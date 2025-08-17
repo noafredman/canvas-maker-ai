@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Maker - Draw & Make Real</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <header class="toolbar">
+            <div class="toolbar-section">
+                <h1>Canvas Maker</h1>
+            </div>
+            <div class="toolbar-section">
+                <button id="pen-tool" class="tool-btn active" data-tool="pen">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                    </svg>
+                    Pen
+                </button>
+                <button id="rectangle-tool" class="tool-btn" data-tool="rectangle">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 3v18h18V3H3zm16 16H5V5h14v14z"/>
+                    </svg>
+                    Rectangle
+                </button>
+                <button id="circle-tool" class="tool-btn" data-tool="circle">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/>
+                    </svg>
+                    Circle
+                </button>
+                <button id="text-tool" class="tool-btn" data-tool="text">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9.93 13.5h4.14L12 7.98 9.93 13.5zM12 2l3.09 8.26L22 12l-6.91 1.74L12 22l-3.09-8.26L2 12l6.91-1.74L12 2z"/>
+                    </svg>
+                    Text
+                </button>
+                <button id="select-tool" class="tool-btn" data-tool="select">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M2 2v6h2V4h4V2H2zm0 16v-6h2v4h4v2H2zm20 0h-6v2h4v-4h2v6zm0-16V2h-6v2h4v4h2V6z"/>
+                    </svg>
+                    Select
+                </button>
+            </div>
+            <div class="toolbar-section">
+                <button id="make-real-btn" class="make-real-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2l3.09 8.26L22 12l-6.91 1.74L12 22l-3.09-8.26L2 12l6.91-1.74L12 2z"/>
+                    </svg>
+                    Make Real
+                </button>
+                <button id="clear-btn" class="clear-btn">Clear</button>
+            </div>
+        </header>
+        
+        <div class="canvas-container">
+            <canvas id="canvas" width="1200" height="800"></canvas>
+            <div id="selection-box" class="selection-box"></div>
+        </div>
+        
+        <div id="preview-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Generated Code</h3>
+                    <button id="close-modal" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <iframe id="preview-iframe" src=""></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="canvas.js"></script>
+</body>
+</html>
