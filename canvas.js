@@ -43,6 +43,19 @@ class CanvasMaker {
         this.zoomIndicator = document.getElementById('zoom-indicator');
         this.recenterBtn = document.getElementById('recenter-btn');
         
+        // Nested canvas elements
+        this.nestedCanvasOverlay = document.getElementById('nested-canvas-overlay');
+        this.nestedCanvas = document.getElementById('nested-canvas');
+        this.nestedCtx = this.nestedCanvas ? this.nestedCanvas.getContext('2d') : null;
+        this.closeNestedCanvasBtn = document.getElementById('close-nested-canvas');
+        this.nestedSelectionBox = document.getElementById('nested-selection-box');
+        
+        // Nested canvas state
+        this.nestedCanvases = []; // Array to store nested canvas shapes
+        this.isNestedCanvasOpen = false;
+        this.currentNestedCanvasId = null;
+        this.nestedCanvasData = new Map(); // Store individual nested canvas data
+        
         if (!this.selectionBox) {
             console.error('Selection box element not found!');
         }
@@ -51,6 +64,9 @@ class CanvasMaker {
         }
         if (!this.recenterBtn) {
             console.error('Recenter button element not found!');
+        }
+        if (!this.nestedCanvasOverlay) {
+            console.error('Nested canvas overlay element not found!');
         }
         
         this.setupCanvas();
@@ -95,6 +111,23 @@ class CanvasMaker {
         // Recenter button
         if (this.recenterBtn) {
             this.recenterBtn.addEventListener('click', this.recenterCanvas.bind(this));
+        }
+        
+        // Nested canvas event listeners
+        if (this.closeNestedCanvasBtn) {
+            this.closeNestedCanvasBtn.addEventListener('click', this.closeNestedCanvas.bind(this));
+        }
+        
+        // Double-click on main canvas to open nested canvas
+        this.canvas.addEventListener('dblclick', this.handleDoubleClick.bind(this));
+        
+        // Overlay click to close nested canvas
+        if (this.nestedCanvasOverlay) {
+            this.nestedCanvasOverlay.addEventListener('click', (e) => {
+                if (e.target === this.nestedCanvasOverlay) {
+                    this.closeNestedCanvas();
+                }
+            });
         }
     }
     
@@ -200,6 +233,8 @@ class CanvasMaker {
                     return sel.type === 'text' && sel.index === this.hoveredElement.index;
                 } else if (this.hoveredElement.type === 'path') {
                     return sel.type === 'path' && sel.index === this.hoveredElement.index;
+                } else if (this.hoveredElement.type === 'nested-canvas') {
+                    return sel.type === 'nested-canvas' && sel.index === this.hoveredElement.index;
                 }
                 return false;
             });
@@ -330,13 +365,17 @@ class CanvasMaker {
                         point.x += deltaX;
                         point.y += deltaY;
                     });
+                } else if (element.type === 'nested-canvas') {
+                    const nestedCanvas = this.nestedCanvases[element.index];
+                    nestedCanvas.x += deltaX;
+                    nestedCanvas.y += deltaY;
                 }
             });
             
             this.dragOffset.x = pos.x;
             this.dragOffset.y = pos.y;
             this.redrawCanvas();
-        } else if (this.currentTool === 'rectangle' || this.currentTool === 'circle') {
+        } else if (this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas') {
             // Store preview coordinates for redrawCanvas to use
             this.previewStartX = this.startX;
             this.previewStartY = this.startY;
@@ -414,6 +453,46 @@ class CanvasMaker {
             
             this.updateCanvasCursor();
             this.redrawCanvas();
+        } else if (this.currentTool === 'nested-canvas') {
+            const width = pos.x - this.startX;
+            const height = pos.y - this.startY;
+            const nestedCanvasId = 'nested_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            
+            const nestedCanvasShape = {
+                type: 'nested-canvas',
+                id: nestedCanvasId,
+                x: this.startX,
+                y: this.startY,
+                width,
+                height
+            };
+            
+            this.nestedCanvases.push(nestedCanvasShape);
+            
+            // Initialize empty data for this nested canvas
+            this.nestedCanvasData.set(nestedCanvasId, {
+                paths: [],
+                shapes: [],
+                texts: [],
+                camera: { x: 0, y: 0, zoom: 1 }
+            });
+            
+            // Clear preview coordinates
+            this.previewStartX = undefined;
+            this.previewStartY = undefined;
+            this.previewEndX = undefined;
+            this.previewEndY = undefined;
+            
+            // Auto-switch to select mode and select the newly created nested canvas
+            this.currentTool = 'select';
+            this.selectedElements = [{ type: 'nested-canvas', index: this.nestedCanvases.length - 1 }];
+            
+            // Update toolbar to show select tool as active
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('select-tool').classList.add('active');
+            
+            this.updateCanvasCursor();
+            this.redrawCanvas();
         } else if (this.currentTool === 'select') {
             if (this.isResizing) {
                 this.isResizing = false;
@@ -458,6 +537,13 @@ class CanvasMaker {
     }
     
     handleKeyDown(e) {
+        // Close nested canvas with ESC key
+        if (e.key === 'Escape' && this.isNestedCanvasOpen) {
+            e.preventDefault();
+            this.closeNestedCanvas();
+            return;
+        }
+        
         // Delete selected elements with Delete or Backspace key
         if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedElements.length > 0) {
             e.preventDefault();
@@ -649,6 +735,93 @@ class CanvasMaker {
         this.updateRecenterButton();
     }
     
+    handleDoubleClick(e) {
+        const pos = this.getMousePos(e);
+        const clickedElement = this.getElementAtPoint(pos.x, pos.y);
+        
+        // Check if user double-clicked on a nested canvas
+        if (clickedElement && clickedElement.type === 'nested-canvas') {
+            this.openNestedCanvas(clickedElement.index);
+        }
+    }
+    
+    openNestedCanvas(index) {
+        if (index >= 0 && index < this.nestedCanvases.length) {
+            const nestedCanvasShape = this.nestedCanvases[index];
+            this.currentNestedCanvasId = nestedCanvasShape.id;
+            this.isNestedCanvasOpen = true;
+            
+            // Setup nested canvas size
+            this.setupNestedCanvas();
+            
+            // Load data for this nested canvas
+            this.loadNestedCanvasData(nestedCanvasShape.id);
+            
+            // Show overlay with animation
+            this.nestedCanvasOverlay.style.display = 'flex';
+            requestAnimationFrame(() => {
+                this.nestedCanvasOverlay.classList.add('show');
+            });
+        }
+    }
+    
+    closeNestedCanvas() {
+        if (this.isNestedCanvasOpen) {
+            // Save current nested canvas data before closing
+            this.saveNestedCanvasData();
+            
+            // Hide overlay with animation
+            this.nestedCanvasOverlay.classList.remove('show');
+            setTimeout(() => {
+                this.nestedCanvasOverlay.style.display = 'none';
+                this.isNestedCanvasOpen = false;
+                this.currentNestedCanvasId = null;
+            }, 300); // Match CSS transition duration
+        }
+    }
+    
+    setupNestedCanvas() {
+        if (!this.nestedCanvas) return;
+        
+        const container = this.nestedCanvas.parentElement;
+        const rect = container.getBoundingClientRect();
+        
+        // Set canvas size to match container
+        this.nestedCanvas.width = rect.width;
+        this.nestedCanvas.height = rect.height;
+        this.nestedCanvas.style.width = rect.width + 'px';
+        this.nestedCanvas.style.height = rect.height + 'px';
+        
+        // Clear the canvas
+        this.nestedCtx.clearRect(0, 0, this.nestedCanvas.width, this.nestedCanvas.height);
+        
+        // Set default styles
+        this.nestedCtx.lineCap = 'round';
+        this.nestedCtx.lineJoin = 'round';
+    }
+    
+    loadNestedCanvasData(canvasId) {
+        const data = this.nestedCanvasData.get(canvasId);
+        if (data) {
+            // For now, just clear the canvas - in the future we'll load the saved content
+            this.nestedCtx.clearRect(0, 0, this.nestedCanvas.width, this.nestedCanvas.height);
+            // TODO: Draw the saved content from data.paths, data.shapes, data.texts
+        }
+    }
+    
+    saveNestedCanvasData() {
+        if (this.currentNestedCanvasId) {
+            // For now, just store empty data structure
+            // TODO: Save actual drawing data from the nested canvas
+            this.nestedCanvasData.set(this.currentNestedCanvasId, {
+                paths: [],
+                shapes: [],
+                texts: [],
+                camera: { x: 0, y: 0, zoom: 1 }
+            });
+        }
+    }
+    
     deleteSelectedElements() {
         // Sort selected elements by index in descending order to avoid index shifting issues
         const sortedElements = [...this.selectedElements].sort((a, b) => b.index - a.index);
@@ -660,6 +833,13 @@ class CanvasMaker {
                 this.shapes.splice(element.index, 1);
             } else if (element.type === 'text') {
                 this.texts.splice(element.index, 1);
+            } else if (element.type === 'nested-canvas') {
+                const nestedCanvas = this.nestedCanvases[element.index];
+                // Delete associated data
+                if (nestedCanvas.id) {
+                    this.nestedCanvasData.delete(nestedCanvas.id);
+                }
+                this.nestedCanvases.splice(element.index, 1);
             }
         });
         
@@ -693,6 +873,19 @@ class CanvasMaker {
                 this.clipboard.push({
                     type: 'text',
                     data: { ...originalText }
+                });
+            } else if (element.type === 'nested-canvas') {
+                const originalNestedCanvas = this.nestedCanvases[element.index];
+                // Deep copy the nested canvas
+                this.clipboard.push({
+                    type: 'nested-canvas',
+                    data: { ...originalNestedCanvas },
+                    nestedData: this.nestedCanvasData.get(originalNestedCanvas.id) || {
+                        paths: [],
+                        shapes: [],
+                        texts: [],
+                        camera: { x: 0, y: 0, zoom: 1 }
+                    }
                 });
             }
         });
@@ -752,6 +945,29 @@ class CanvasMaker {
                     type: 'text',
                     index: this.texts.length - 1
                 });
+            } else if (item.type === 'nested-canvas') {
+                // Create new nested canvas with offset and new ID
+                const newNestedCanvasId = 'nested_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                const newNestedCanvas = {
+                    ...item.data,
+                    id: newNestedCanvasId,
+                    x: item.data.x + offset,
+                    y: item.data.y + offset
+                };
+                this.nestedCanvases.push(newNestedCanvas);
+                
+                // Copy the nested data with the new ID
+                if (item.nestedData) {
+                    this.nestedCanvasData.set(newNestedCanvasId, {
+                        ...item.nestedData
+                    });
+                }
+                
+                // Select the new nested canvas
+                this.selectedElements.push({
+                    type: 'nested-canvas',
+                    index: this.nestedCanvases.length - 1
+                });
             }
         });
         
@@ -774,6 +990,36 @@ class CanvasMaker {
             this.ctx.beginPath();
             this.ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
             this.ctx.stroke();
+        } else if (this.currentTool === 'nested-canvas') {
+            const width = endX - startX;
+            const height = endY - startY;
+            
+            // Draw outer frame
+            this.ctx.strokeRect(startX, startY, width, height);
+            
+            // Draw nested canvas preview indicator
+            this.ctx.save();
+            this.ctx.setLineDash([]);
+            this.ctx.strokeStyle = '#3b82f6';
+            this.ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+            this.ctx.fillRect(startX, startY, width, height);
+            
+            // Draw icon in center if shape is large enough
+            if (Math.abs(width) > 40 && Math.abs(height) > 40) {
+                const centerX = startX + width / 2;
+                const centerY = startY + height / 2;
+                const iconSize = Math.min(24, Math.min(Math.abs(width), Math.abs(height)) / 3);
+                
+                this.ctx.strokeRect(centerX - iconSize/2, centerY - iconSize/2 - 5, iconSize, iconSize);
+                
+                this.ctx.fillStyle = '#3b82f6';
+                this.ctx.font = '12px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('Canvas', centerX, centerY + 10);
+            }
+            
+            this.ctx.restore();
         }
         
         this.ctx.setLineDash([]);
@@ -819,7 +1065,17 @@ class CanvasMaker {
     }
     
     getElementAtPoint(x, y) {
-        // Check shapes first (they're on top)
+        // Check nested canvases first (they're on top)
+        for (let i = this.nestedCanvases.length - 1; i >= 0; i--) {
+            const nestedCanvas = this.nestedCanvases[i];
+            const hit = x >= nestedCanvas.x && x <= nestedCanvas.x + nestedCanvas.width &&
+                       y >= nestedCanvas.y && y <= nestedCanvas.y + nestedCanvas.height;
+            if (hit) {
+                return { type: 'nested-canvas', index: i };
+            }
+        }
+        
+        // Check shapes (they're on top after nested canvases)
         for (let i = this.shapes.length - 1; i >= 0; i--) {
             const shape = this.shapes[i];
             if (shape.type === 'rectangle') {
@@ -954,6 +1210,18 @@ class CanvasMaker {
             }
         });
         
+        // Check nested canvases
+        this.nestedCanvases.forEach((nestedCanvas, index) => {
+            // Check if nested canvas intersects with selection rectangle
+            const rectRight = nestedCanvas.x + nestedCanvas.width;
+            const rectBottom = nestedCanvas.y + nestedCanvas.height;
+            const inSelection = !(rectRight < minX || nestedCanvas.x > maxX || 
+                                 rectBottom < minY || nestedCanvas.y > maxY);
+            if (inSelection) {
+                this.selectedElements.push({ type: 'nested-canvas', index });
+            }
+        });
+        
         this.updateCanvasCursor();
         this.redrawCanvas();
     }
@@ -1035,11 +1303,48 @@ class CanvasMaker {
             this.ctx.fillText(textObj.text, textObj.x, textObj.y);
         });
         
-        // Draw preview shape if currently drawing rectangle or circle
-        if ((this.currentTool === 'rectangle' || this.currentTool === 'circle') && 
+        // Draw preview shape if currently drawing rectangle, circle, or nested-canvas
+        if ((this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas') && 
             this.isDrawing && this.previewStartX !== undefined) {
             this.drawPreviewShape(this.previewStartX, this.previewStartY, this.previewEndX, this.previewEndY);
         }
+        
+        // Draw nested canvases (before restoring context so they get camera transformation)
+        this.nestedCanvases.forEach((nestedCanvas, index) => {
+            const isHovered = this.hoveredElement && 
+                             this.hoveredElement.type === 'nested-canvas' && 
+                             this.hoveredElement.index === index;
+            const isSelected = this.selectedElements.some(sel => 
+                              sel.type === 'nested-canvas' && sel.index === index);
+            
+            // Draw the nested canvas frame
+            this.ctx.strokeStyle = isSelected ? '#ef4444' : (isHovered ? '#3b82f6' : '#666');
+            this.ctx.lineWidth = (isSelected || isHovered) ? 3 : 2;
+            this.ctx.fillStyle = '#f8f9fa';
+            
+            this.ctx.fillRect(nestedCanvas.x, nestedCanvas.y, nestedCanvas.width, nestedCanvas.height);
+            this.ctx.strokeRect(nestedCanvas.x, nestedCanvas.y, nestedCanvas.width, nestedCanvas.height);
+            
+            // Draw nested canvas icon/placeholder
+            this.ctx.save();
+            this.ctx.fillStyle = '#6b7280';
+            this.ctx.font = '16px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            
+            const centerX = nestedCanvas.x + nestedCanvas.width / 2;
+            const centerY = nestedCanvas.y + nestedCanvas.height / 2;
+            
+            // Draw canvas icon
+            const iconSize = Math.min(32, Math.min(Math.abs(nestedCanvas.width), Math.abs(nestedCanvas.height)) / 3);
+            this.ctx.strokeStyle = '#6b7280';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(centerX - iconSize/2, centerY - iconSize/2 - 10, iconSize, iconSize);
+            
+            // Draw "Canvas" text
+            this.ctx.fillText('Canvas', centerX, centerY + 15);
+            this.ctx.restore();
+        });
         
         // Restore context before drawing UI elements
         this.ctx.restore();
@@ -1119,6 +1424,14 @@ class CanvasMaker {
                     height: shape.radius * 2
                 };
             }
+        } else if (element.type === 'nested-canvas') {
+            const nestedCanvas = this.nestedCanvases[element.index];
+            bounds = {
+                x: nestedCanvas.x,
+                y: nestedCanvas.y,
+                width: nestedCanvas.width,
+                height: nestedCanvas.height
+            };
         }
         
         if (bounds) {
@@ -1186,6 +1499,14 @@ class CanvasMaker {
                     height: shape.radius * 2
                 };
             }
+        } else if (element.type === 'nested-canvas') {
+            const nestedCanvas = this.nestedCanvases[element.index];
+            bounds = {
+                x: nestedCanvas.x,
+                y: nestedCanvas.y,
+                width: nestedCanvas.width,
+                height: nestedCanvas.height
+            };
         }
         
         if (!bounds) return null;
@@ -1230,13 +1551,14 @@ class CanvasMaker {
         if (this.selectedElements.length !== 1 || !this.resizeHandle) return;
         
         const element = this.selectedElements[0];
-        if (element.type !== 'shape') return;
+        if (element.type !== 'shape' && element.type !== 'nested-canvas') return;
         
-        const shape = this.shapes[element.index];
+        const shape = element.type === 'shape' ? this.shapes[element.index] : this.nestedCanvases[element.index];
         const deltaX = currentX - this.dragOffset.x;
         const deltaY = currentY - this.dragOffset.y;
         
-        if (shape.type === 'rectangle') {
+        // Check if it's a rectangle shape or a nested canvas (nested canvases are always rectangular)
+        if ((element.type === 'shape' && shape.type === 'rectangle') || element.type === 'nested-canvas') {
             switch (this.resizeHandle) {
                 case 'nw': // top-left
                     shape.x += deltaX;
@@ -1300,9 +1622,12 @@ class CanvasMaker {
         this.paths = [];
         this.shapes = [];
         this.texts = [];
+        this.nestedCanvases = [];
+        this.nestedCanvasData.clear();
         this.selectedElements = [];
         this.hoveredElement = null;
         this.hideSelectionBox();
+        this.redrawCanvas();
     }
     
     async makeReal() {

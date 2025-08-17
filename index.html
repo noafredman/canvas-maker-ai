@@ -43,6 +43,12 @@
                     </svg>
                     Select
                 </button>
+                <button id="nested-canvas-tool" class="tool-btn" data-tool="nested-canvas">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v8H8V8zm2 2v4h4v-4h-4z"/>
+                    </svg>
+                    Canvas
+                </button>
             </div>
             <div class="toolbar-section">
                 <button id="make-real-btn" class="make-real-btn">
@@ -76,6 +82,19 @@
                 </div>
                 <div class="modal-body">
                     <iframe id="preview-iframe" src=""></iframe>
+                </div>
+            </div>
+        </div>
+        
+        <div id="nested-canvas-overlay" class="nested-canvas-overlay" style="display: none;">
+            <div class="nested-canvas-container">
+                <div class="nested-canvas-header">
+                    <span class="nested-canvas-title">Nested Canvas</span>
+                    <button id="close-nested-canvas" class="close-btn">&times;</button>
+                </div>
+                <div class="nested-canvas-content">
+                    <canvas id="nested-canvas" width="800" height="600"></canvas>
+                    <div id="nested-selection-box" class="selection-box"></div>
                 </div>
             </div>
         </div>
