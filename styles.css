@@ -103,9 +103,6 @@ h1 {
     position: relative;
     overflow: hidden;
     background: white;
-    margin: 20px;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 #canvas {
@@ -114,15 +111,58 @@ h1 {
     background: white;
     width: 100%;
     height: 100%;
+    touch-action: none; /* Prevent default touch behaviors */
 }
 
 .selection-box {
     position: absolute;
-    border: 2px dashed #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+    border: 3px dashed #3b82f6;
+    background: rgba(59, 130, 246, 0.2);
     display: none;
     pointer-events: none;
     z-index: 10;
+    box-sizing: border-box;
+}
+
+.zoom-indicator {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    pointer-events: none;
+    z-index: 1000;
+    min-width: 50px;
+    text-align: center;
+}
+
+.recenter-btn {
+    position: absolute;
+    bottom: 20px;
+    right: 85px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    border: none;
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    width: 32px;
+    height: 32px;
+}
+
+.recenter-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: translateY(-1px);
 }
 
 .modal {
@@ -206,4 +246,35 @@ h1 {
 
 .canvas-container.select-cursor #canvas {
     cursor: default;
+}
+
+/* Hover states */
+.canvas-container.select-cursor.hovering #canvas {
+    cursor: pointer;
+}
+
+.canvas-container.select-cursor.can-grab #canvas {
+    cursor: grab;
+}
+
+.canvas-container.select-cursor.grabbing #canvas {
+    cursor: grabbing;
+}
+
+/* Drawing states */
+.canvas-container.pen-cursor.drawing #canvas {
+    cursor: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTMgMTcuMjVWMjFoMy43NUwxNy44MSA5Ljk0bC0zLjc1LTMuNzVMMyAxNy4yNXpNMjAuNzEgNy4wNGMuMzktLjM5LjM5LTEuMDIgMC0xLjQxbC0yLjM0LTIuMzRjLS4zOS0uMzktMS4wMi0uMzktMS40MSAwbC0xLjgzIDEuODMgMy43NSAzLjc1IDEuODMtMS44M3oiIGZpbGw9IiMzYjgyZjYiLz4KPHN2Zz4K') 2 20, auto;
+}
+
+.canvas-container.rectangle-cursor.drawing #canvas,
+.canvas-container.circle-cursor.drawing #canvas {
+    cursor: crosshair;
+}
+
+.canvas-container.select-cursor.selecting #canvas {
+    cursor: crosshair;
+}
+
+.canvas-container.select-cursor.resizing #canvas {
+    cursor: nw-resize;
 }

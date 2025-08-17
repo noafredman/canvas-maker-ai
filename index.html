@@ -58,6 +58,14 @@
         <div class="canvas-container">
             <canvas id="canvas" width="1200" height="800"></canvas>
             <div id="selection-box" class="selection-box"></div>
+            <div id="zoom-indicator" class="zoom-indicator">100%</div>
+            <button id="recenter-btn" class="recenter-btn" style="display: none;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                </svg>
+            </button>
         </div>
         
         <div id="preview-modal" class="modal">
