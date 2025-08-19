@@ -277,8 +277,8 @@ class CanvasMaker {
         this.previewEndX = undefined;
         this.previewEndY = undefined;
         
-        // Check if clicking on an element when drag mode is enabled (except pen tool)
-        if (this.hoveredElement && this.dragModeEnabled && this.currentTool !== 'pen') {
+        // Check if clicking on an element when drag mode is enabled
+        if (this.hoveredElement && this.dragModeEnabled) {
             // Check if the clicked element is already selected - if so, start dragging
             const isAlreadySelected = this.selectedElements.some(sel => {
                 if (this.hoveredElement.type === 'shape') {
@@ -1277,13 +1277,16 @@ class CanvasMaker {
             });
             this.clearPreviewCoords();
         } else if (this.currentTool === 'circle') {
+            // Calculate circle that fits in the bounding box from start to end (same as main canvas)
+            const centerX = (this.startX + pos.x) / 2;
+            const centerY = (this.startY + pos.y) / 2;
             const radius = Math.sqrt(
                 Math.pow(pos.x - this.startX, 2) + Math.pow(pos.y - this.startY, 2)
-            );
+            ) / 2;
             this.nestedCanvasContext.shapes.push({
                 type: 'circle',
-                x: this.startX,
-                y: this.startY,
+                x: centerX,
+                y: centerY,
                 radius
             });
             this.clearPreviewCoords();
@@ -1889,6 +1892,7 @@ class CanvasMaker {
                 const p2 = path[j + 1];
                 const distance = this.distanceToLineSegment(x, y, p1.x, p1.y, p2.x, p2.y);
                 if (distance <= 5) { // 5px tolerance
+                    console.log('Path detected at hover:', { type: 'path', index: i, distance });
                     return { type: 'path', index: i };
                 }
             }
@@ -2143,22 +2147,20 @@ class CanvasMaker {
         ctx.strokeStyle = `rgba(150, 150, 150, ${opacity})`;
         ctx.lineWidth = 1;
         
-        // Calculate visible world bounds with extra margin for infinite feel
-        const topLeft = {
-            x: -camera.x - gridSize / camera.zoom,
-            y: -camera.y - gridSize / camera.zoom
-        };
-        const bottomRight = {
-            x: (canvas.width / camera.zoom) - camera.x + gridSize / camera.zoom,
-            y: (canvas.height / camera.zoom) - camera.y + gridSize / camera.zoom
-        };
+        // Calculate world bounds that need to be covered by the grid
+        // Convert screen edges to world coordinates
+        const worldLeft = -camera.x;
+        const worldRight = (canvas.width / camera.zoom) - camera.x;
+        const worldTop = -camera.y;
+        const worldBottom = (canvas.height / camera.zoom) - camera.y;
         
-        // Extend grid way beyond visible area for truly infinite feel
-        const margin = gridSize * 10;
-        const startX = Math.floor((topLeft.x - margin) / gridSize) * gridSize;
-        const endX = Math.ceil((bottomRight.x + margin) / gridSize) * gridSize;
-        const startY = Math.floor((topLeft.y - margin) / gridSize) * gridSize;
-        const endY = Math.ceil((bottomRight.y + margin) / gridSize) * gridSize;
+        // Add extra margin to ensure full coverage
+        const margin = gridSize * 2;
+        const startX = Math.floor((worldLeft - margin) / gridSize) * gridSize;
+        const endX = Math.ceil((worldRight + margin) / gridSize) * gridSize;
+        const startY = Math.floor((worldTop - margin) / gridSize) * gridSize;
+        const endY = Math.ceil((worldBottom + margin) / gridSize) * gridSize;
+        
         
         
         // Draw grid lines in screen space without camera transformation
@@ -2167,21 +2169,23 @@ class CanvasMaker {
         ctx.beginPath();
         
         // Vertical lines
-        let verticalCount = 0;
         for (let x = startX; x <= endX; x += gridSize) {
             const screenX = (x + camera.x) * camera.zoom;
-            ctx.moveTo(screenX, 0);
-            ctx.lineTo(screenX, canvas.height);
-            verticalCount++;
+            // Only draw lines that are at least partially visible
+            if (screenX >= -1 && screenX <= canvas.width + 1) {
+                ctx.moveTo(screenX, 0);
+                ctx.lineTo(screenX, canvas.height);
+            }
         }
         
         // Horizontal lines
-        let horizontalCount = 0;
         for (let y = startY; y <= endY; y += gridSize) {
             const screenY = (y + camera.y) * camera.zoom;
-            ctx.moveTo(0, screenY);
-            ctx.lineTo(canvas.width, screenY);
-            horizontalCount++;
+            // Only draw lines that are at least partially visible
+            if (screenY >= -1 && screenY <= canvas.height + 1) {
+                ctx.moveTo(0, screenY);
+                ctx.lineTo(canvas.width, screenY);
+            }
         }
         
         ctx.stroke();
