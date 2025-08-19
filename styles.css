@@ -64,6 +64,25 @@ h1 {
     color: white;
 }
 
+/* Drag toggle button styling */
+#drag-toggle {
+    margin-left: 8px;
+    border-left: 1px solid #e1e5e9;
+    padding-left: 12px;
+}
+
+#drag-toggle:not(.active) {
+    background: #f3f4f6;
+    color: #6b7280;
+    border-color: #d1d5db;
+}
+
+#drag-toggle.active {
+    background: #10b981;
+    border-color: #10b981;
+    color: white;
+}
+
 .make-real-btn {
     display: flex;
     align-items: center;
@@ -124,34 +143,63 @@ h1 {
     box-sizing: border-box;
 }
 
-.zoom-indicator {
+.canvas-controls {
     position: absolute;
     bottom: 20px;
     right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 1000;
+}
+
+.zoom-controls {
+    display: flex;
+    align-items: center;
     background: rgba(0, 0, 0, 0.8);
+    border-radius: 8px;
+    padding: 4px;
+    gap: 4px;
+}
+
+.zoom-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    width: 32px;
+    height: 32px;
+}
+
+.zoom-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.zoom-indicator {
+    background: transparent;
     color: white;
     padding: 8px 12px;
-    border-radius: 6px;
     font-size: 14px;
     font-weight: 500;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     pointer-events: none;
-    z-index: 1000;
     min-width: 50px;
     text-align: center;
 }
 
 .recenter-btn {
-    position: absolute;
-    bottom: 20px;
-    right: 85px;
     background: rgba(0, 0, 0, 0.8);
     color: white;
     border: none;
     padding: 8px;
     border-radius: 6px;
     cursor: pointer;
-    z-index: 1000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -249,15 +297,15 @@ h1 {
 }
 
 /* Hover states */
-.canvas-container.select-cursor.hovering #canvas {
+.canvas-container.hovering #canvas {
     cursor: pointer;
 }
 
-.canvas-container.select-cursor.can-grab #canvas {
+.canvas-container.can-grab #canvas {
     cursor: grab;
 }
 
-.canvas-container.select-cursor.grabbing #canvas {
+.canvas-container.grabbing #canvas {
     cursor: grabbing;
 }
 
@@ -328,6 +376,12 @@ h1 {
     background: #f8f9fa;
 }
 
+.nested-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .nested-canvas-title {
     font-size: 18px;
     font-weight: 600;
@@ -348,4 +402,53 @@ h1 {
     background: white;
     cursor: crosshair;
     touch-action: none;
+}
+
+/* Nested canvas cursor styles for different tools */
+.nested-canvas-content.pen-cursor #nested-canvas {
+    cursor: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTMgMTcuMjVWMjFoMy43NUwxNy44MSA5Ljk0bC0zLjc1LTMuNzVMMyAxNy4yNXpNMjAuNzEgNy4wNGMuMzktLjM5LjM5LTEuMDIgMC0xLjQxbC0yLjM0LTIuMzRjLS4zOS0uMzktMS4wMi0uMzktMS40MSAwbC0xLjgzIDEuODMgMy43NSAzLjc1IDEuODMtMS44M3oiIGZpbGw9IiMzMzMiLz4KPHN2Zz4K') 2 20, auto;
+}
+
+.nested-canvas-content.rectangle-cursor #nested-canvas,
+.nested-canvas-content.circle-cursor #nested-canvas {
+    cursor: crosshair;
+}
+
+.nested-canvas-content.text-cursor #nested-canvas {
+    cursor: text;
+}
+
+.nested-canvas-content.select-cursor #nested-canvas {
+    cursor: default;
+}
+
+.nested-canvas-content.hovering #nested-canvas {
+    cursor: pointer;
+}
+
+.nested-canvas-content.can-grab #nested-canvas {
+    cursor: grab;
+}
+
+.nested-canvas-content.grabbing #nested-canvas {
+    cursor: grabbing;
+}
+
+/* Drawing states for nested canvas */
+.nested-canvas-content.pen-cursor.drawing #nested-canvas {
+    cursor: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTMgMTcuMjVWMjFoMy43NUwxNy44MSA5Ljk0bC0zLjc1LTMuNzVMMyAxNy4yNXpNMjAuNzEgNy4wNGMuMzktLjM5LjM5LTEuMDIgMC0xLjQxbC0yLjM0LTIuMzRjLS4zOS0uMzktMS4wMi0uMzktMS40MSAwbC0xLjgzIDEuODMgMy43NSAzLjc1IDEuODMtMS44M3oiIGZpbGw9IiMzYjgyZjYiLz4KPHN2Zz4K') 2 20, auto;
+}
+
+.nested-canvas-content.rectangle-cursor.drawing #nested-canvas,
+.nested-canvas-content.circle-cursor.drawing #nested-canvas,
+.nested-canvas-content.nested-canvas-cursor.drawing #nested-canvas {
+    cursor: crosshair;
+}
+
+.nested-canvas-content.select-cursor.selecting #nested-canvas {
+    cursor: crosshair;
+}
+
+.nested-canvas-content.select-cursor.resizing #nested-canvas {
+    cursor: nw-resize;
 }

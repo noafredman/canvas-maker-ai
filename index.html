@@ -49,6 +49,12 @@
                     </svg>
                     Canvas
                 </button>
+                <button id="drag-toggle" class="tool-btn active" data-toggle="drag">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M13 6v5h5V9.5l3.5 3.5-3.5 3.5V14h-5v5h1.5L10.5 22 7 19h1.5v-5H3v1.5L-.5 12 3 8.5V10h5.5V5H7l3.5-3.5L14 5h-1z"/>
+                    </svg>
+                    Drag
+                </button>
             </div>
             <div class="toolbar-section">
                 <button id="make-real-btn" class="make-real-btn">
@@ -64,14 +70,28 @@
         <div class="canvas-container">
             <canvas id="canvas" width="1200" height="800"></canvas>
             <div id="selection-box" class="selection-box"></div>
-            <div id="zoom-indicator" class="zoom-indicator">100%</div>
-            <button id="recenter-btn" class="recenter-btn" style="display: none;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
-                    <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2" fill="none"/>
-                    <circle cx="12" cy="12" r="2" fill="currentColor"/>
-                </svg>
-            </button>
+            <div class="canvas-controls">
+                <div class="zoom-controls">
+                    <button id="zoom-out-btn" class="zoom-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 13H5v-2h14v2z"/>
+                        </svg>
+                    </button>
+                    <div id="zoom-indicator" class="zoom-indicator">100%</div>
+                    <button id="zoom-in-btn" class="zoom-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                    </button>
+                </div>
+                <button id="recenter-btn" class="recenter-btn" style="display: none;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                    </svg>
+                </button>
+            </div>
         </div>
         
         <div id="preview-modal" class="modal">
@@ -90,6 +110,39 @@
             <div class="nested-canvas-container">
                 <div class="nested-canvas-header">
                     <span class="nested-canvas-title">Nested Canvas</span>
+                    <div class="nested-toolbar">
+                        <button id="nested-pen-tool" class="tool-btn active" data-tool="pen">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                            </svg>
+                            Pen
+                        </button>
+                        <button id="nested-rectangle-tool" class="tool-btn" data-tool="rectangle">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 3v18h18V3H3zm16 16H5V5h14v14z"/>
+                            </svg>
+                            Rectangle
+                        </button>
+                        <button id="nested-circle-tool" class="tool-btn" data-tool="circle">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/>
+                            </svg>
+                            Circle
+                        </button>
+                        <button id="nested-text-tool" class="tool-btn" data-tool="text">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M9.93 13.5h4.14L12 7.98 9.93 13.5zM12 2l3.09 8.26L22 12l-6.91 1.74L12 22l-3.09-8.26L2 12l6.91-1.74L12 2z"/>
+                            </svg>
+                            Text
+                        </button>
+                        <button id="nested-select-tool" class="tool-btn" data-tool="select">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M2 2v6h2V4h4V2H2zm0 16v-6h2v4h4v2H2zm20 0h-6v2h4v-4h2v6zm0-16V2h-6v2h4v4h2V6z"/>
+                            </svg>
+                            Select
+                        </button>
+                        <button id="nested-clear-btn" class="clear-btn">Clear</button>
+                    </div>
                     <button id="close-nested-canvas" class="close-btn">&times;</button>
                 </div>
                 <div class="nested-canvas-content">
