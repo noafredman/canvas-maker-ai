@@ -963,15 +963,65 @@ class CanvasMaker {
             this.currentNestedCanvasId = nestedCanvasShape.id;
             this.isNestedCanvasOpen = true;
             
-            // Show overlay and setup immediately
+            // Show overlay
             this.nestedCanvasOverlay.style.display = 'flex';
             
-            // Setup nested canvas size to fill container
-            if (!this.nestedCanvas) return;
+            // Set up the context and events immediately
+            this.setupNestedCanvasContext(nestedCanvasShape);
             
-            // Set up canvas dimensions consistently
-            this.setupNestedCanvasDimensions(nestedCanvasShape);
+            // Canvas dimensions will be set up after the CSS transition completes
         }
+    }
+    
+    setupNestedCanvasContext(nestedCanvasShape) {
+        // Create nested canvas context immediately (before canvas resizing)
+        const nestedData = this.loadNestedCanvasData(nestedCanvasShape.id);
+        this.nestedCanvasContext = {
+            canvas: this.nestedCanvas,
+            ctx: this.nestedCtx,
+            camera: {
+                x: nestedData.camera?.x ?? 0,
+                y: nestedData.camera?.y ?? 0,
+                zoom: nestedData.camera?.zoom ?? 1,
+                minZoom: 0.1,
+                maxZoom: 5
+            },
+            paths: nestedData.paths || [],
+            shapes: nestedData.shapes || [],
+            texts: nestedData.texts || [],
+            nestedCanvases: [], // Nested canvases don't have their own nested canvases for now
+            selectedElements: [],
+            previewSelectedElements: [],
+            hoveredElement: null,
+            currentPath: [],
+            selectionBox: this.nestedSelectionBox
+        };
+        
+        // Switch to nested canvas context for unified event handling
+        this.activeCanvasContext = this.nestedCanvasContext;
+        
+        // Setup event listeners for nested canvas
+        this.setupNestedCanvasEvents();
+        
+        // Initialize cursor for nested canvas
+        this.updateNestedCanvasCursor();
+        
+        // Draw initial content (will be redrawn after resize)
+        this.redrawCanvas(this.activeCanvasContext);
+        
+        // Update nested canvas UI elements
+        this.updateZoomIndicator();
+        this.updateRecenterButton();
+        
+        // Add show animation
+        requestAnimationFrame(() => {
+            this.nestedCanvasOverlay.classList.add('show');
+            
+            // Setup canvas dimensions after the transition
+            setTimeout(() => {
+                this.setupNestedCanvasDimensions(this.nestedCanvases.find(nc => nc.id === this.currentNestedCanvasId));
+            }, 350); // Wait for CSS transition to complete (300ms + buffer)
+        });
     }
     
     setupNestedCanvasDimensions(nestedCanvasShape) {
@@ -1010,57 +1060,9 @@ class CanvasMaker {
                 this.nestedCtx.lineJoin = 'round';
             }
             
-            // Continue with setup
-            this.finishNestedCanvasSetup(nestedCanvasShape);
+            // Redraw the canvas with the new dimensions
+            this.redrawCanvas(this.nestedCanvasContext);
         }, 50);
-    }
-    
-    finishNestedCanvasSetup(nestedCanvasShape) {
-        // Create nested canvas context
-        const nestedData = this.loadNestedCanvasData(nestedCanvasShape.id);
-        this.nestedCanvasContext = {
-            canvas: this.nestedCanvas,
-            ctx: this.nestedCtx,
-            camera: {
-                x: nestedData.camera?.x ?? 0,
-                y: nestedData.camera?.y ?? 0,
-                zoom: nestedData.camera?.zoom ?? 1,
-                minZoom: 0.1,
-                maxZoom: 5
-            },
-            paths: nestedData.paths || [],
-            shapes: nestedData.shapes || [],
-            texts: nestedData.texts || [],
-            nestedCanvases: [], // Nested canvases don't have their own nested canvases for now
-            selectedElements: [],
-            previewSelectedElements: [],
-            hoveredElement: null,
-            currentPath: [],
-            selectionBox: this.nestedSelectionBox
-        };
-        
-        // Switch to nested canvas context for unified event handling
-        this.activeCanvasContext = this.nestedCanvasContext;
-        
-        // Nested canvas is now ready for user drawing
-        
-        // Initial draw
-        this.redrawCanvas(this.activeCanvasContext);
-        
-        // Setup event listeners for nested canvas
-        this.setupNestedCanvasEvents();
-        
-        // Initialize cursor for nested canvas
-        this.updateNestedCanvasCursor();
-        
-        // Update nested canvas UI elements
-        this.updateZoomIndicator();
-        this.updateRecenterButton();
-        
-        // Add show animation
-        requestAnimationFrame(() => {
-            this.nestedCanvasOverlay.classList.add('show');
-        });
     }
     
     closeNestedCanvas() {
@@ -2355,11 +2357,11 @@ class CanvasMaker {
             ctx.restore();
         });
         
+        // Draw resize handles for selected elements (in world space)
+        this.drawResizeHandles(canvasContext);
+        
         // Restore context before drawing UI elements
         ctx.restore();
-        
-        // Draw resize handles for selected elements (in screen space)
-        this.drawResizeHandles(canvasContext);
     }
     
     drawGrid(canvasContext) {
@@ -2382,14 +2384,12 @@ class CanvasMaker {
         const worldTop = -camera.y;
         const worldBottom = (canvas.height / camera.zoom) - camera.y;
         
-        // Add extra margin to ensure full coverage
+        // Add margin to ensure full coverage
         const margin = gridSize * 2;
         const startX = Math.floor((worldLeft - margin) / gridSize) * gridSize;
         const endX = Math.ceil((worldRight + margin) / gridSize) * gridSize;
         const startY = Math.floor((worldTop - margin) / gridSize) * gridSize;
         const endY = Math.ceil((worldBottom + margin) / gridSize) * gridSize;
-        
-        
         
         // Draw grid lines in screen space without camera transformation
         ctx.save();
@@ -2399,7 +2399,7 @@ class CanvasMaker {
         // Vertical lines
         for (let x = startX; x <= endX; x += gridSize) {
             const screenX = (x + camera.x) * camera.zoom;
-            // Only draw lines that are at least partially visible - extend range to ensure coverage
+            // Only draw lines that are at least partially visible
             if (screenX >= -2 && screenX <= canvas.width + 2) {
                 ctx.moveTo(screenX, 0);
                 ctx.lineTo(screenX, canvas.height);
@@ -2409,7 +2409,7 @@ class CanvasMaker {
         // Horizontal lines
         for (let y = startY; y <= endY; y += gridSize) {
             const screenY = (y + camera.y) * camera.zoom;
-            // Only draw lines that are at least partially visible - extend range to ensure coverage
+            // Only draw lines that are at least partially visible
             if (screenY >= -2 && screenY <= canvas.height + 2) {
                 ctx.moveTo(0, screenY);
                 ctx.lineTo(canvas.width, screenY);
@@ -2515,7 +2515,7 @@ class CanvasMaker {
                 };
             }
         } else if (element.type === 'nested-canvas') {
-            const nestedCanvas = canvasContext.nestedCanvases[element.index];
+            const nestedCanvas = this.activeCanvasContext.nestedCanvases[element.index];
             bounds = {
                 x: nestedCanvas.x,
                 y: nestedCanvas.y,
@@ -2527,19 +2527,19 @@ class CanvasMaker {
         if (!bounds) return null;
         
         // Work in world coordinates (much simpler and more reliable)
-        const handleSize = 8 / canvasContext.camera.zoom; // Handle size in world coordinates
-        const tolerance = 4 / canvasContext.camera.zoom; // Tolerance in world coordinates
+        const handleSize = 8 / this.activeCanvasContext.camera.zoom; // Handle size in world coordinates
+        const tolerance = 4 / this.activeCanvasContext.camera.zoom; // Tolerance in world coordinates
         
         // Create handles in world coordinates matching the drawing function
         const handles = [
-            { x: bounds.x - handleSize/2, y: bounds.y - handleSize/2, type: 'top-left' },
-            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y - handleSize/2, type: 'top-right' },
-            { x: bounds.x - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'bottom-left' },
-            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'bottom-right' },
-            { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y - handleSize/2, type: 'top' },
-            { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'bottom' },
-            { x: bounds.x - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'left' },
-            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'right' }
+            { x: bounds.x - handleSize/2, y: bounds.y - handleSize/2, type: 'nw' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y - handleSize/2, type: 'ne' },
+            { x: bounds.x - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'sw' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'se' },
+            { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y - handleSize/2, type: 'n' },
+            { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 's' },
+            { x: bounds.x - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'w' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'e' }
         ];
         
         // Check if worldX, worldY is within any handle bounds
@@ -2559,7 +2559,7 @@ class CanvasMaker {
         const element = this.selectedElements[0];
         if (element.type !== 'shape' && element.type !== 'nested-canvas') return;
         
-        const shape = element.type === 'shape' ? this.shapes[element.index] : canvasContext.nestedCanvases[element.index];
+        const shape = element.type === 'shape' ? this.shapes[element.index] : this.activeCanvasContext.nestedCanvases[element.index];
         const deltaX = currentX - this.dragOffset.x;
         const deltaY = currentY - this.dragOffset.y;
         
@@ -2916,20 +2916,27 @@ class CanvasMaker {
         
         if (!bounds) return null;
         
-        const handleSize = 8;
-        const tolerance = handleSize;
+        // Work in world coordinates (much simpler and more reliable)
+        const handleSize = 8 / canvasContext.camera.zoom; // Handle size in world coordinates
+        const tolerance = 4 / canvasContext.camera.zoom; // Tolerance in world coordinates
         
-        // Check corner handles
-        const corners = [
-            { x: bounds.x, y: bounds.y, handle: 'top-left' },
-            { x: bounds.x + bounds.width, y: bounds.y, handle: 'top-right' },
-            { x: bounds.x, y: bounds.y + bounds.height, handle: 'bottom-left' },
-            { x: bounds.x + bounds.width, y: bounds.y + bounds.height, handle: 'bottom-right' }
+        // Create handles in world coordinates matching the drawing function
+        const handles = [
+            { x: bounds.x - handleSize/2, y: bounds.y - handleSize/2, type: 'nw' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y - handleSize/2, type: 'ne' },
+            { x: bounds.x - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'sw' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'se' },
+            { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y - handleSize/2, type: 'n' },
+            { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 's' },
+            { x: bounds.x - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'w' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'e' }
         ];
         
-        for (const corner of corners) {
-            if (Math.abs(worldX - corner.x) <= tolerance && Math.abs(worldY - corner.y) <= tolerance) {
-                return corner.handle;
+        // Check if worldX, worldY is within any handle bounds
+        for (let handle of handles) {
+            if (worldX >= handle.x - tolerance && worldX <= handle.x + handleSize + tolerance &&
+                worldY >= handle.y - tolerance && worldY <= handle.y + handleSize + tolerance) {
+                return handle.type;
             }
         }
         
