@@ -431,7 +431,7 @@ class CanvasMaker {
                         point.y += deltaY;
                     });
                 } else if (element.type === 'nested-canvas') {
-                    const nestedCanvas = canvasContext.nestedCanvases[element.index];
+                    const nestedCanvas = this.nestedCanvases[element.index];
                     nestedCanvas.x += deltaX;
                     nestedCanvas.y += deltaY;
                 }
