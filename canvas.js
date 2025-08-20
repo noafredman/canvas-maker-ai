@@ -156,7 +156,7 @@ class CanvasMaker {
             this.closeNestedCanvasBtn.addEventListener('click', this.closeNestedCanvas.bind(this));
         }
         
-        // Double-click on main canvas to open nested canvas
+        // Double-click on main canvas to open nested canvas or edit text
         this.canvas.addEventListener('dblclick', this.handleDoubleClick.bind(this));
         
         // Overlay click to close nested canvas
@@ -593,25 +593,132 @@ class CanvasMaker {
     handleClick(e) {
         if (this.currentTool === 'text') {
             const pos = this.getMousePos(e);
-            const text = prompt('Enter text:');
-            if (text) {
-                this.texts.push({
-                    text,
-                    x: pos.x,
-                    y: pos.y
-                });
-                
-                // Auto-switch to select mode and select the newly created text
-                this.currentTool = 'select';
-                this.selectedElements = [{ type: 'text', index: this.texts.length - 1 }];
-                
-                // Update toolbar to show select tool as active
-                document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-                document.getElementById('select-tool').classList.add('active');
-                
-                this.updateCanvasCursor();
-                this.redrawCanvas();
+            
+            // Create a new text box
+            const newTextBox = {
+                text: '',
+                x: pos.x,
+                y: pos.y,
+                width: 200,
+                height: 40,
+                fontSize: 16,
+                fontFamily: 'Arial',
+                color: '#333',
+                isEditing: true,
+                id: Date.now() // Unique ID for the text box
+            };
+            
+            this.texts.push(newTextBox);
+            
+            // Auto-switch to select mode and select the newly created text
+            this.currentTool = 'select';
+            this.selectedElements = [{ type: 'text', index: this.texts.length - 1 }];
+            
+            // Update toolbar to show select tool as active
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('select-tool').classList.add('active');
+            
+            // Create and show text input for immediate editing
+            this.createTextInput(newTextBox, this.texts.length - 1);
+            
+            this.updateCanvasCursor();
+            this.redrawCanvas();
+        }
+    }
+    
+    createTextInput(textBox, textIndex) {
+        // Remove any existing text input
+        this.removeTextInput();
+        
+        // Convert world coordinates to screen coordinates
+        const screenPos = this.worldToCanvas(textBox.x, textBox.y);
+        
+        // Get the canvas position relative to the viewport
+        const canvas = this.activeCanvasContext.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
+        
+        // Create text input element
+        const textInput = document.createElement('textarea');
+        textInput.id = 'text-input';
+        textInput.value = textBox.text;
+        textInput.style.position = 'absolute';
+        textInput.style.left = (canvasRect.left + screenPos.x) + 'px';
+        textInput.style.top = (canvasRect.top + screenPos.y) + 'px';
+        textInput.style.width = (textBox.width * this.activeCanvasContext.camera.zoom) + 'px';
+        textInput.style.height = (textBox.height * this.activeCanvasContext.camera.zoom) + 'px';
+        textInput.style.fontSize = (textBox.fontSize * this.activeCanvasContext.camera.zoom) + 'px';
+        textInput.style.fontFamily = textBox.fontFamily;
+        textInput.style.color = textBox.color;
+        textInput.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+        textInput.style.border = '2px solid #3b82f6';
+        textInput.style.borderRadius = '4px';
+        textInput.style.padding = '4px';
+        textInput.style.resize = 'none';
+        textInput.style.outline = 'none';
+        textInput.style.zIndex = '1000';
+        textInput.style.overflow = 'hidden';
+        
+        // Add to document body instead of canvas container for absolute positioning
+        document.body.appendChild(textInput);
+        
+        // Focus and select all text
+        textInput.focus();
+        textInput.select();
+        
+        // Store reference
+        this.currentTextInput = textInput;
+        this.currentTextIndex = textIndex;
+        
+        // Handle text input events
+        textInput.addEventListener('blur', () => this.finishTextEditing());
+        textInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.finishTextEditing();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                this.finishTextEditing();
             }
+        });
+        
+        // Auto-resize textarea based on content
+        textInput.addEventListener('input', () => {
+            textInput.style.height = 'auto';
+            textInput.style.height = textInput.scrollHeight + 'px';
+            
+            // Update text box height in world coordinates
+            const newHeight = textInput.scrollHeight / this.activeCanvasContext.camera.zoom;
+            this.texts[textIndex].height = Math.max(newHeight, 20);
+        });
+    }
+    
+    removeTextInput() {
+        if (this.currentTextInput) {
+            this.currentTextInput.remove();
+            this.currentTextInput = null;
+            this.currentTextIndex = -1;
+        }
+    }
+    
+    finishTextEditing() {
+        if (this.currentTextInput && this.currentTextIndex >= 0) {
+            // Update the text content
+            const text = this.currentTextInput.value.trim();
+            
+            if (text) {
+                this.texts[this.currentTextIndex].text = text;
+                this.texts[this.currentTextIndex].isEditing = false;
+            } else {
+                // Remove empty text boxes
+                this.texts.splice(this.currentTextIndex, 1);
+                this.selectedElements = [];
+            }
+            
+            // Remove the input
+            this.removeTextInput();
+            
+            // Redraw canvas
+            this.redrawCanvas();
         }
     }
     
@@ -825,8 +932,21 @@ class CanvasMaker {
         const pos = this.getMousePos(e);
         const clickedElement = this.getElementAtPoint(pos.x, pos.y);
         
+        // Check if user double-clicked on a text box
+        if (clickedElement && clickedElement.type === 'text') {
+            const textBox = this.texts[clickedElement.index];
+            textBox.isEditing = true;
+            
+            // Select the text box
+            this.selectedElements = [{ type: 'text', index: clickedElement.index }];
+            
+            // Create text input for editing
+            this.createTextInput(textBox, clickedElement.index);
+            
+            this.redrawCanvas();
+        }
         // Check if user double-clicked on a nested canvas
-        if (clickedElement && clickedElement.type === 'nested-canvas') {
+        else if (clickedElement && clickedElement.type === 'nested-canvas') {
             this.openNestedCanvas(clickedElement.index);
         }
     }
@@ -843,35 +963,50 @@ class CanvasMaker {
             // Setup nested canvas size to fill container
             if (!this.nestedCanvas) return;
             
-            // Get container dimensions and use them for canvas sizing
-            // Use a slight delay to ensure layout is complete
-            setTimeout(() => {
-                const container = this.nestedCanvas.parentElement;
-                const containerRect = container.getBoundingClientRect();
-                const canvasWidth = Math.floor(containerRect.width);
-                const canvasHeight = Math.floor(containerRect.height);
-                
-                console.log('Container dimensions:', { 
-                    width: containerRect.width, 
-                    height: containerRect.height,
-                    canvasWidth,
-                    canvasHeight 
+            // Set up canvas dimensions consistently
+            this.setupNestedCanvasDimensions(nestedCanvasShape);
+        }
+    }
+    
+    setupNestedCanvasDimensions(nestedCanvasShape) {
+        // Use a consistent approach for all nested canvases
+        setTimeout(() => {
+            const container = this.nestedCanvas.parentElement;
+            const containerRect = container.getBoundingClientRect();
+            
+            // Ensure we have valid dimensions
+            if (containerRect.width <= 0 || containerRect.height <= 0) {
+                console.warn('Invalid container dimensions, retrying...');
+                setTimeout(() => this.setupNestedCanvasDimensions(nestedCanvasShape), 100);
+                return;
+            }
+            
+            // Use fixed dimensions to ensure consistency across all nested canvases
+            const canvasWidth = Math.round(containerRect.width);
+            const canvasHeight = Math.round(containerRect.height);
+            
+            // Only resize if dimensions have actually changed to avoid coordinate issues
+            if (this.nestedCanvas.width !== canvasWidth || this.nestedCanvas.height !== canvasHeight) {
+                console.log('Resizing nested canvas:', { 
+                    oldWidth: this.nestedCanvas.width,
+                    oldHeight: this.nestedCanvas.height,
+                    newWidth: canvasWidth,
+                    newHeight: canvasHeight
                 });
                 
                 this.nestedCanvas.width = canvasWidth;
                 this.nestedCanvas.height = canvasHeight;
-                this.nestedCanvas.style.width = '100%';
-                this.nestedCanvas.style.height = '100%';
+                this.nestedCanvas.style.width = canvasWidth + 'px';
+                this.nestedCanvas.style.height = canvasHeight + 'px';
                 
-                // Clear and setup context
-                this.nestedCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+                // Reset context properties after resize
                 this.nestedCtx.lineCap = 'round';
                 this.nestedCtx.lineJoin = 'round';
-                
-                // Continue with setup now that dimensions are correct
-                this.finishNestedCanvasSetup(nestedCanvasShape);
-            }, 50);
-        }
+            }
+            
+            // Continue with setup
+            this.finishNestedCanvasSetup(nestedCanvasShape);
+        }, 50);
     }
     
     finishNestedCanvasSetup(nestedCanvasShape) {
@@ -900,23 +1035,7 @@ class CanvasMaker {
         // Switch to nested canvas context for unified event handling
         this.activeCanvasContext = this.nestedCanvasContext;
         
-        // Add some test content for easier zoom testing if canvas is empty
-        if (this.nestedCanvasContext.shapes.length === 0 && this.nestedCanvasContext.paths.length === 0) {
-            this.nestedCanvasContext.shapes.push({
-                type: 'rectangle',
-                x: 100,
-                y: 100,
-                width: 200,
-                height: 150
-            });
-            this.nestedCanvasContext.shapes.push({
-                type: 'circle',
-                x: 400,
-                y: 300,
-                radius: 80
-            });
-            console.log('Added test shapes for zoom testing');
-        }
+        // Nested canvas is now ready for user drawing
         
         // Initial draw
         this.redrawCanvas(this.activeCanvasContext);
@@ -1029,6 +1148,7 @@ class CanvasMaker {
         this.nestedCanvas.addEventListener('mousemove', this.nestedMouseHandlers.mousemove);
         this.nestedCanvas.addEventListener('mouseup', this.nestedMouseHandlers.mouseup);
         this.nestedCanvas.addEventListener('click', this.nestedMouseHandlers.click);
+        this.nestedCanvas.addEventListener('dblclick', this.handleDoubleClick.bind(this));
         
         // Zoom and pan events for nested canvas - reuse main canvas handler
         this.nestedMouseHandlers.wheel = this.handleWheel.bind(this);
@@ -1087,6 +1207,7 @@ class CanvasMaker {
         this.nestedCanvas.removeEventListener('mousemove', this.nestedMouseHandlers.mousemove);
         this.nestedCanvas.removeEventListener('mouseup', this.nestedMouseHandlers.mouseup);
         this.nestedCanvas.removeEventListener('click', this.nestedMouseHandlers.click);
+        this.nestedCanvas.removeEventListener('dblclick', this.handleDoubleClick.bind(this));
         
         // Remove zoom/pan events
         if (this.nestedMouseHandlers.wheel) {
@@ -1267,7 +1388,7 @@ class CanvasMaker {
             // Area selection preview
             const width = pos.x - this.startX;
             const height = pos.y - this.startY;
-            this.showNestedSelectionBox(this.startX, this.startY, width, height);
+            this.showSelectionBox(this.startX, this.startY, width, height);
         } else if (this.isResizing) {
             // Resizing selected element
             this.performResizeForContext(pos.x, pos.y, this.nestedCanvasContext);
@@ -1330,7 +1451,7 @@ class CanvasMaker {
                 this.isDragging = false;
             } else if (this.isSelecting) {
                 this.isSelecting = false;
-                this.hideNestedSelectionBox();
+                this.hideSelectionBox();
                 this.selectElementsInAreaForContext(this.startX, this.startY, pos.x, pos.y, this.nestedCanvasContext);
                 this.redrawCanvas(this.nestedCanvasContext);
             }
@@ -1368,20 +1489,8 @@ class CanvasMaker {
     }
     
     handleNestedClick(e) {
-        if (this.currentTool === 'text') {
-            const pos = this.getNestedMousePos(e);
-            const text = prompt('Enter text:');
-            if (text) {
-                this.nestedCanvasContext.texts.push({
-                    text,
-                    x: pos.x,
-                    y: pos.y
-                });
-                // Auto-save after adding text
-                this.saveNestedCanvasData();
-                this.redrawCanvas(this.nestedCanvasContext);
-            }
-        }
+        // Text handling is now unified through handleClick method
+        // This method can be removed as it's deprecated
     }
     
     handleNestedWheel(e) {
@@ -1586,14 +1695,12 @@ class CanvasMaker {
             }
         }
         
-        // Check texts
+        // Check texts (text boxes)
         for (let i = texts.length - 1; i >= 0; i--) {
             const text = texts[i];
-            // Simple text bounds check
-            const textWidth = text.text.length * 10; // Rough estimate
-            const textHeight = 16;
-            if (x >= text.x && x <= text.x + textWidth &&
-                y >= text.y - textHeight && y <= text.y) {
+            // Check if point is within text box bounds
+            if (x >= text.x && x <= text.x + text.width &&
+                y >= text.y && y <= text.y + text.height) {
                 return { type: 'text', index: i };
             }
         }
@@ -1626,7 +1733,7 @@ class CanvasMaker {
             } else if (element.type === 'text') {
                 this.texts.splice(element.index, 1);
             } else if (element.type === 'nested-canvas') {
-                const nestedCanvas = canvasContext.nestedCanvases[element.index];
+                const nestedCanvas = this.nestedCanvases[element.index];
                 // Delete associated data
                 if (nestedCanvas.id) {
                     this.nestedCanvasData.delete(nestedCanvas.id);
@@ -1831,31 +1938,54 @@ class CanvasMaker {
     }
     
     showSelectionBox(worldX, worldY, worldWidth, worldHeight) {
-        if (!this.selectionBox) return;
+        // Use the appropriate selection box based on active canvas
+        const isNestedCanvas = this.activeCanvasContext === this.nestedCanvasContext;
+        const selectionBox = isNestedCanvas ? 
+            document.getElementById('nested-selection-box') : 
+            this.selectionBox;
+            
+        if (!selectionBox) return;
         
         // Convert world coordinates to screen coordinates for the selection box
         const topLeft = this.worldToCanvas(worldX, worldY);
         const bottomRight = this.worldToCanvas(worldX + worldWidth, worldY + worldHeight);
+        
+        // Get canvas position for absolute positioning
+        const canvas = this.activeCanvasContext.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
         
         const screenLeft = Math.min(topLeft.x, bottomRight.x);
         const screenTop = Math.min(topLeft.y, bottomRight.y);
         const screenWidth = Math.abs(bottomRight.x - topLeft.x);
         const screenHeight = Math.abs(bottomRight.y - topLeft.y);
         
-        this.selectionBox.style.display = 'block';
-        this.selectionBox.style.left = screenLeft + 'px';
-        this.selectionBox.style.top = screenTop + 'px';
-        this.selectionBox.style.width = screenWidth + 'px';
-        this.selectionBox.style.height = screenHeight + 'px';
+        selectionBox.style.display = 'block';
         
-        // Ensure visibility
-        this.selectionBox.style.border = '3px dashed #3b82f6';
-        this.selectionBox.style.background = 'rgba(59, 130, 246, 0.2)';
-        this.selectionBox.style.zIndex = '1000';
+        if (isNestedCanvas) {
+            // For nested canvas, position relative to the nested canvas container (no viewport offset needed)
+            selectionBox.style.left = screenLeft + 'px';
+            selectionBox.style.top = screenTop + 'px';
+        } else {
+            // For main canvas, position relative to the canvas container (no viewport offset needed)
+            selectionBox.style.left = screenLeft + 'px';
+            selectionBox.style.top = screenTop + 'px';
+        }
+        
+        selectionBox.style.width = screenWidth + 'px';
+        selectionBox.style.height = screenHeight + 'px';
+        selectionBox.style.zIndex = '1000';
     }
     
     hideSelectionBox() {
-        this.selectionBox.style.display = 'none';
+        // Hide the appropriate selection box based on active canvas
+        const isNestedCanvas = this.activeCanvasContext === this.nestedCanvasContext;
+        const selectionBox = isNestedCanvas ? 
+            document.getElementById('nested-selection-box') : 
+            this.selectionBox;
+            
+        if (selectionBox) {
+            selectionBox.style.display = 'none';
+        }
     }
     
     handleHover(pos) {
@@ -1898,14 +2028,12 @@ class CanvasMaker {
             }
         }
         
-        // Check texts
+        // Check texts (text boxes)
         for (let i = this.texts.length - 1; i >= 0; i--) {
             const text = this.texts[i];
-            // Approximate text bounds (simple check)
-            const textWidth = this.ctx.measureText(text.text).width;
-            const textHeight = 16; // font size
-            if (x >= text.x && x <= text.x + textWidth &&
-                y >= text.y - textHeight && y <= text.y) {
+            // Check if point is within text box bounds
+            if (x >= text.x && x <= text.x + text.width &&
+                y >= text.y && y <= text.y + text.height) {
                 return { type: 'text', index: i };
             }
         }
@@ -2100,14 +2228,49 @@ class CanvasMaker {
         // Draw texts
         ctx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
         texts.forEach((textObj, index) => {
+            if (textObj.isEditing) return; // Don't render text that's being edited
+            
             const isHovered = hoveredElement && 
                              hoveredElement.type === 'text' && 
                              hoveredElement.index === index;
             const isSelected = selectedElements.some(sel => 
                               sel.type === 'text' && sel.index === index);
             
-            ctx.fillStyle = isSelected ? '#ef4444' : (isHovered ? '#3b82f6' : '#333');
-            ctx.fillText(textObj.text, textObj.x, textObj.y);
+            // Draw text box background
+            if (isSelected || isHovered) {
+                ctx.fillStyle = isSelected ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)';
+                ctx.fillRect(textObj.x, textObj.y, textObj.width, textObj.height);
+                
+                // Draw border
+                ctx.strokeStyle = isSelected ? '#ef4444' : '#3b82f6';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(textObj.x, textObj.y, textObj.width, textObj.height);
+            }
+            
+            // Draw text
+            if (textObj.text) {
+                ctx.fillStyle = textObj.color || '#333';
+                ctx.font = `${textObj.fontSize}px ${textObj.fontFamily}`;
+                
+                // Multi-line text rendering
+                const lines = textObj.text.split('\n');
+                const lineHeight = textObj.fontSize * 1.2;
+                
+                lines.forEach((line, lineIndex) => {
+                    ctx.fillText(
+                        line, 
+                        textObj.x + 6, // Small padding
+                        textObj.y + textObj.fontSize + (lineIndex * lineHeight) + 6
+                    );
+                });
+            }
+            
+            // Draw placeholder if empty and selected
+            if (!textObj.text && isSelected) {
+                ctx.fillStyle = '#999';
+                ctx.font = `${textObj.fontSize}px ${textObj.fontFamily}`;
+                ctx.fillText('Double-click to edit', textObj.x + 6, textObj.y + textObj.fontSize + 6);
+            }
         });
         
         // Draw preview shape if currently drawing rectangle, circle, or nested-canvas
@@ -2197,8 +2360,8 @@ class CanvasMaker {
         // Vertical lines
         for (let x = startX; x <= endX; x += gridSize) {
             const screenX = (x + camera.x) * camera.zoom;
-            // Only draw lines that are at least partially visible
-            if (screenX >= -1 && screenX <= canvas.width + 1) {
+            // Only draw lines that are at least partially visible - extend range to ensure coverage
+            if (screenX >= -2 && screenX <= canvas.width + 2) {
                 ctx.moveTo(screenX, 0);
                 ctx.lineTo(screenX, canvas.height);
             }
@@ -2207,8 +2370,8 @@ class CanvasMaker {
         // Horizontal lines
         for (let y = startY; y <= endY; y += gridSize) {
             const screenY = (y + camera.y) * camera.zoom;
-            // Only draw lines that are at least partially visible
-            if (screenY >= -1 && screenY <= canvas.height + 1) {
+            // Only draw lines that are at least partially visible - extend range to ensure coverage
+            if (screenY >= -2 && screenY <= canvas.height + 2) {
                 ctx.moveTo(0, screenY);
                 ctx.lineTo(canvas.width, screenY);
             }
@@ -2645,33 +2808,6 @@ class CanvasMaker {
         this.updateRecenterButton();
     }
     
-    // Nested canvas selection helper methods
-    showNestedSelectionBox(worldX, worldY, worldWidth, worldHeight) {
-        const nestedSelectionBox = document.getElementById('nested-selection-box');
-        if (!nestedSelectionBox) return;
-        
-        // Convert world coordinates to screen coordinates for the nested selection box
-        const topLeft = this.worldToCanvas(worldX, worldY);
-        const bottomRight = this.worldToCanvas(worldX + worldWidth, worldY + worldHeight);
-        
-        const screenLeft = Math.min(topLeft.x, bottomRight.x);
-        const screenTop = Math.min(topLeft.y, bottomRight.y);
-        const screenWidth = Math.abs(bottomRight.x - topLeft.x);
-        const screenHeight = Math.abs(bottomRight.y - topLeft.y);
-        
-        nestedSelectionBox.style.display = 'block';
-        nestedSelectionBox.style.left = screenLeft + 'px';
-        nestedSelectionBox.style.top = screenTop + 'px';
-        nestedSelectionBox.style.width = screenWidth + 'px';
-        nestedSelectionBox.style.height = screenHeight + 'px';
-    }
-    
-    hideNestedSelectionBox() {
-        const nestedSelectionBox = document.getElementById('nested-selection-box');
-        if (nestedSelectionBox) {
-            nestedSelectionBox.style.display = 'none';
-        }
-    }
     
     selectElementsInAreaForContext(x1, y1, x2, y2, canvasContext) {
         const minX = Math.min(x1, x2);
@@ -2804,7 +2940,16 @@ class CanvasMaker {
     }
 }
 
-// Initialize the app when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    new CanvasMaker();
-});
+// Export the class for use as a module (if modules are supported)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = CanvasMaker;
+} else if (typeof window !== 'undefined') {
+    window.CanvasMaker = CanvasMaker;
+}
+
+// Initialize the app when the DOM is loaded (only if running standalone)
+if (typeof document !== 'undefined' && typeof module === 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => {
+        new CanvasMaker();
+    });
+}

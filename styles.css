@@ -135,8 +135,8 @@ h1 {
 
 .selection-box {
     position: absolute;
-    border: 3px dashed #3b82f6;
-    background: rgba(59, 130, 246, 0.2);
+    border: 2px solid rgba(128, 128, 128, 0.7);
+    background: rgba(128, 128, 128, 0.2);
     display: none;
     pointer-events: none;
     z-index: 10;

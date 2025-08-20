@@ -1,13 +1,17 @@
 {
   "name": "canvas-maker",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Custom canvas system with pan/zoom and drawing tools",
+  "main": "canvas.js",
+  "exports": {
+    ".": "./canvas.js",
+    "./styles": "./styles.css"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["canvas", "drawing", "pan", "zoom"],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "module"
 }
