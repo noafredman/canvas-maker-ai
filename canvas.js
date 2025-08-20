@@ -11,12 +11,13 @@ class CanvasMaker {
         this.resizeHandle = null;
         this.startX = 0;
         this.startY = 0;
-        this.currentPath = [];
-        this.paths = [];
-        this.shapes = [];
-        this.texts = [];
-        this.selectedElements = [];
-        this.hoveredElement = null;
+        // Initialize arrays that will be used in main canvas context
+        this._currentPath = [];
+        this._paths = [];
+        this._shapes = [];
+        this._texts = [];
+        this._selectedElements = [];
+        this._hoveredElement = null;
         this.dragOffset = { x: 0, y: 0 };
         this.clipboard = [];
         
@@ -64,13 +65,13 @@ class CanvasMaker {
             canvas: this.canvas,
             ctx: this.ctx,
             camera: this.camera,
-            paths: this.paths,
-            shapes: this.shapes,
-            texts: this.texts,
+            paths: this._paths,
+            shapes: this._shapes,
+            texts: this._texts,
             nestedCanvases: this.nestedCanvases,
-            selectedElements: this.selectedElements,
-            hoveredElement: null,
-            currentPath: this.currentPath,
+            selectedElements: this._selectedElements,
+            hoveredElement: this._hoveredElement,
+            currentPath: this._currentPath,
             selectionBox: this.selectionBox
         };
         
@@ -232,8 +233,22 @@ class CanvasMaker {
         }
     }
     
+    // Unified getters that work with active context
+    get paths() { return this.activeCanvasContext.paths; }
+    get shapes() { return this.activeCanvasContext.shapes; }
+    get texts() { return this.activeCanvasContext.texts; }
+    get nestedCanvases() { return this.activeCanvasContext.nestedCanvases; }
+    get selectedElements() { return this.activeCanvasContext.selectedElements; }
+    set selectedElements(value) { this.activeCanvasContext.selectedElements = value; }
+    get hoveredElement() { return this.activeCanvasContext.hoveredElement; }
+    set hoveredElement(value) { this.activeCanvasContext.hoveredElement = value; }
+    get currentPath() { return this.activeCanvasContext.currentPath; }
+    set currentPath(value) { this.activeCanvasContext.currentPath = value; }
+    get camera() { return this.activeCanvasContext.camera; }
+    
     getMousePos(e) {
-        const rect = this.canvas.getBoundingClientRect();
+        const canvas = this.activeCanvasContext.canvas;
+        const rect = canvas.getBoundingClientRect();
         const canvasX = e.clientX - rect.left;
         const canvasY = e.clientY - rect.top;
         
@@ -243,16 +258,18 @@ class CanvasMaker {
     }
     
     canvasToWorld(canvasX, canvasY) {
+        const camera = this.activeCanvasContext.camera;
         return {
-            x: canvasX / this.camera.zoom - this.camera.x,
-            y: canvasY / this.camera.zoom - this.camera.y
+            x: canvasX / camera.zoom - camera.x,
+            y: canvasY / camera.zoom - camera.y
         };
     }
     
     worldToCanvas(worldX, worldY) {
+        const camera = this.activeCanvasContext.camera;
         return {
-            x: (worldX + this.camera.x) * this.camera.zoom,
-            y: (worldY + this.camera.y) * this.camera.zoom
+            x: (worldX + camera.x) * camera.zoom,
+            y: (worldY + camera.y) * camera.zoom
         };
     }
     
@@ -853,6 +870,9 @@ class CanvasMaker {
                 selectionBox: this.nestedSelectionBox
             };
             
+            // Switch to nested canvas context for unified event handling
+            this.activeCanvasContext = this.nestedCanvasContext;
+            
             // Add some test content for easier zoom testing if canvas is empty
             if (this.nestedCanvasContext.shapes.length === 0 && this.nestedCanvasContext.paths.length === 0) {
                 this.nestedCanvasContext.shapes.push({
@@ -965,12 +985,12 @@ class CanvasMaker {
     setupNestedCanvasEvents() {
         if (!this.nestedCanvas) return;
         
-        // Store bound functions for proper event removal
+        // Store bound functions for proper event removal - reuse main canvas handlers
         this.nestedMouseHandlers = {
-            mousedown: this.handleNestedMouseDown.bind(this),
-            mousemove: this.handleNestedMouseMove.bind(this),
-            mouseup: this.handleNestedMouseUp.bind(this),
-            click: this.handleNestedClick.bind(this)
+            mousedown: this.handleMouseDown.bind(this),
+            mousemove: this.handleMouseMove.bind(this),
+            mouseup: this.handleMouseUp.bind(this),
+            click: this.handleClick.bind(this)
         };
         
         // Mouse events
@@ -979,14 +999,14 @@ class CanvasMaker {
         this.nestedCanvas.addEventListener('mouseup', this.nestedMouseHandlers.mouseup);
         this.nestedCanvas.addEventListener('click', this.nestedMouseHandlers.click);
         
-        // Zoom and pan events for nested canvas
-        this.nestedMouseHandlers.wheel = this.handleNestedWheel.bind(this);
+        // Zoom and pan events for nested canvas - reuse main canvas handler
+        this.nestedMouseHandlers.wheel = this.handleWheel.bind(this);
         this.nestedCanvas.addEventListener('wheel', this.nestedMouseHandlers.wheel);
         
-        // Touch events for nested canvas
-        this.nestedMouseHandlers.touchstart = this.handleNestedTouchStart.bind(this);
-        this.nestedMouseHandlers.touchmove = this.handleNestedTouchMove.bind(this);
-        this.nestedMouseHandlers.touchend = this.handleNestedTouchEnd.bind(this);
+        // Touch events for nested canvas - reuse main canvas handlers
+        this.nestedMouseHandlers.touchstart = this.handleTouchStart.bind(this);
+        this.nestedMouseHandlers.touchmove = this.handleTouchMove.bind(this);
+        this.nestedMouseHandlers.touchend = this.handleTouchEnd.bind(this);
         this.nestedCanvas.addEventListener('touchstart', this.nestedMouseHandlers.touchstart);
         this.nestedCanvas.addEventListener('touchmove', this.nestedMouseHandlers.touchmove);
         this.nestedCanvas.addEventListener('touchend', this.nestedMouseHandlers.touchend);
@@ -1075,7 +1095,8 @@ class CanvasMaker {
         }
     }
     
-    // Nested canvas mouse event handlers - enhanced implementation
+    // DEPRECATED: Nested canvas mouse event handlers - now using unified handlers above
+    // TODO: Remove this entire section after confirming the unified approach works
     handleNestedMouseDown(e) {
         const pos = this.getNestedMousePos(e);
         this.startX = pos.x;
@@ -1363,9 +1384,9 @@ class CanvasMaker {
             
             if (newZoom !== oldZoom && !isNaN(newZoom) && newZoom > 0) {
                 // Zoom towards cursor position - exactly like main canvas
-                const worldPos = this.nestedCanvasToWorld(canvasX, canvasY);
+                const worldPos = this.canvasToWorld(canvasX, canvasY);
                 camera.zoom = newZoom;
-                const newWorldPos = this.nestedCanvasToWorld(canvasX, canvasY);
+                const newWorldPos = this.canvasToWorld(canvasX, canvasY);
                 
                 // Safety check for valid world positions
                 if (!isNaN(worldPos.x) && !isNaN(worldPos.y) && !isNaN(newWorldPos.x) && !isNaN(newWorldPos.y)) {
@@ -1433,9 +1454,9 @@ class CanvasMaker {
                     const canvasY = center.y - rect.top;
                     
                     // Zoom towards touch center - exactly like main canvas
-                    const worldPos = this.nestedCanvasToWorld(canvasX, canvasY);
+                    const worldPos = this.canvasToWorld(canvasX, canvasY);
                     camera.zoom = newZoom;
-                    const newWorldPos = this.nestedCanvasToWorld(canvasX, canvasY);
+                    const newWorldPos = this.canvasToWorld(canvasX, canvasY);
                     
                     // Safety check for valid world positions
                     if (!isNaN(worldPos.x) && !isNaN(worldPos.y) && !isNaN(newWorldPos.x) && !isNaN(newWorldPos.y)) {
@@ -1490,53 +1511,10 @@ class CanvasMaker {
         const canvasX = e.clientX - rect.left;
         const canvasY = e.clientY - rect.top;
         
-        // Transform canvas coordinates to world coordinates using nested canvas camera
-        if (this.nestedCanvasContext && this.nestedCanvasContext.camera) {
-            return this.nestedCanvasToWorld(canvasX, canvasY);
-        }
-        
-        return { x: canvasX, y: canvasY };
+        // Transform canvas coordinates to world coordinates using active canvas camera
+        return this.canvasToWorld(canvasX, canvasY);
     }
     
-    nestedCanvasToWorld(canvasX, canvasY) {
-        const camera = this.nestedCanvasContext.camera;
-        
-        // Safety check for invalid zoom values
-        if (!camera || typeof camera.zoom !== 'number' || isNaN(camera.zoom) || camera.zoom <= 0) {
-            console.error('Invalid camera zoom:', camera);
-            // Reset to safe defaults
-            camera.zoom = 1;
-            camera.x = 0;
-            camera.y = 0;
-            camera.minZoom = 0.1;
-            camera.maxZoom = 5;
-        }
-        
-        return {
-            x: canvasX / camera.zoom - camera.x,
-            y: canvasY / camera.zoom - camera.y
-        };
-    }
-    
-    nestedWorldToCanvas(worldX, worldY) {
-        const camera = this.nestedCanvasContext.camera;
-        
-        // Safety check for invalid zoom values
-        if (!camera || typeof camera.zoom !== 'number' || isNaN(camera.zoom) || camera.zoom <= 0) {
-            console.error('Invalid camera zoom in worldToCanvas:', camera);
-            // Reset to safe defaults
-            camera.zoom = 1;
-            camera.x = 0;
-            camera.y = 0;
-            camera.minZoom = 0.1;
-            camera.maxZoom = 5;
-        }
-        
-        return {
-            x: (worldX + camera.x) * camera.zoom,
-            y: (worldY + camera.y) * camera.zoom
-        };
-    }
     
     getElementAtPointForContext(x, y, canvasContext) {
         const { shapes, texts, paths } = canvasContext;
@@ -2610,8 +2588,8 @@ class CanvasMaker {
         if (!nestedSelectionBox) return;
         
         // Convert world coordinates to screen coordinates for the nested selection box
-        const topLeft = this.nestedWorldToCanvas(worldX, worldY);
-        const bottomRight = this.nestedWorldToCanvas(worldX + worldWidth, worldY + worldHeight);
+        const topLeft = this.worldToCanvas(worldX, worldY);
+        const bottomRight = this.worldToCanvas(worldX + worldWidth, worldY + worldHeight);
         
         const screenLeft = Math.min(topLeft.x, bottomRight.x);
         const screenTop = Math.min(topLeft.y, bottomRight.y);
