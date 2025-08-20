@@ -17,6 +17,7 @@ class CanvasMaker {
         this._shapes = [];
         this._texts = [];
         this._selectedElements = [];
+        this._previewSelectedElements = []; // Elements that would be selected during drag
         this._hoveredElement = null;
         this.dragOffset = { x: 0, y: 0 };
         this.clipboard = [];
@@ -72,6 +73,7 @@ class CanvasMaker {
             texts: this._texts,
             nestedCanvases: this._nestedCanvases,
             selectedElements: this._selectedElements,
+            previewSelectedElements: this._previewSelectedElements,
             hoveredElement: this._hoveredElement,
             currentPath: this._currentPath,
             selectionBox: this.selectionBox
@@ -357,10 +359,6 @@ class CanvasMaker {
                         this.selectedElements = [clickedElement];
                         this.redrawCanvas();
                     }
-                } else if (this.selectedElements.length > 0) {
-                    // If we have selected elements and didn't click on anything specific, deselect
-                    this.selectedElements = [];
-                    this.redrawCanvas();
                 } else {
                     // If clicking on empty space, clear selection and start box selection
                     this.selectedElements = [];
@@ -408,6 +406,12 @@ class CanvasMaker {
             const width = pos.x - this.startX;
             const height = pos.y - this.startY;
             this.showSelectionBox(this.startX, this.startY, width, height);
+            
+            // Update preview selection to show which elements would be selected
+            this.activeCanvasContext.previewSelectedElements = this.getElementsInArea(
+                this.startX, this.startY, pos.x, pos.y, this.activeCanvasContext
+            );
+            this.redrawCanvas();
         } else if (this.isResizing) {
             // Resizing selected element
             this.performResize(pos.x, pos.y);
@@ -582,6 +586,8 @@ class CanvasMaker {
             } else {
                 this.isSelecting = false;
                 this.hideSelectionBox();
+                // Clear preview selection before finalizing the actual selection
+                this.activeCanvasContext.previewSelectedElements = [];
                 this.selectElementsInArea(this.startX, this.startY, pos.x, pos.y);
                 this.redrawCanvas();
             }
@@ -1027,6 +1033,7 @@ class CanvasMaker {
             texts: nestedData.texts || [],
             nestedCanvases: [], // Nested canvases don't have their own nested canvases for now
             selectedElements: [],
+            previewSelectedElements: [],
             hoveredElement: null,
             currentPath: [],
             selectionBox: this.nestedSelectionBox
@@ -1452,6 +1459,8 @@ class CanvasMaker {
             } else if (this.isSelecting) {
                 this.isSelecting = false;
                 this.hideSelectionBox();
+                // Clear preview selection before finalizing the actual selection
+                this.nestedCanvasContext.previewSelectedElements = [];
                 this.selectElementsInAreaForContext(this.startX, this.startY, pos.x, pos.y, this.nestedCanvasContext);
                 this.redrawCanvas(this.nestedCanvasContext);
             }
@@ -2085,28 +2094,29 @@ class CanvasMaker {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    selectElementsInArea(x1, y1, x2, y2) {
+    // Get elements that would be selected in the given area (without actually selecting them)
+    getElementsInArea(x1, y1, x2, y2, canvasContext = this.activeCanvasContext) {
         const minX = Math.min(x1, x2);
         const maxX = Math.max(x1, x2);
         const minY = Math.min(y1, y2);
         const maxY = Math.max(y1, y2);
         
-        
-        this.selectedElements = [];
+        const previewElements = [];
+        const { paths, shapes, texts, nestedCanvases } = canvasContext;
         
         // Check paths
-        this.paths.forEach((path, index) => {
+        paths.forEach((path, index) => {
             const inSelection = path.some(point => 
                 point.x >= minX && point.x <= maxX && 
                 point.y >= minY && point.y <= maxY
             );
             if (inSelection) {
-                this.selectedElements.push({ type: 'path', index });
+                previewElements.push({ type: 'path', index });
             }
         });
         
         // Check shapes
-        this.shapes.forEach((shape, index) => {
+        shapes.forEach((shape, index) => {
             let inSelection = false;
             if (shape.type === 'rectangle') {
                 // Check if rectangles intersect (more permissive - any overlap)
@@ -2131,36 +2141,45 @@ class CanvasMaker {
                 }
             }
             if (inSelection) {
-                this.selectedElements.push({ type: 'shape', index });
+                previewElements.push({ type: 'shape', index });
             }
         });
         
         // Check texts
-        this.texts.forEach((text, index) => {
+        texts.forEach((text, index) => {
             if (text.x >= minX && text.x <= maxX && 
                 text.y >= minY && text.y <= maxY) {
-                this.selectedElements.push({ type: 'text', index });
+                previewElements.push({ type: 'text', index });
             }
         });
         
-        // Check nested canvases
-        this.nestedCanvases.forEach((nestedCanvas, index) => {
-            // Check if nested canvas intersects with selection rectangle
-            const rectRight = nestedCanvas.x + nestedCanvas.width;
-            const rectBottom = nestedCanvas.y + nestedCanvas.height;
-            const inSelection = !(rectRight < minX || nestedCanvas.x > maxX || 
-                                 rectBottom < minY || nestedCanvas.y > maxY);
-            if (inSelection) {
-                this.selectedElements.push({ type: 'nested-canvas', index });
-            }
-        });
+        // Check nested canvases (only for main canvas context)
+        if (canvasContext === this.mainCanvasContext) {
+            nestedCanvases.forEach((nestedCanvas, index) => {
+                // Check if nested canvas intersects with selection rectangle
+                const rectRight = nestedCanvas.x + nestedCanvas.width;
+                const rectBottom = nestedCanvas.y + nestedCanvas.height;
+                const inSelection = !(rectRight < minX || nestedCanvas.x > maxX || 
+                                     rectBottom < minY || nestedCanvas.y > maxY);
+                if (inSelection) {
+                    previewElements.push({ type: 'nested-canvas', index });
+                }
+            });
+        }
+        
+        return previewElements;
+    }
+
+    selectElementsInArea(x1, y1, x2, y2) {
+        const previewElements = this.getElementsInArea(x1, y1, x2, y2);
+        this.selectedElements = previewElements;
         
         this.updateCanvasCursor();
         this.redrawCanvas();
     }
     
     redrawCanvas(canvasContext = this.activeCanvasContext) {
-        const { canvas, ctx, camera, paths, shapes, texts, nestedCanvases, selectedElements, hoveredElement, currentPath } = canvasContext;
+        const { canvas, ctx, camera, paths, shapes, texts, nestedCanvases, selectedElements, previewSelectedElements, hoveredElement, currentPath } = canvasContext;
         
         ctx.save();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2179,9 +2198,14 @@ class CanvasMaker {
                              hoveredElement.index === index;
             const isSelected = selectedElements.some(sel => 
                               sel.type === 'path' && sel.index === index);
+            const isPreviewSelected = previewSelectedElements && previewSelectedElements.some(sel => 
+                              sel.type === 'path' && sel.index === index);
             
-            ctx.strokeStyle = isSelected ? '#ef4444' : (isHovered ? '#3b82f6' : '#333');
-            ctx.lineWidth = (isSelected || isHovered) ? 3 : 2;
+            // Priority: Selected (red) > Hovered (blue) > Preview Selected (orange) > Default (gray)
+            ctx.strokeStyle = isSelected ? '#ef4444' : 
+                             (isHovered ? '#3b82f6' : 
+                             (isPreviewSelected ? '#f97316' : '#333'));
+            ctx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : 2;
             
             if (path.length > 0) {
                 ctx.beginPath();
@@ -2212,9 +2236,14 @@ class CanvasMaker {
                              hoveredElement.index === index;
             const isSelected = selectedElements.some(sel => 
                               sel.type === 'shape' && sel.index === index);
+            const isPreviewSelected = previewSelectedElements && previewSelectedElements.some(sel => 
+                              sel.type === 'shape' && sel.index === index);
             
-            ctx.strokeStyle = isSelected ? '#ef4444' : (isHovered ? '#3b82f6' : '#333');
-            ctx.lineWidth = (isSelected || isHovered) ? 3 : 2;
+            // Priority: Selected (red) > Hovered (blue) > Preview Selected (orange) > Default (gray)
+            ctx.strokeStyle = isSelected ? '#ef4444' : 
+                             (isHovered ? '#3b82f6' : 
+                             (isPreviewSelected ? '#f97316' : '#333'));
+            ctx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : 2;
             
             ctx.beginPath();
             if (shape.type === 'rectangle') {
@@ -2235,14 +2264,19 @@ class CanvasMaker {
                              hoveredElement.index === index;
             const isSelected = selectedElements.some(sel => 
                               sel.type === 'text' && sel.index === index);
+            const isPreviewSelected = previewSelectedElements && previewSelectedElements.some(sel => 
+                              sel.type === 'text' && sel.index === index);
             
             // Draw text box background
-            if (isSelected || isHovered) {
-                ctx.fillStyle = isSelected ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)';
+            if (isSelected || isHovered || isPreviewSelected) {
+                ctx.fillStyle = isSelected ? 'rgba(239, 68, 68, 0.1)' : 
+                               (isHovered ? 'rgba(59, 130, 246, 0.1)' : 
+                               'rgba(249, 115, 22, 0.1)'); // Orange for preview
                 ctx.fillRect(textObj.x, textObj.y, textObj.width, textObj.height);
                 
                 // Draw border
-                ctx.strokeStyle = isSelected ? '#ef4444' : '#3b82f6';
+                ctx.strokeStyle = isSelected ? '#ef4444' : 
+                                 (isHovered ? '#3b82f6' : '#f97316'); // Orange for preview
                 ctx.lineWidth = 2;
                 ctx.strokeRect(textObj.x, textObj.y, textObj.width, textObj.height);
             }
@@ -2286,10 +2320,15 @@ class CanvasMaker {
                              hoveredElement.index === index;
             const isSelected = selectedElements.some(sel => 
                               sel.type === 'nested-canvas' && sel.index === index);
+            const isPreviewSelected = previewSelectedElements && previewSelectedElements.some(sel => 
+                              sel.type === 'nested-canvas' && sel.index === index);
             
             // Draw the nested canvas frame
-            ctx.strokeStyle = isSelected ? '#ef4444' : (isHovered ? '#3b82f6' : '#666');
-            ctx.lineWidth = (isSelected || isHovered) ? 3 : 2;
+            // Priority: Selected (red) > Hovered (blue) > Preview Selected (orange) > Default (gray)
+            ctx.strokeStyle = isSelected ? '#ef4444' : 
+                             (isHovered ? '#3b82f6' : 
+                             (isPreviewSelected ? '#f97316' : '#666'));
+            ctx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : 2;
             ctx.fillStyle = '#f8f9fa';
             
             ctx.fillRect(nestedCanvas.x, nestedCanvas.y, nestedCanvas.width, nestedCanvas.height);
@@ -2414,47 +2453,41 @@ class CanvasMaker {
                 width: nestedCanvas.width,
                 height: nestedCanvas.height
             };
+        } else if (element.type === 'text') {
+            const text = canvasContext.texts[element.index];
+            bounds = {
+                x: text.x,
+                y: text.y,
+                width: text.width,
+                height: text.height
+            };
         }
         
         if (bounds) {
-            // Draw handles in screen space (no transformations applied)
-            canvasContext.ctx.save();
+            // Draw handles in world space (with camera transformations applied)
+            canvasContext.ctx.fillStyle = '#3b82f6'; // Blue
+            canvasContext.ctx.strokeStyle = '#ffffff'; // White border
+            canvasContext.ctx.lineWidth = 2 / canvasContext.camera.zoom; // Scale line width with zoom
             
-            // Reset any transformations for UI elements
-            canvasContext.ctx.setTransform(1, 0, 0, 1, 0, 0);
+            // Handle size in world coordinates (scales with zoom)
+            const handleSize = 8 / canvasContext.camera.zoom;
             
-            // Convert world coordinates to screen coordinates for handles
-            const topLeft = this.worldToCanvas(bounds.x, bounds.y);
-            const bottomRight = this.worldToCanvas(bounds.x + bounds.width, bounds.y + bounds.height);
+            // Draw corner handles
+            const handles = [
+                { x: bounds.x - handleSize/2, y: bounds.y - handleSize/2, type: 'nw' },
+                { x: bounds.x + bounds.width - handleSize/2, y: bounds.y - handleSize/2, type: 'ne' },
+                { x: bounds.x - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'sw' },
+                { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'se' },
+                { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y - handleSize/2, type: 'n' },
+                { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 's' },
+                { x: bounds.x - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'w' },
+                { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'e' }
+            ];
             
-            canvasContext.ctx.fillStyle = '#3b82f6';
-            canvasContext.ctx.strokeStyle = '#ffffff';
-            canvasContext.ctx.lineWidth = 2;
-            
-            const handleSize = 8;
-            const screenWidth = bottomRight.x - topLeft.x;
-            const screenHeight = bottomRight.y - topLeft.y;
-            
-            // Only show handles if the shape is reasonably sized on screen
-            if (Math.abs(screenWidth) > 20 && Math.abs(screenHeight) > 20) {
-                const handles = [
-                    { x: topLeft.x - handleSize/2, y: topLeft.y - handleSize/2, type: 'nw' },
-                    { x: bottomRight.x - handleSize/2, y: topLeft.y - handleSize/2, type: 'ne' },
-                    { x: topLeft.x - handleSize/2, y: bottomRight.y - handleSize/2, type: 'sw' },
-                    { x: bottomRight.x - handleSize/2, y: bottomRight.y - handleSize/2, type: 'se' },
-                    { x: topLeft.x + screenWidth/2 - handleSize/2, y: topLeft.y - handleSize/2, type: 'n' },
-                    { x: topLeft.x + screenWidth/2 - handleSize/2, y: bottomRight.y - handleSize/2, type: 's' },
-                    { x: topLeft.x - handleSize/2, y: topLeft.y + screenHeight/2 - handleSize/2, type: 'w' },
-                    { x: bottomRight.x - handleSize/2, y: topLeft.y + screenHeight/2 - handleSize/2, type: 'e' }
-                ];
-                
-                handles.forEach(handle => {
-                    canvasContext.ctx.fillRect(handle.x, handle.y, handleSize, handleSize);
-                    canvasContext.ctx.strokeRect(handle.x, handle.y, handleSize, handleSize);
-                });
-            }
-            
-            canvasContext.ctx.restore();
+            handles.forEach(handle => {
+                canvasContext.ctx.fillRect(handle.x, handle.y, handleSize, handleSize);
+                canvasContext.ctx.strokeRect(handle.x, handle.y, handleSize, handleSize);
+            });
         }
     }
     
@@ -2493,35 +2526,26 @@ class CanvasMaker {
         
         if (!bounds) return null;
         
-        // Convert world coordinates to screen coordinates for hit testing
-        const screenPos = this.worldToCanvas(worldX, worldY);
-        const topLeft = this.worldToCanvas(bounds.x, bounds.y);
-        const bottomRight = this.worldToCanvas(bounds.x + bounds.width, bounds.y + bounds.height);
+        // Work in world coordinates (much simpler and more reliable)
+        const handleSize = 8 / canvasContext.camera.zoom; // Handle size in world coordinates
+        const tolerance = 4 / canvasContext.camera.zoom; // Tolerance in world coordinates
         
-        const handleSize = 8;
-        const tolerance = 4;
-        const screenWidth = bottomRight.x - topLeft.x;
-        const screenHeight = bottomRight.y - topLeft.y;
-        
-        // Only check handles if shape is reasonably sized
-        if (Math.abs(screenWidth) < 20 || Math.abs(screenHeight) < 20) {
-            return null;
-        }
-        
+        // Create handles in world coordinates matching the drawing function
         const handles = [
-            { x: topLeft.x - handleSize/2, y: topLeft.y - handleSize/2, type: 'nw' },
-            { x: bottomRight.x - handleSize/2, y: topLeft.y - handleSize/2, type: 'ne' },
-            { x: topLeft.x - handleSize/2, y: bottomRight.y - handleSize/2, type: 'sw' },
-            { x: bottomRight.x - handleSize/2, y: bottomRight.y - handleSize/2, type: 'se' },
-            { x: topLeft.x + screenWidth/2 - handleSize/2, y: topLeft.y - handleSize/2, type: 'n' },
-            { x: topLeft.x + screenWidth/2 - handleSize/2, y: bottomRight.y - handleSize/2, type: 's' },
-            { x: topLeft.x - handleSize/2, y: topLeft.y + screenHeight/2 - handleSize/2, type: 'w' },
-            { x: bottomRight.x - handleSize/2, y: topLeft.y + screenHeight/2 - handleSize/2, type: 'e' }
+            { x: bounds.x - handleSize/2, y: bounds.y - handleSize/2, type: 'top-left' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y - handleSize/2, type: 'top-right' },
+            { x: bounds.x - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'bottom-left' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'bottom-right' },
+            { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y - handleSize/2, type: 'top' },
+            { x: bounds.x + bounds.width/2 - handleSize/2, y: bounds.y + bounds.height - handleSize/2, type: 'bottom' },
+            { x: bounds.x - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'left' },
+            { x: bounds.x + bounds.width - handleSize/2, y: bounds.y + bounds.height/2 - handleSize/2, type: 'right' }
         ];
         
+        // Check if worldX, worldY is within any handle bounds
         for (let handle of handles) {
-            if (screenPos.x >= handle.x - tolerance && screenPos.x <= handle.x + handleSize + tolerance &&
-                screenPos.y >= handle.y - tolerance && screenPos.y <= handle.y + handleSize + tolerance) {
+            if (worldX >= handle.x - tolerance && worldX <= handle.x + handleSize + tolerance &&
+                worldY >= handle.y - tolerance && worldY <= handle.y + handleSize + tolerance) {
                 return handle.type;
             }
         }
@@ -2872,6 +2896,22 @@ class CanvasMaker {
                     height: shape.radius * 2
                 };
             }
+        } else if (element.type === 'nested-canvas') {
+            const nestedCanvas = canvasContext.nestedCanvases[element.index];
+            bounds = {
+                x: nestedCanvas.x,
+                y: nestedCanvas.y,
+                width: nestedCanvas.width,
+                height: nestedCanvas.height
+            };
+        } else if (element.type === 'text') {
+            const text = canvasContext.texts[element.index];
+            bounds = {
+                x: text.x,
+                y: text.y,
+                width: text.width,
+                height: text.height
+            };
         }
         
         if (!bounds) return null;
@@ -2900,39 +2940,98 @@ class CanvasMaker {
         if (canvasContext.selectedElements.length !== 1 || !this.resizeHandle) return;
         
         const element = canvasContext.selectedElements[0];
-        if (element.type !== 'shape') return;
-        
-        const shape = canvasContext.shapes[element.index];
         const deltaX = currentX - this.dragOffset.x;
         const deltaY = currentY - this.dragOffset.y;
         
-        if (shape.type === 'rectangle') {
+        if (element.type === 'shape') {
+            const shape = canvasContext.shapes[element.index];
+            
+            if (shape.type === 'rectangle') {
+                switch (this.resizeHandle) {
+                    case 'top-left':
+                        shape.x += deltaX;
+                        shape.y += deltaY;
+                        shape.width -= deltaX;
+                        shape.height -= deltaY;
+                        break;
+                    case 'top-right':
+                        shape.y += deltaY;
+                        shape.width += deltaX;
+                        shape.height -= deltaY;
+                        break;
+                    case 'bottom-left':
+                        shape.x += deltaX;
+                        shape.width -= deltaX;
+                        shape.height += deltaY;
+                        break;
+                    case 'bottom-right':
+                        shape.width += deltaX;
+                        shape.height += deltaY;
+                        break;
+                }
+            } else if (shape.type === 'circle') {
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                const direction = deltaX > 0 || deltaY > 0 ? 1 : -1;
+                shape.radius = Math.max(5, shape.radius + direction * distance * 0.1);
+            }
+        } else if (element.type === 'text') {
+            const text = canvasContext.texts[element.index];
+            
             switch (this.resizeHandle) {
                 case 'top-left':
-                    shape.x += deltaX;
-                    shape.y += deltaY;
-                    shape.width -= deltaX;
-                    shape.height -= deltaY;
+                    text.x += deltaX;
+                    text.y += deltaY;
+                    text.width -= deltaX;
+                    text.height -= deltaY;
                     break;
                 case 'top-right':
-                    shape.y += deltaY;
-                    shape.width += deltaX;
-                    shape.height -= deltaY;
+                    text.y += deltaY;
+                    text.width += deltaX;
+                    text.height -= deltaY;
                     break;
                 case 'bottom-left':
-                    shape.x += deltaX;
-                    shape.width -= deltaX;
-                    shape.height += deltaY;
+                    text.x += deltaX;
+                    text.width -= deltaX;
+                    text.height += deltaY;
                     break;
                 case 'bottom-right':
-                    shape.width += deltaX;
-                    shape.height += deltaY;
+                    text.width += deltaX;
+                    text.height += deltaY;
                     break;
             }
-        } else if (shape.type === 'circle') {
-            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            const direction = deltaX > 0 || deltaY > 0 ? 1 : -1;
-            shape.radius = Math.max(5, shape.radius + direction * distance * 0.1);
+            
+            // Ensure minimum text box size
+            text.width = Math.max(50, text.width);
+            text.height = Math.max(20, text.height);
+        } else if (element.type === 'nested-canvas') {
+            const nestedCanvas = canvasContext.nestedCanvases[element.index];
+            
+            switch (this.resizeHandle) {
+                case 'top-left':
+                    nestedCanvas.x += deltaX;
+                    nestedCanvas.y += deltaY;
+                    nestedCanvas.width -= deltaX;
+                    nestedCanvas.height -= deltaY;
+                    break;
+                case 'top-right':
+                    nestedCanvas.y += deltaY;
+                    nestedCanvas.width += deltaX;
+                    nestedCanvas.height -= deltaY;
+                    break;
+                case 'bottom-left':
+                    nestedCanvas.x += deltaX;
+                    nestedCanvas.width -= deltaX;
+                    nestedCanvas.height += deltaY;
+                    break;
+                case 'bottom-right':
+                    nestedCanvas.width += deltaX;
+                    nestedCanvas.height += deltaY;
+                    break;
+            }
+            
+            // Ensure minimum nested canvas size
+            nestedCanvas.width = Math.max(100, nestedCanvas.width);
+            nestedCanvas.height = Math.max(100, nestedCanvas.height);
         }
         
         this.dragOffset.x = currentX;
