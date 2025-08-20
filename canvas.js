@@ -430,7 +430,7 @@ class CanvasMaker {
                         point.y += deltaY;
                     });
                 } else if (element.type === 'nested-canvas') {
-                    const nestedCanvas = this.nestedCanvases[element.index];
+                    const nestedCanvas = canvasContext.nestedCanvases[element.index];
                     nestedCanvas.x += deltaX;
                     nestedCanvas.y += deltaY;
                 }
@@ -1576,7 +1576,7 @@ class CanvasMaker {
             } else if (element.type === 'text') {
                 this.texts.splice(element.index, 1);
             } else if (element.type === 'nested-canvas') {
-                const nestedCanvas = this.nestedCanvases[element.index];
+                const nestedCanvas = canvasContext.nestedCanvases[element.index];
                 // Delete associated data
                 if (nestedCanvas.id) {
                     this.nestedCanvasData.delete(nestedCanvas.id);
@@ -1617,7 +1617,7 @@ class CanvasMaker {
                     data: { ...originalText }
                 });
             } else if (element.type === 'nested-canvas') {
-                const originalNestedCanvas = this.nestedCanvases[element.index];
+                const originalNestedCanvas = canvasContext.nestedCanvases[element.index];
                 // Deep copy the nested canvas
                 this.clipboard.push({
                     type: 'nested-canvas',
@@ -1724,7 +1724,7 @@ class CanvasMaker {
         if (this.currentTool === 'rectangle') {
             const width = endX - startX;
             const height = endY - startY;
-            this.ctx.strokeRect(startX, startY, width, height);
+            canvasContext.ctx.strokeRect(startX, startY, width, height);
         } else if (this.currentTool === 'circle') {
             // Calculate circle that fits in the bounding box from start to end
             const centerX = (startX + endX) / 2;
@@ -1741,22 +1741,22 @@ class CanvasMaker {
                 centerY: centerY,
                 radius: radius
             });
-            this.ctx.beginPath();
-            this.ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-            this.ctx.stroke();
+            canvasContext.ctx.beginPath();
+            canvasContext.ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            canvasContext.ctx.stroke();
         } else if (this.currentTool === 'nested-canvas') {
             const width = endX - startX;
             const height = endY - startY;
             
             // Draw outer frame
-            this.ctx.strokeRect(startX, startY, width, height);
+            canvasContext.ctx.strokeRect(startX, startY, width, height);
             
             // Draw nested canvas preview indicator
-            this.ctx.save();
-            this.ctx.setLineDash([]);
-            this.ctx.strokeStyle = '#3b82f6';
-            this.ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
-            this.ctx.fillRect(startX, startY, width, height);
+            canvasContext.ctx.save();
+            canvasContext.ctx.setLineDash([]);
+            canvasContext.ctx.strokeStyle = '#3b82f6';
+            canvasContext.ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+            canvasContext.ctx.fillRect(startX, startY, width, height);
             
             // Draw icon in center if shape is large enough
             if (Math.abs(width) > 40 && Math.abs(height) > 40) {
@@ -1764,16 +1764,16 @@ class CanvasMaker {
                 const centerY = startY + height / 2;
                 const iconSize = Math.min(24, Math.min(Math.abs(width), Math.abs(height)) / 3);
                 
-                this.ctx.strokeRect(centerX - iconSize/2, centerY - iconSize/2 - 5, iconSize, iconSize);
+                canvasContext.ctx.strokeRect(centerX - iconSize/2, centerY - iconSize/2 - 5, iconSize, iconSize);
                 
-                this.ctx.fillStyle = '#3b82f6';
-                this.ctx.font = '12px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
-                this.ctx.textAlign = 'center';
-                this.ctx.textBaseline = 'middle';
-                this.ctx.fillText('Canvas', centerX, centerY + 10);
+                canvasContext.ctx.fillStyle = '#3b82f6';
+                canvasContext.ctx.font = '12px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+                canvasContext.ctx.textAlign = 'center';
+                canvasContext.ctx.textBaseline = 'middle';
+                canvasContext.ctx.fillText('Canvas', centerX, centerY + 10);
             }
             
-            this.ctx.restore();
+            canvasContext.ctx.restore();
         }
         
         this.ctx.setLineDash([]);
@@ -2107,7 +2107,7 @@ class CanvasMaker {
         ctx.restore();
         
         // Draw resize handles for selected elements (in screen space)
-        this.drawResizeHandles();
+        this.drawResizeHandles(canvasContext);
     }
     
     drawGrid(canvasContext) {
@@ -2168,16 +2168,16 @@ class CanvasMaker {
         ctx.restore();
     }
     
-    drawResizeHandles() {
-        if (this.selectedElements.length !== 1) {
+    drawResizeHandles(canvasContext) {
+        if (canvasContext.selectedElements.length !== 1) {
             return; // Only show handles for single selection
         }
         
-        const element = this.selectedElements[0];
+        const element = canvasContext.selectedElements[0];
         let bounds = null;
         
         if (element.type === 'shape') {
-            const shape = this.shapes[element.index];
+            const shape = canvasContext.shapes[element.index];
             if (shape.type === 'rectangle') {
                 bounds = {
                     x: shape.x,
@@ -2194,7 +2194,7 @@ class CanvasMaker {
                 };
             }
         } else if (element.type === 'nested-canvas') {
-            const nestedCanvas = this.nestedCanvases[element.index];
+            const nestedCanvas = canvasContext.nestedCanvases[element.index];
             bounds = {
                 x: nestedCanvas.x,
                 y: nestedCanvas.y,
@@ -2205,18 +2205,18 @@ class CanvasMaker {
         
         if (bounds) {
             // Draw handles in screen space (no transformations applied)
-            this.ctx.save();
+            canvasContext.ctx.save();
             
             // Reset any transformations for UI elements
-            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+            canvasContext.ctx.setTransform(1, 0, 0, 1, 0, 0);
             
             // Convert world coordinates to screen coordinates for handles
             const topLeft = this.worldToCanvas(bounds.x, bounds.y);
             const bottomRight = this.worldToCanvas(bounds.x + bounds.width, bounds.y + bounds.height);
             
-            this.ctx.fillStyle = '#3b82f6';
-            this.ctx.strokeStyle = '#ffffff';
-            this.ctx.lineWidth = 2;
+            canvasContext.ctx.fillStyle = '#3b82f6';
+            canvasContext.ctx.strokeStyle = '#ffffff';
+            canvasContext.ctx.lineWidth = 2;
             
             const handleSize = 8;
             const screenWidth = bottomRight.x - topLeft.x;
@@ -2236,12 +2236,12 @@ class CanvasMaker {
                 ];
                 
                 handles.forEach(handle => {
-                    this.ctx.fillRect(handle.x, handle.y, handleSize, handleSize);
-                    this.ctx.strokeRect(handle.x, handle.y, handleSize, handleSize);
+                    canvasContext.ctx.fillRect(handle.x, handle.y, handleSize, handleSize);
+                    canvasContext.ctx.strokeRect(handle.x, handle.y, handleSize, handleSize);
                 });
             }
             
-            this.ctx.restore();
+            canvasContext.ctx.restore();
         }
     }
     
@@ -2269,7 +2269,7 @@ class CanvasMaker {
                 };
             }
         } else if (element.type === 'nested-canvas') {
-            const nestedCanvas = this.nestedCanvases[element.index];
+            const nestedCanvas = canvasContext.nestedCanvases[element.index];
             bounds = {
                 x: nestedCanvas.x,
                 y: nestedCanvas.y,
@@ -2322,7 +2322,7 @@ class CanvasMaker {
         const element = this.selectedElements[0];
         if (element.type !== 'shape' && element.type !== 'nested-canvas') return;
         
-        const shape = element.type === 'shape' ? this.shapes[element.index] : this.nestedCanvases[element.index];
+        const shape = element.type === 'shape' ? this.shapes[element.index] : canvasContext.nestedCanvases[element.index];
         const deltaX = currentX - this.dragOffset.x;
         const deltaY = currentY - this.dragOffset.y;
         
