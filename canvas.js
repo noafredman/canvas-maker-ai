@@ -668,7 +668,8 @@ class CanvasMaker {
     handleWheel(e) {
         e.preventDefault();
         
-        const rect = this.canvas.getBoundingClientRect();
+        const canvas = this.activeCanvasContext.canvas;
+        const rect = canvas.getBoundingClientRect();
         const canvasX = e.clientX - rect.left;
         const canvasY = e.clientY - rect.top;
         
@@ -864,7 +865,13 @@ class CanvasMaker {
             this.nestedCanvasContext = {
                 canvas: this.nestedCanvas,
                 ctx: this.nestedCtx,
-                camera: nestedData.camera || { x: 0, y: 0, zoom: 1, minZoom: 0.1, maxZoom: 5 },
+                camera: {
+                    x: nestedData.camera?.x ?? 0,
+                    y: nestedData.camera?.y ?? 0,
+                    zoom: nestedData.camera?.zoom ?? 1,
+                    minZoom: 0.1,
+                    maxZoom: 5
+                },
                 paths: nestedData.paths || [],
                 shapes: nestedData.shapes || [],
                 texts: nestedData.texts || [],
