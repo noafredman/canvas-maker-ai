@@ -328,7 +328,7 @@ class CanvasMaker {
             this.currentPath = [{ x: pos.x, y: pos.y }];
         } else if (this.currentTool === 'select') {
             // Check if clicking on a resize handle
-            const resizeHandle = this.getResizeHandle(pos.x, pos.y);
+            const resizeHandle = this.getResizeHandleForContext(pos.x, pos.y, this.activeCanvasContext);
             if (resizeHandle) {
                 this.isResizing = true;
                 this.resizeHandle = resizeHandle;
@@ -1717,9 +1717,9 @@ class CanvasMaker {
         this.updateCanvasCursor();
     }
     
-    drawPreviewShape(startX, startY, endX, endY) {
-        this.ctx.strokeStyle = '#3b82f6';
-        this.ctx.setLineDash([5, 5]);
+    drawPreviewShape(canvasContext, startX, startY, endX, endY) {
+        canvasContext.ctx.strokeStyle = '#3b82f6';
+        canvasContext.ctx.setLineDash([5, 5]);
         
         if (this.currentTool === 'rectangle') {
             const width = endX - startX;
@@ -2063,7 +2063,7 @@ class CanvasMaker {
         // Draw preview shape if currently drawing rectangle, circle, or nested-canvas
         if ((this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas') && 
             this.isDrawing && this.previewStartX !== undefined) {
-            this.drawPreviewShape(this.previewStartX, this.previewStartY, this.previewEndX, this.previewEndY);
+            this.drawPreviewShape(canvasContext, this.previewStartX, this.previewStartY, this.previewEndX, this.previewEndY);
         }
         
         // Draw nested canvases (before restoring context so they get camera transformation)
