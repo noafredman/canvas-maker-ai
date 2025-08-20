@@ -28,7 +28,7 @@ class CanvasMaker {
         this.previewEndY = undefined;
         
         // Camera/viewport system for infinite canvas
-        this.camera = {
+        this._camera = {
             x: 0,
             y: 0,
             zoom: 1,
@@ -64,7 +64,7 @@ class CanvasMaker {
         this.mainCanvasContext = {
             canvas: this.canvas,
             ctx: this.ctx,
-            camera: this.camera,
+            camera: this._camera,
             paths: this._paths,
             shapes: this._shapes,
             texts: this._texts,
