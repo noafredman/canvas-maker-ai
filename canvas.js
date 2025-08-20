@@ -55,7 +55,7 @@ class CanvasMaker {
         this.nestedSelectionBox = document.getElementById('nested-selection-box');
         
         // Nested canvas state
-        this.nestedCanvases = []; // Array to store nested canvas shapes
+        this._nestedCanvases = []; // Array to store nested canvas shapes
         this.isNestedCanvasOpen = false;
         this.currentNestedCanvasId = null;
         this.nestedCanvasData = new Map(); // Store individual nested canvas data
@@ -68,7 +68,7 @@ class CanvasMaker {
             paths: this._paths,
             shapes: this._shapes,
             texts: this._texts,
-            nestedCanvases: this.nestedCanvases,
+            nestedCanvases: this._nestedCanvases,
             selectedElements: this._selectedElements,
             hoveredElement: this._hoveredElement,
             currentPath: this._currentPath,
