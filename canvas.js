@@ -375,11 +375,12 @@ class CanvasMaker {
     handleMouseMove(e) {
         // Handle panning
         if (this.isPanning) {
+            const camera = this.activeCanvasContext.camera;
             const deltaX = e.clientX - this.dragOffset.x;
             const deltaY = e.clientY - this.dragOffset.y;
             
-            this.camera.x += deltaX / this.camera.zoom;
-            this.camera.y += deltaY / this.camera.zoom;
+            camera.x += deltaX / camera.zoom;
+            camera.y += deltaY / camera.zoom;
             
             this.dragOffset.x = e.clientX;
             this.dragOffset.y = e.clientY;
@@ -676,27 +677,29 @@ class CanvasMaker {
         // On trackpad: ctrlKey is false for two-finger scroll
         if (e.ctrlKey || e.metaKey) {
             // Pinch-to-zoom
+            const camera = this.activeCanvasContext.camera;
             const zoomFactor = e.deltaY > 0 ? 0.95 : 1.05;
-            const oldZoom = this.camera.zoom;
-            const newZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, oldZoom * zoomFactor));
+            const oldZoom = camera.zoom;
+            const newZoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, oldZoom * zoomFactor));
             
             if (newZoom !== oldZoom) {
                 // Zoom towards cursor position
                 const worldPos = this.canvasToWorld(canvasX, canvasY);
-                this.camera.zoom = newZoom;
+                camera.zoom = newZoom;
                 const newWorldPos = this.canvasToWorld(canvasX, canvasY);
                 
-                this.camera.x += newWorldPos.x - worldPos.x;
-                this.camera.y += newWorldPos.y - worldPos.y;
+                camera.x += newWorldPos.x - worldPos.x;
+                camera.y += newWorldPos.y - worldPos.y;
                 
                 this.redrawCanvas();
                 this.updateZoomIndicator();
             }
         } else {
             // Two-finger scroll (pan)
-            const panSpeed = 1 / this.camera.zoom;
-            this.camera.x -= e.deltaX * panSpeed;
-            this.camera.y -= e.deltaY * panSpeed;
+            const camera = this.activeCanvasContext.camera;
+            const panSpeed = 1 / camera.zoom;
+            camera.x -= e.deltaX * panSpeed;
+            camera.y -= e.deltaY * panSpeed;
             
             this.redrawCanvas();
             this.updateRecenterButton();
@@ -773,30 +776,34 @@ class CanvasMaker {
     }
     
     zoomIn() {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
+        const camera = this.activeCanvasContext.camera;
+        const canvas = this.activeCanvasContext.canvas;
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
         const worldCenter = this.canvasToWorld(centerX, centerY);
         
-        this.camera.zoom = Math.min(this.camera.maxZoom, this.camera.zoom * 1.2);
+        camera.zoom = Math.min(camera.maxZoom, camera.zoom * 1.2);
         
         const newWorldCenter = this.canvasToWorld(centerX, centerY);
-        this.camera.x += newWorldCenter.x - worldCenter.x;
-        this.camera.y += newWorldCenter.y - worldCenter.y;
+        camera.x += newWorldCenter.x - worldCenter.x;
+        camera.y += newWorldCenter.y - worldCenter.y;
         
         this.redrawCanvas();
         this.updateZoomIndicator();
     }
     
     zoomOut() {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
+        const camera = this.activeCanvasContext.camera;
+        const canvas = this.activeCanvasContext.canvas;
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
         const worldCenter = this.canvasToWorld(centerX, centerY);
         
-        this.camera.zoom = Math.max(this.camera.minZoom, this.camera.zoom / 1.2);
+        camera.zoom = Math.max(camera.minZoom, camera.zoom / 1.2);
         
         const newWorldCenter = this.canvasToWorld(centerX, centerY);
-        this.camera.x += newWorldCenter.x - worldCenter.x;
-        this.camera.y += newWorldCenter.y - worldCenter.y;
+        camera.x += newWorldCenter.x - worldCenter.x;
+        camera.y += newWorldCenter.y - worldCenter.y;
         
         this.redrawCanvas();
         this.updateZoomIndicator();
@@ -2552,7 +2559,7 @@ class CanvasMaker {
     
     updateZoomIndicator() {
         if (this.zoomIndicator) {
-            const zoomPercentage = Math.round(this.camera.zoom * 100);
+            const zoomPercentage = Math.round(this.activeCanvasContext.camera.zoom * 100);
             this.zoomIndicator.textContent = `${zoomPercentage}%`;
         }
     }
