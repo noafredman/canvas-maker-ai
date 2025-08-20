@@ -53,6 +53,8 @@ class CanvasMaker {
         this.nestedCtx = this.nestedCanvas ? this.nestedCanvas.getContext('2d') : null;
         this.closeNestedCanvasBtn = document.getElementById('close-nested-canvas');
         this.nestedSelectionBox = document.getElementById('nested-selection-box');
+        this.nestedZoomIndicator = document.getElementById('nested-zoom-indicator');
+        this.nestedRecenterBtn = document.getElementById('nested-recenter-btn');
         
         // Nested canvas state
         this._nestedCanvases = []; // Array to store nested canvas shapes
@@ -838,88 +840,101 @@ class CanvasMaker {
             // Show overlay and setup immediately
             this.nestedCanvasOverlay.style.display = 'flex';
             
-            // Setup nested canvas size with fixed dimensions
+            // Setup nested canvas size to fill container
             if (!this.nestedCanvas) return;
             
-            // Use fixed dimensions for nested canvas instead of container size
-            const fixedWidth = 800;
-            const fixedHeight = 600;
-            
-            this.nestedCanvas.width = fixedWidth;
-            this.nestedCanvas.height = fixedHeight;
-            this.nestedCanvas.style.width = fixedWidth + 'px';
-            this.nestedCanvas.style.height = fixedHeight + 'px';
-            
-            // Clear and setup context
-            this.nestedCtx.clearRect(0, 0, fixedWidth, fixedHeight);
-            this.nestedCtx.lineCap = 'round';
-            this.nestedCtx.lineJoin = 'round';
-            
-            console.log('Fixed nested canvas setup:', {
-                width: this.nestedCanvas.width,
-                height: this.nestedCanvas.height
-            });
-            
-            // Create nested canvas context
-            const nestedData = this.loadNestedCanvasData(nestedCanvasShape.id);
-            this.nestedCanvasContext = {
-                canvas: this.nestedCanvas,
-                ctx: this.nestedCtx,
-                camera: {
-                    x: nestedData.camera?.x ?? 0,
-                    y: nestedData.camera?.y ?? 0,
-                    zoom: nestedData.camera?.zoom ?? 1,
-                    minZoom: 0.1,
-                    maxZoom: 5
-                },
-                paths: nestedData.paths || [],
-                shapes: nestedData.shapes || [],
-                texts: nestedData.texts || [],
-                nestedCanvases: [], // Nested canvases don't have their own nested canvases for now
-                selectedElements: [],
-                hoveredElement: null,
-                currentPath: [],
-                selectionBox: this.nestedSelectionBox
-            };
-            
-            // Switch to nested canvas context for unified event handling
-            this.activeCanvasContext = this.nestedCanvasContext;
-            
-            // Add some test content for easier zoom testing if canvas is empty
-            if (this.nestedCanvasContext.shapes.length === 0 && this.nestedCanvasContext.paths.length === 0) {
-                this.nestedCanvasContext.shapes.push({
-                    type: 'rectangle',
-                    x: 100,
-                    y: 100,
-                    width: 200,
-                    height: 150
+            // Get container dimensions and use them for canvas sizing
+            // Use a slight delay to ensure layout is complete
+            setTimeout(() => {
+                const container = this.nestedCanvas.parentElement;
+                const containerRect = container.getBoundingClientRect();
+                const canvasWidth = Math.floor(containerRect.width);
+                const canvasHeight = Math.floor(containerRect.height);
+                
+                console.log('Container dimensions:', { 
+                    width: containerRect.width, 
+                    height: containerRect.height,
+                    canvasWidth,
+                    canvasHeight 
                 });
-                this.nestedCanvasContext.shapes.push({
-                    type: 'circle',
-                    x: 400,
-                    y: 300,
-                    radius: 80
-                });
-                console.log('Added test shapes for zoom testing');
-            }
-            
-            // Switch to nested canvas context
-            this.activeCanvasContext = this.nestedCanvasContext;
-            
-            // Initial draw
-            this.redrawCanvas(this.activeCanvasContext);
-            
-            // Setup event listeners for nested canvas
-            this.setupNestedCanvasEvents();
-            
-            // Initialize cursor for nested canvas
-            this.updateNestedCanvasCursor();
-            
-            // Add show animation
-            requestAnimationFrame(() => {
-                this.nestedCanvasOverlay.classList.add('show');
-            });
+                
+                this.nestedCanvas.width = canvasWidth;
+                this.nestedCanvas.height = canvasHeight;
+                this.nestedCanvas.style.width = '100%';
+                this.nestedCanvas.style.height = '100%';
+                
+                // Clear and setup context
+                this.nestedCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+                this.nestedCtx.lineCap = 'round';
+                this.nestedCtx.lineJoin = 'round';
+                
+                // Continue with setup now that dimensions are correct
+                this.finishNestedCanvasSetup(nestedCanvasShape);
+            }, 50);
         }
+    }
+    
+    finishNestedCanvasSetup(nestedCanvasShape) {
+        // Create nested canvas context
+        const nestedData = this.loadNestedCanvasData(nestedCanvasShape.id);
+        this.nestedCanvasContext = {
+            canvas: this.nestedCanvas,
+            ctx: this.nestedCtx,
+            camera: {
+                x: nestedData.camera?.x ?? 0,
+                y: nestedData.camera?.y ?? 0,
+                zoom: nestedData.camera?.zoom ?? 1,
+                minZoom: 0.1,
+                maxZoom: 5
+            },
+            paths: nestedData.paths || [],
+            shapes: nestedData.shapes || [],
+            texts: nestedData.texts || [],
+            nestedCanvases: [], // Nested canvases don't have their own nested canvases for now
+            selectedElements: [],
+            hoveredElement: null,
+            currentPath: [],
+            selectionBox: this.nestedSelectionBox
+        };
+        
+        // Switch to nested canvas context for unified event handling
+        this.activeCanvasContext = this.nestedCanvasContext;
+        
+        // Add some test content for easier zoom testing if canvas is empty
+        if (this.nestedCanvasContext.shapes.length === 0 && this.nestedCanvasContext.paths.length === 0) {
+            this.nestedCanvasContext.shapes.push({
+                type: 'rectangle',
+                x: 100,
+                y: 100,
+                width: 200,
+                height: 150
+            });
+            this.nestedCanvasContext.shapes.push({
+                type: 'circle',
+                x: 400,
+                y: 300,
+                radius: 80
+            });
+            console.log('Added test shapes for zoom testing');
+        }
+        
+        // Initial draw
+        this.redrawCanvas(this.activeCanvasContext);
+        
+        // Setup event listeners for nested canvas
+        this.setupNestedCanvasEvents();
+        
+        // Initialize cursor for nested canvas
+        this.updateNestedCanvasCursor();
+        
+        // Update nested canvas UI elements
+        this.updateZoomIndicator();
+        this.updateRecenterButton();
+        
+        // Add show animation
+        requestAnimationFrame(() => {
+            this.nestedCanvasOverlay.classList.add('show');
+        });
     }
     
     closeNestedCanvas() {
@@ -932,6 +947,10 @@ class CanvasMaker {
             
             // Switch back to main canvas context
             this.activeCanvasContext = this.mainCanvasContext;
+            
+            // Update main canvas UI elements
+            this.updateZoomIndicator();
+            this.updateRecenterButton();
             
             // Hide overlay with animation
             this.nestedCanvasOverlay.classList.remove('show');
@@ -1040,6 +1059,23 @@ class CanvasMaker {
         
         if (nestedClearBtn) {
             nestedClearBtn.addEventListener('click', this.clearNestedCanvas.bind(this));
+        }
+        
+        // Zoom controls for nested canvas
+        const nestedZoomInBtn = document.getElementById('nested-zoom-in-btn');
+        const nestedZoomOutBtn = document.getElementById('nested-zoom-out-btn');
+        const nestedRecenterBtn = document.getElementById('nested-recenter-btn');
+        
+        if (nestedZoomInBtn) {
+            nestedZoomInBtn.addEventListener('click', this.zoomIn.bind(this));
+        }
+        
+        if (nestedZoomOutBtn) {
+            nestedZoomOutBtn.addEventListener('click', this.zoomOut.bind(this));
+        }
+        
+        if (nestedRecenterBtn) {
+            nestedRecenterBtn.addEventListener('click', this.recenterCanvas.bind(this));
         }
     }
     
@@ -2565,29 +2601,44 @@ class CanvasMaker {
     }
     
     updateZoomIndicator() {
+        const zoomPercentage = Math.round(this.activeCanvasContext.camera.zoom * 100);
+        
+        // Update main canvas zoom indicator
         if (this.zoomIndicator) {
-            const zoomPercentage = Math.round(this.activeCanvasContext.camera.zoom * 100);
             this.zoomIndicator.textContent = `${zoomPercentage}%`;
+        }
+        
+        // Update nested canvas zoom indicator if it's the active context
+        if (this.nestedZoomIndicator && this.activeCanvasContext === this.nestedCanvasContext) {
+            this.nestedZoomIndicator.textContent = `${zoomPercentage}%`;
         }
     }
     
     updateRecenterButton() {
+        const camera = this.activeCanvasContext.camera;
+        const tolerance = 0.1;
+        const isAtOriginalCenter = 
+            Math.abs(camera.x - this.originalCenter.x) < tolerance && 
+            Math.abs(camera.y - this.originalCenter.y) < tolerance &&
+            Math.abs(camera.zoom - 1) < tolerance;
+        
+        // Update main canvas recenter button
         if (this.recenterBtn) {
-            // Show button if camera is not at original center (with small tolerance for floating point)
-            const tolerance = 0.1;
-            const isAtOriginalCenter = 
-                Math.abs(this.camera.x - this.originalCenter.x) < tolerance && 
-                Math.abs(this.camera.y - this.originalCenter.y) < tolerance &&
-                Math.abs(this.camera.zoom - 1) < tolerance;
             this.recenterBtn.style.display = isAtOriginalCenter ? 'none' : 'flex';
+        }
+        
+        // Update nested canvas recenter button if it's the active context
+        if (this.nestedRecenterBtn && this.activeCanvasContext === this.nestedCanvasContext) {
+            this.nestedRecenterBtn.style.display = isAtOriginalCenter ? 'none' : 'flex';
         }
     }
     
     recenterCanvas() {
         // Return to the original center position
-        this.camera.x = this.originalCenter.x;
-        this.camera.y = this.originalCenter.y;
-        this.camera.zoom = 1;
+        const camera = this.activeCanvasContext.camera;
+        camera.x = this.originalCenter.x;
+        camera.y = this.originalCenter.y;
+        camera.zoom = 1;
         
         this.redrawCanvas();
         this.updateZoomIndicator();

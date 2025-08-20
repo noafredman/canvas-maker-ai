@@ -148,6 +148,28 @@
                 <div class="nested-canvas-content">
                     <canvas id="nested-canvas" width="800" height="600"></canvas>
                     <div id="nested-selection-box" class="selection-box"></div>
+                    <div class="canvas-controls">
+                        <div class="zoom-controls">
+                            <button id="nested-zoom-out-btn" class="zoom-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 13H5v-2h14v2z"/>
+                                </svg>
+                            </button>
+                            <div id="nested-zoom-indicator" class="zoom-indicator">100%</div>
+                            <button id="nested-zoom-in-btn" class="zoom-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <button id="nested-recenter-btn" class="recenter-btn" style="display: none;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                                <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2" fill="none"/>
+                                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
