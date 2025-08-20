@@ -397,12 +397,10 @@ class CanvasMaker {
             return;
         }
         
-        if (this.currentTool === 'pen') {
+        if (this.currentTool === 'pen' && !this.isDragging && !this.isResizing) {
             this.currentPath.push({ x: pos.x, y: pos.y });
-            // Update the reference in main canvas context
-            this.mainCanvasContext.currentPath = this.currentPath;
-            // Don't draw directly here - let redrawCanvas handle it
-            this.redrawCanvas(this.mainCanvasContext);
+            // Draw using active canvas context (works for both main and nested)
+            this.redrawCanvas();
         } else if (this.currentTool === 'select' && this.isSelecting) {
             const width = pos.x - this.startX;
             const height = pos.y - this.startY;
@@ -463,7 +461,7 @@ class CanvasMaker {
         const pos = this.getMousePos(e);
         this.isDrawing = false;
         
-        if (this.currentTool === 'pen') {
+        if (this.currentTool === 'pen' && !this.isDragging && !this.isResizing) {
             this.paths.push([...this.currentPath]);
             this.currentPath = [];
         } else if (this.currentTool === 'rectangle') {
