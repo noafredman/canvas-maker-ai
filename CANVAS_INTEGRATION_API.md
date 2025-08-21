@@ -286,6 +286,319 @@ canvas.redrawCanvas();
 canvas.clearCanvas(); // Clears all elements and resets camera
 ```
 
+## Custom Component Integration
+
+### Overview
+The Canvas Maker system supports integrating custom components that work seamlessly with all canvas functionality (zoom, pan, selection, drag, etc.). There are multiple approaches depending on your needs.
+
+### Approach 1: Custom Shape Types (Recommended)
+
+Add your custom components as new shape types that get rendered by the canvas:
+
+```javascript
+// 1. Add your custom component as a shape
+canvas.activeCanvasContext.shapes.push({
+  type: 'myCustomComponent',
+  x: 100, y: 100,
+  width: 200, height: 150,
+  // Your custom properties
+  data: { 
+    title: 'My Component',
+    value: 42,
+    config: {...}
+  }
+});
+
+// 2. Extend the drawing logic
+const originalRedraw = canvas.redrawCanvas.bind(canvas);
+canvas.redrawCanvas = function() {
+  originalRedraw();
+  this.drawCustomComponents();
+};
+
+canvas.drawCustomComponents = function() {
+  const ctx = this.activeCanvasContext.ctx;
+  const camera = this.activeCanvasContext.camera;
+  const shapes = this.activeCanvasContext.shapes;
+  
+  // Apply camera transforms
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.translate(camera.x, camera.y);
+  
+  shapes.forEach(shape => {
+    if (shape.type === 'myCustomComponent') {
+      this.drawMyCustomComponent(ctx, shape);
+    }
+  });
+  
+  ctx.restore();
+};
+
+canvas.drawMyCustomComponent = function(ctx, shape) {
+  // Your custom drawing logic
+  ctx.fillStyle = '#e3f2fd';
+  ctx.fillRect(shape.x, shape.y, shape.width, shape.height);
+  
+  ctx.strokeStyle = '#2196f3';
+  ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+  
+  // Draw your component content
+  ctx.fillStyle = '#333';
+  ctx.font = '16px Arial';
+  ctx.fillText(shape.data.title, shape.x + 10, shape.y + 25);
+};
+
+// 3. Extend hit detection for selection
+const originalGetElement = canvas.getElementAtPointForContext.bind(canvas);
+canvas.getElementAtPointForContext = function(x, y, canvasContext) {
+  // Check custom components first
+  for (let i = canvasContext.shapes.length - 1; i >= 0; i--) {
+    const shape = canvasContext.shapes[i];
+    if (shape.type === 'myCustomComponent') {
+      if (x >= shape.x && x <= shape.x + shape.width &&
+          y >= shape.y && y <= shape.y + shape.height) {
+        return { type: 'shape', element: shape };
+      }
+    }
+  }
+  
+  // Fall back to original detection
+  return originalGetElement(x, y, canvasContext);
+};
+```
+
+### Approach 2: DOM Element Synchronization
+
+For React/Vue/Angular components that exist as DOM elements outside the canvas:
+
+```javascript
+class ExternalComponentSync {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.components = new Map();
+    this.setupSync();
+  }
+  
+  setupSync() {
+    // Hook into canvas redraw
+    const originalRedraw = this.canvas.redrawCanvas.bind(this.canvas);
+    this.canvas.redrawCanvas = function() {
+      originalRedraw();
+      this.syncExternalComponents();
+    }.bind(this);
+  }
+  
+  addComponent(id, worldX, worldY, domElement) {
+    // Store component with world coordinates
+    this.components.set(id, {
+      worldX, worldY, 
+      element: domElement,
+      originalWidth: domElement.offsetWidth,
+      originalHeight: domElement.offsetHeight
+    });
+    
+    // Initial positioning
+    this.updateComponent(id);
+  }
+  
+  updateComponent(id) {
+    const comp = this.components.get(id);
+    if (!comp) return;
+    
+    // Convert world to screen coordinates
+    const screenPos = this.canvas.worldToCanvas(comp.worldX, comp.worldY);
+    const zoom = this.canvas.activeCanvasContext.camera.zoom;
+    
+    // Position and scale the DOM element
+    comp.element.style.position = 'absolute';
+    comp.element.style.left = screenPos.x + 'px';
+    comp.element.style.top = screenPos.y + 'px';
+    comp.element.style.transform = `scale(${zoom})`;
+    comp.element.style.transformOrigin = 'top left';
+    
+    // Optional: Hide when out of viewport
+    const canvas = this.canvas.activeCanvasContext.canvas;
+    const isVisible = screenPos.x + (comp.originalWidth * zoom) > 0 &&
+                     screenPos.y + (comp.originalHeight * zoom) > 0 &&
+                     screenPos.x < canvas.width &&
+                     screenPos.y < canvas.height;
+    comp.element.style.display = isVisible ? 'block' : 'none';
+  }
+  
+  syncExternalComponents() {
+    this.components.forEach((comp, id) => {
+      this.updateComponent(id);
+    });
+  }
+  
+  removeComponent(id) {
+    this.components.delete(id);
+  }
+}
+
+// Usage example:
+const sync = new ExternalComponentSync(canvas);
+
+// Add a React component
+const myReactDiv = document.getElementById('myReactComponent');
+sync.addComponent('react1', 200, 300, myReactDiv);
+
+// The component will now move and zoom with the canvas!
+```
+
+### Approach 3: Hybrid Integration (Canvas + DOM)
+
+Combine canvas rendering with DOM overlays for interactive components:
+
+```javascript
+class HybridComponent {
+  constructor(canvas, x, y, width, height) {
+    this.canvas = canvas;
+    
+    // Add to canvas shapes for hit detection and basic rendering
+    this.shape = {
+      type: 'hybrid',
+      x, y, width, height,
+      id: 'hybrid_' + Date.now(),
+      domElement: null
+    };
+    
+    canvas.activeCanvasContext.shapes.push(this.shape);
+    
+    // Create DOM overlay when selected
+    this.setupInteraction();
+  }
+  
+  setupInteraction() {
+    const originalMouseDown = this.canvas.handleMouseDown.bind(this.canvas);
+    this.canvas.handleMouseDown = function(e) {
+      const pos = this.getMousePos(e);
+      const element = this.getElementAtPointForContext(pos.x, pos.y, this.activeCanvasContext);
+      
+      if (element && element.element && element.element.type === 'hybrid') {
+        // Show interactive DOM overlay
+        this.showHybridOverlay(element.element);
+        return;
+      }
+      
+      // Hide any active overlays
+      this.hideHybridOverlays();
+      originalMouseDown(e);
+    }.bind(this.canvas);
+  }
+}
+```
+
+### Complete Integration Example: Chart Component
+
+```javascript
+// Full example: Integrating a chart library with canvas
+class CanvasChartComponent {
+  constructor(canvas, chartData) {
+    this.canvas = canvas;
+    this.chartData = chartData;
+    this.init();
+  }
+  
+  init() {
+    // 1. Register as custom shape
+    const chartShape = {
+      type: 'chart',
+      x: 100, y: 100,
+      width: 400, height: 300,
+      data: this.chartData,
+      id: 'chart_' + Date.now()
+    };
+    
+    this.canvas.activeCanvasContext.shapes.push(chartShape);
+    
+    // 2. Extend canvas drawing
+    this.extendDrawing();
+    
+    // 3. Add interactive features
+    this.addInteractivity();
+    
+    // 4. Refresh canvas
+    this.canvas.redrawCanvas();
+  }
+  
+  extendDrawing() {
+    if (!this.canvas.drawCharts) {
+      const originalRedraw = this.canvas.redrawCanvas.bind(this.canvas);
+      this.canvas.redrawCanvas = function() {
+        originalRedraw();
+        this.drawAllCharts();
+      };
+      
+      this.canvas.drawAllCharts = function() {
+        const ctx = this.activeCanvasContext.ctx;
+        const camera = this.activeCanvasContext.camera;
+        const shapes = this.activeCanvasContext.shapes;
+        
+        ctx.save();
+        ctx.translate(this.activeCanvasContext.canvas.width / 2, 
+                      this.activeCanvasContext.canvas.height / 2);
+        ctx.scale(camera.zoom, camera.zoom);
+        ctx.translate(camera.x, camera.y);
+        
+        shapes.forEach(shape => {
+          if (shape.type === 'chart') {
+            this.renderChart(ctx, shape);
+          }
+        });
+        
+        ctx.restore();
+      }.bind(this.canvas);
+    }
+  }
+  
+  addInteractivity() {
+    // Make charts selectable, draggable, resizable
+    const shape = this.canvas.activeCanvasContext.shapes[this.canvas.activeCanvasContext.shapes.length - 1];
+    
+    // Charts participate in selection
+    shape.isSelectable = true;
+    shape.isDraggable = true;
+    shape.isResizable = true;
+  }
+}
+
+// Usage:
+const chart = new CanvasChartComponent(canvas, {
+  type: 'bar',
+  labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+  data: [30, 45, 60, 35]
+});
+```
+
+### Best Practices
+
+1. **Always use world coordinates** - Store positions in world space, not screen space
+2. **Hook into the redraw cycle** - Ensure your components update when the camera moves
+3. **Implement hit detection** - Make your components selectable
+4. **Handle zoom scaling** - Components should scale appropriately with zoom
+5. **Clean up properly** - Remove event listeners and references when components are deleted
+6. **Consider performance** - For many components, consider culling based on viewport
+
+### Coordinate System Reference
+
+```javascript
+// Converting between coordinate systems
+const worldPos = { x: 100, y: 200 };
+
+// World to screen (for positioning DOM elements)
+const screenPos = canvas.worldToCanvas(worldPos.x, worldPos.y);
+
+// Screen to world (for mouse interactions)
+const mouseWorld = canvas.canvasToWorld(mouseX, mouseY);
+
+// Access current camera state
+const camera = canvas.activeCanvasContext.camera;
+console.log('Camera:', { x: camera.x, y: camera.y, zoom: camera.zoom });
+```
+
 ## Event Handling
 
 ### Custom Event Listeners
