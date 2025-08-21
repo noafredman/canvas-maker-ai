@@ -48,6 +48,18 @@ class CanvasMaker {
         this.originalCenter = { x: 0, y: 0 };
         this.isPanning = false;
         
+        // Redraw loop protection
+        this.isRedrawing = false;
+        this.redrawRequested = false;
+        
+        // Component integration hooks
+        this.hooks = {
+            beforeRedraw: [],
+            afterRedraw: [],
+            onCameraChange: [],
+            onSelectionChange: []
+        };
+        
         // Touch gesture state
         this.touches = [];
         this.lastTouchDistance = 0;
@@ -1336,6 +1348,7 @@ class CanvasMaker {
         this.redrawCanvas();
         this.updateZoomIndicator();
         this.updateRecenterButton();
+        this.notifyCameraChange();
     }
     
     zoomOut() {
@@ -1360,6 +1373,7 @@ class CanvasMaker {
         this.redrawCanvas();
         this.updateZoomIndicator();
         this.updateRecenterButton();
+        this.notifyCameraChange();
     }
     
     
@@ -2602,6 +2616,36 @@ class CanvasMaker {
     }
     
     redrawCanvas(canvasContext = this.activeCanvasContext) {
+        // Prevent infinite redraw loops
+        if (this.isRedrawing) {
+            this.redrawRequested = true;
+            return;
+        }
+        
+        this.isRedrawing = true;
+        
+        try {
+            // Execute beforeRedraw hooks
+            this.executeHooks('beforeRedraw', canvasContext);
+            
+            this._performRedraw(canvasContext);
+            
+            // Execute afterRedraw hooks
+            this.executeHooks('afterRedraw', canvasContext);
+            
+        } finally {
+            this.isRedrawing = false;
+            
+            // Handle any redraw requests that came in during this cycle
+            if (this.redrawRequested) {
+                this.redrawRequested = false;
+                // Use requestAnimationFrame to avoid stack overflow
+                requestAnimationFrame(() => this.redrawCanvas(canvasContext));
+            }
+        }
+    }
+    
+    _performRedraw(canvasContext = this.activeCanvasContext) {
         const { canvas, ctx, camera, paths, shapes, texts, nestedCanvases, selectedElements, previewSelectedElements, hoveredElement, currentPath } = canvasContext;
         
         ctx.save();
@@ -3303,6 +3347,7 @@ class CanvasMaker {
         
         this.redrawCanvas();
         this.updateRecenterButton();
+        this.notifyCameraChange();
     }
     
     resetZoom() {
@@ -3327,6 +3372,7 @@ class CanvasMaker {
         this.redrawCanvas();
         this.updateZoomIndicator();
         this.updateRecenterButton();
+        this.notifyCameraChange();
     }
     
     
@@ -3599,6 +3645,76 @@ class CanvasMaker {
         console.log('Added red test rectangle at world origin (-50,-50,100,100)');
         console.log('It should appear centered on screen');
         this.redrawCanvas();
+    }
+    
+    // Hook System for Component Integration
+    addHook(event, callback) {
+        if (!this.hooks[event]) {
+            console.warn(`Unknown hook event: ${event}`);
+            return;
+        }
+        this.hooks[event].push(callback);
+    }
+    
+    removeHook(event, callback) {
+        if (!this.hooks[event]) return;
+        const index = this.hooks[event].indexOf(callback);
+        if (index > -1) {
+            this.hooks[event].splice(index, 1);
+        }
+    }
+    
+    executeHooks(event, data) {
+        if (!this.hooks[event]) return;
+        this.hooks[event].forEach(callback => {
+            try {
+                callback(data);
+            } catch (error) {
+                console.error(`Error in ${event} hook:`, error);
+            }
+        });
+    }
+    
+    // Camera change detection and notification
+    notifyCameraChange() {
+        const camera = this.activeCanvasContext.camera;
+        this.executeHooks('onCameraChange', { 
+            camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
+            canvas: this.activeCanvasContext.canvas
+        });
+    }
+    
+    // Selection change notification
+    notifySelectionChange() {
+        this.executeHooks('onSelectionChange', {
+            selectedElements: this.selectedElements,
+            canvas: this.activeCanvasContext.canvas
+        });
+    }
+    
+    // Safe external component integration helper
+    integrateExternalComponent(options) {
+        const { 
+            onCameraChange,
+            onSelectionChange,
+            onBeforeRedraw,
+            onAfterRedraw
+        } = options;
+        
+        if (onCameraChange) this.addHook('onCameraChange', onCameraChange);
+        if (onSelectionChange) this.addHook('onSelectionChange', onSelectionChange);
+        if (onBeforeRedraw) this.addHook('beforeRedraw', onBeforeRedraw);
+        if (onAfterRedraw) this.addHook('afterRedraw', onAfterRedraw);
+        
+        return {
+            // Return cleanup function
+            cleanup: () => {
+                if (onCameraChange) this.removeHook('onCameraChange', onCameraChange);
+                if (onSelectionChange) this.removeHook('onSelectionChange', onSelectionChange);
+                if (onBeforeRedraw) this.removeHook('beforeRedraw', onBeforeRedraw);
+                if (onAfterRedraw) this.removeHook('afterRedraw', onAfterRedraw);
+            }
+        };
     }
 }
 

@@ -369,9 +369,141 @@ canvas.getElementAtPointForContext = function(x, y, canvasContext) {
 };
 ```
 
-### Approach 2: DOM Element Synchronization
+### Approach 2: Safe Hook System (Recommended for External Components)
 
-For React/Vue/Angular components that exist as DOM elements outside the canvas:
+**NEW**: Canvas Maker now includes built-in redraw loop protection and a safe hook system for component integration:
+
+```javascript
+// Safe integration with built-in loop protection
+const integration = canvas.integrateExternalComponent({
+  onCameraChange: ({ camera, canvas }) => {
+    // Called only when camera actually changes (zoom, pan)
+    // Safe to update DOM elements here
+    updateAllMyComponents(camera);
+  },
+  
+  onSelectionChange: ({ selectedElements }) => {
+    // Called when selection changes
+    highlightSelectedComponents(selectedElements);
+  },
+  
+  onBeforeRedraw: (canvasContext) => {
+    // Called before each redraw cycle
+    // Good for preparing data
+  },
+  
+  onAfterRedraw: (canvasContext) => {
+    // Called after each redraw cycle
+    // Safe zone for DOM updates that don't trigger more redraws
+    syncExternalDOMElements();
+  }
+});
+
+// Always clean up when your component unmounts
+integration.cleanup();
+```
+
+**Example: Complete External Component Sync**
+
+```javascript
+class SafeExternalComponentSync {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.components = new Map();
+    
+    // Use the safe hook system instead of directly hooking redraw
+    this.integration = canvas.integrateExternalComponent({
+      onCameraChange: this.handleCameraChange.bind(this),
+      onAfterRedraw: this.handleAfterRedraw.bind(this)
+    });
+  }
+  
+  handleCameraChange({ camera, canvas }) {
+    // Only called when camera actually changes - prevents unnecessary updates
+    this.components.forEach((comp, id) => {
+      this.updateComponent(id, camera);
+    });
+  }
+  
+  handleAfterRedraw(canvasContext) {
+    // Safe zone for any additional DOM updates
+    this.cullOffscreenComponents();
+  }
+  
+  addComponent(id, worldX, worldY, domElement) {
+    this.components.set(id, {
+      worldX, worldY, element: domElement,
+      originalWidth: domElement.offsetWidth,
+      originalHeight: domElement.offsetHeight
+    });
+    
+    // Initial positioning
+    const camera = this.canvas.activeCanvasContext.camera;
+    this.updateComponent(id, camera);
+  }
+  
+  updateComponent(id, camera) {
+    const comp = this.components.get(id);
+    if (!comp) return;
+    
+    // Convert world to screen coordinates
+    const screenPos = this.canvas.worldToCanvas(comp.worldX, comp.worldY);
+    
+    // Update DOM element position and scale
+    comp.element.style.position = 'absolute';
+    comp.element.style.left = screenPos.x + 'px';
+    comp.element.style.top = screenPos.y + 'px';
+    comp.element.style.transform = `scale(${camera.zoom})`;
+    comp.element.style.transformOrigin = 'top left';
+  }
+  
+  cullOffscreenComponents() {
+    // Hide components that are off-screen for performance
+    const canvas = this.canvas.activeCanvasContext.canvas;
+    const camera = this.canvas.activeCanvasContext.camera;
+    
+    this.components.forEach((comp, id) => {
+      const screenPos = this.canvas.worldToCanvas(comp.worldX, comp.worldY);
+      const scaledWidth = comp.originalWidth * camera.zoom;
+      const scaledHeight = comp.originalHeight * camera.zoom;
+      
+      const isVisible = screenPos.x + scaledWidth > 0 &&
+                       screenPos.y + scaledHeight > 0 &&
+                       screenPos.x < canvas.width &&
+                       screenPos.y < canvas.height;
+                       
+      comp.element.style.display = isVisible ? 'block' : 'none';
+    });
+  }
+  
+  removeComponent(id) {
+    const comp = this.components.get(id);
+    if (comp && comp.element.parentNode) {
+      comp.element.parentNode.removeChild(comp.element);
+    }
+    this.components.delete(id);
+  }
+  
+  destroy() {
+    // Clean up all components and hooks
+    this.components.forEach((comp, id) => {
+      this.removeComponent(id);
+    });
+    this.integration.cleanup();
+  }
+}
+
+// Usage:
+const sync = new SafeExternalComponentSync(canvas);
+sync.addComponent('react1', 200, 300, document.getElementById('myReactComponent'));
+
+// When your app unmounts:
+sync.destroy();
+```
+
+### Approach 3: Legacy DOM Element Synchronization
+
+For React/Vue/Angular components that exist as DOM elements outside the canvas (legacy approach - use Approach 2 instead):
 
 ```javascript
 class ExternalComponentSync {
@@ -573,14 +705,95 @@ const chart = new CanvasChartComponent(canvas, {
 });
 ```
 
+### Built-in Redraw Loop Protection
+
+Canvas Maker automatically prevents infinite redraw loops through:
+
+```javascript
+// Built into the core redrawCanvas method
+redrawCanvas(canvasContext) {
+    if (this.isRedrawing) {
+        // Queue the redraw request instead of executing immediately
+        this.redrawRequested = true;
+        return;
+    }
+    
+    // Execute hooks safely with error handling
+    // Uses requestAnimationFrame for queued redraws
+}
+```
+
+**What this means for integrators:**
+- No more infinite redraw loops when integrating external components
+- Safe to call `canvas.redrawCanvas()` from within hook callbacks
+- Automatic error handling prevents one component from breaking others
+- Better performance through intelligent redraw queueing
+
+### Hook System API Reference
+
+```javascript
+// Available hooks
+const integration = canvas.integrateExternalComponent({
+  onCameraChange: ({ camera, canvas }) => {
+    // Triggered when: zoom, pan, recenter, resetZoom
+    // camera: { x, y, zoom }
+    // canvas: canvas DOM element
+  },
+  
+  onSelectionChange: ({ selectedElements, canvas }) => {
+    // Triggered when: selection changes
+    // selectedElements: array of selected elements
+  },
+  
+  onBeforeRedraw: (canvasContext) => {
+    // Triggered before each redraw
+    // Good for: preparing data, measurements
+  },
+  
+  onAfterRedraw: (canvasContext) => {
+    // Triggered after each redraw
+    // Good for: DOM updates, external component sync
+    // canvasContext: { canvas, ctx, camera, shapes, texts, paths, etc. }
+  }
+});
+
+// Manual hook management
+canvas.addHook('onCameraChange', callback);
+canvas.removeHook('onCameraChange', callback);
+
+// Cleanup (important!)
+integration.cleanup();
+```
+
+### Migration from Legacy Integration
+
+**❌ Old way (causes infinite loops):**
+```javascript
+const originalRedraw = canvas.redrawCanvas.bind(canvas);
+canvas.redrawCanvas = function() {
+    originalRedraw();
+    updateMyComponents(); // Risky - might trigger more redraws
+};
+```
+
+**✅ New way (safe and efficient):**
+```javascript
+const integration = canvas.integrateExternalComponent({
+    onCameraChange: ({ camera }) => updateMyComponents(camera),
+    onAfterRedraw: () => syncDOMElements()
+});
+```
+
 ### Best Practices
 
-1. **Always use world coordinates** - Store positions in world space, not screen space
-2. **Hook into the redraw cycle** - Ensure your components update when the camera moves
-3. **Implement hit detection** - Make your components selectable
-4. **Handle zoom scaling** - Components should scale appropriately with zoom
-5. **Clean up properly** - Remove event listeners and references when components are deleted
-6. **Consider performance** - For many components, consider culling based on viewport
+1. **Use the hook system** - Prefer `integrateExternalComponent()` over direct method hooking
+2. **Always use world coordinates** - Store positions in world space, not screen space
+3. **Clean up properly** - Always call `integration.cleanup()` when components unmount
+4. **Implement hit detection** - Make your components selectable and interactive
+5. **Handle zoom scaling** - Components should scale appropriately with zoom
+6. **Consider performance** - Use viewport culling to hide off-screen components
+7. **Error handling** - Wrap hook callbacks in try-catch for robustness
+8. **Debounce expensive operations** - Use `onCameraChange` which only fires on actual changes
 
 ### Coordinate System Reference
 
