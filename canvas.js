@@ -2,6 +2,9 @@ class CanvasMaker {
     constructor() {
         this.canvas = document.getElementById('canvas');
         this.ctx = this.canvas.getContext('2d');
+        
+        // Make instance globally accessible for testing
+        window.canvasMaker = this;
         this.currentTool = null; // No tool selected by default
         this.isDrawing = false;
         this.dragModeEnabled = true; // Default to drag mode enabled
@@ -132,6 +135,12 @@ class CanvasMaker {
         this.canvas.width = availableWidth;
         this.canvas.height = availableHeight;
         
+        // Center the world origin (0,0) on the screen
+        this._camera.x = availableWidth / 2;
+        this._camera.y = availableHeight / 2;
+        this.originalCenter.x = availableWidth / 2;
+        this.originalCenter.y = availableHeight / 2;
+        
         // Update the app and container to use the calculated size
         const app = document.querySelector('.app');
         const container = this.canvas.parentElement;
@@ -191,6 +200,12 @@ class CanvasMaker {
         // Recenter button
         if (this.recenterBtn) {
             this.recenterBtn.addEventListener('click', this.recenterCanvas.bind(this));
+        }
+        
+        // Reset zoom button
+        const resetZoomBtn = document.getElementById('reset-zoom-btn');
+        if (resetZoomBtn) {
+            resetZoomBtn.addEventListener('click', this.resetZoom.bind(this));
         }
         
         // Zoom buttons
@@ -1102,45 +1117,45 @@ class CanvasMaker {
     zoomIn() {
         const camera = this.activeCanvasContext.camera;
         const canvas = this.activeCanvasContext.canvas;
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const worldCenter = this.canvasToWorld(centerX, centerY);
         
-        camera.zoom = Math.min(camera.maxZoom, camera.zoom * 1.2);
+        // Calculate where world origin (0,0) should appear on screen (center)
+        const targetScreenX = canvas.width / 2;
+        const targetScreenY = canvas.height / 2;
         
-        const newWorldCenter = this.canvasToWorld(centerX, centerY);
-        camera.x += newWorldCenter.x - worldCenter.x;
-        camera.y += newWorldCenter.y - worldCenter.y;
+        const oldZoom = camera.zoom;
+        const newZoom = Math.min(camera.maxZoom, oldZoom * 1.2);
         
+        // Adjust camera position to keep world origin (0,0) at screen center
+        camera.x = targetScreenX / newZoom;
+        camera.y = targetScreenY / newZoom;
+        camera.zoom = newZoom;
+
         this.redrawCanvas();
         this.updateZoomIndicator();
+        this.updateRecenterButton();
     }
     
     zoomOut() {
         const camera = this.activeCanvasContext.camera;
         const canvas = this.activeCanvasContext.canvas;
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const worldCenter = this.canvasToWorld(centerX, centerY);
         
-        camera.zoom = Math.max(camera.minZoom, camera.zoom / 1.2);
+        // Calculate where world origin (0,0) should appear on screen (center)
+        const targetScreenX = canvas.width / 2;
+        const targetScreenY = canvas.height / 2;
         
-        const newWorldCenter = this.canvasToWorld(centerX, centerY);
-        camera.x += newWorldCenter.x - worldCenter.x;
-        camera.y += newWorldCenter.y - worldCenter.y;
+        const oldZoom = camera.zoom;
+        const newZoom = Math.max(camera.minZoom, oldZoom / 1.2);
         
-        this.redrawCanvas();
-        this.updateZoomIndicator();
-    }
-    
-    resetZoom() {
-        this.camera.zoom = 1;
-        this.camera.x = 0;
-        this.camera.y = 0;
+        // Adjust camera position to keep world origin (0,0) at screen center
+        camera.x = targetScreenX / newZoom;
+        camera.y = targetScreenY / newZoom;
+        camera.zoom = newZoom;
+
         this.redrawCanvas();
         this.updateZoomIndicator();
         this.updateRecenterButton();
     }
+    
     
     handleDoubleClick(e) {
         const pos = this.getMousePos(e);
@@ -1413,6 +1428,11 @@ class CanvasMaker {
         
         if (nestedRecenterBtn) {
             nestedRecenterBtn.addEventListener('click', this.recenterCanvas.bind(this));
+        }
+        
+        const nestedResetZoomBtn = document.getElementById('nested-reset-zoom-btn');
+        if (nestedResetZoomBtn) {
+            nestedResetZoomBtn.addEventListener('click', this.resetZoom.bind(this));
         }
     }
     
@@ -2604,6 +2624,35 @@ class CanvasMaker {
         ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
         ctx.beginPath();
         
+        // Draw origin marker at world (0,0)
+        // Transform world origin (0,0) to screen coordinates
+        const originScreenX = (0 + camera.x) * camera.zoom;
+        const originScreenY = (0 + camera.y) * camera.zoom;
+        
+        // Draw a red cross at the origin
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 3;
+        const crossSize = 20;
+        
+        // Horizontal line
+        ctx.moveTo(originScreenX - crossSize, originScreenY);
+        ctx.lineTo(originScreenX + crossSize, originScreenY);
+        
+        // Vertical line  
+        ctx.moveTo(originScreenX, originScreenY - crossSize);
+        ctx.lineTo(originScreenX, originScreenY + crossSize);
+        
+        ctx.stroke();
+        
+        // Draw a small red square at the exact origin
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(originScreenX - 3, originScreenY - 3, 6, 6);
+        
+        // Reset stroke style for grid
+        ctx.strokeStyle = `rgba(150, 150, 150, ${opacity})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        
         // Vertical lines
         for (let x = startX; x <= endX; x += gridSize) {
             const screenX = (x + camera.x) * camera.zoom;
@@ -3011,28 +3060,52 @@ class CanvasMaker {
     
     updateRecenterButton() {
         const camera = this.activeCanvasContext.camera;
+        const canvas = this.activeCanvasContext.canvas;
         const tolerance = 0.1;
-        const isAtOriginalCenter = 
-            Math.abs(camera.x - this.originalCenter.x) < tolerance && 
-            Math.abs(camera.y - this.originalCenter.y) < tolerance &&
-            Math.abs(camera.zoom - 1) < tolerance;
         
-        // Update main canvas recenter button
+        // Check if world origin (0,0) is centered at current zoom level
+        const expectedCameraX = canvas.width / 2 / camera.zoom;
+        const expectedCameraY = canvas.height / 2 / camera.zoom;
+        const isAtOriginalCenter = 
+            Math.abs(camera.x - expectedCameraX) < tolerance && 
+            Math.abs(camera.y - expectedCameraY) < tolerance;
+        const isAt100Zoom = Math.abs(camera.zoom - 1) < tolerance;
+        
+        // Update main canvas buttons
         if (this.recenterBtn) {
             this.recenterBtn.style.display = isAtOriginalCenter ? 'none' : 'flex';
         }
+        const resetZoomBtn = document.getElementById('reset-zoom-btn');
+        if (resetZoomBtn) {
+            resetZoomBtn.style.display = isAt100Zoom ? 'none' : 'flex';
+        }
         
-        // Update nested canvas recenter button if it's the active context
+        // Update nested canvas buttons if it's the active context
         if (this.nestedRecenterBtn && this.activeCanvasContext === this.nestedCanvasContext) {
             this.nestedRecenterBtn.style.display = isAtOriginalCenter ? 'none' : 'flex';
+        }
+        const nestedResetZoomBtn = document.getElementById('nested-reset-zoom-btn');
+        if (nestedResetZoomBtn && this.activeCanvasContext === this.nestedCanvasContext) {
+            nestedResetZoomBtn.style.display = isAt100Zoom ? 'none' : 'flex';
         }
     }
     
     recenterCanvas() {
-        // Return to the original center position
+        // Center world origin (0,0) on screen at current zoom level
         const camera = this.activeCanvasContext.camera;
-        camera.x = this.originalCenter.x;
-        camera.y = this.originalCenter.y;
+        const canvas = this.activeCanvasContext.canvas;
+        
+        // Calculate camera position to center world origin (0,0) at current zoom
+        camera.x = canvas.width / 2 / camera.zoom;
+        camera.y = canvas.height / 2 / camera.zoom;
+        
+        this.redrawCanvas();
+        this.updateRecenterButton();
+    }
+    
+    resetZoom() {
+        // Reset zoom to 100% (without changing position)
+        const camera = this.activeCanvasContext.camera;
         camera.zoom = 1;
         
         this.redrawCanvas();

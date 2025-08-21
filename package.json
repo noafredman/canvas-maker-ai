@@ -8,10 +8,19 @@
     "./styles": "./styles.css"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test-zoom": "node test-zoom.js"
   },
-  "keywords": ["canvas", "drawing", "pan", "zoom"],
+  "keywords": [
+    "canvas",
+    "drawing",
+    "pan",
+    "zoom"
+  ],
   "author": "",
   "license": "ISC",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "puppeteer": "^24.17.0"
+  }
 }
