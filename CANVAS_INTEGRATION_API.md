@@ -958,6 +958,126 @@ canvas.on('toolbarMove', saveToolbarPosition);
 restoreToolbarPosition();
 ```
 
+### Dynamic Toolbar Customization
+
+External apps can easily add, remove, and customize toolbar tools:
+
+```javascript
+// Add a custom tool
+canvas.addTool({
+    id: 'my-custom-tool',
+    tool: 'customTool',
+    icon: 'M12 2l2 7h7l-5.5 4 2 7-5.5-4-5.5 4 2-7L2 9h7l2-7z',
+    title: 'My Custom Tool',
+    customHandler: () => {
+        console.log('Custom tool clicked!');
+        // Your custom logic here
+    }
+}, 2); // Insert at position 2
+
+// Remove a tool
+canvas.removeTool('text-tool'); // Remove text tool
+
+// Add a custom action button
+canvas.addAction({
+    id: 'export-btn',
+    icon: 'M19 12v7H5v-7M12 2v10m5-5l-5 5-5-5',
+    title: 'Export',
+    class: 'export-btn',
+    customHandler: () => {
+        // Export functionality
+        exportCanvas();
+    }
+});
+
+// Remove an action
+canvas.removeAction('make-real-btn'); // Remove Make Real button
+
+// Complete toolbar reconfiguration
+canvas.setToolbarConfig({
+    tools: [
+        { id: 'pen-tool', tool: 'pen', icon: '...', title: 'Pen' },
+        { id: 'select-tool', tool: 'select', icon: '...', title: 'Select', active: true }
+    ],
+    actions: [
+        { id: 'save-btn', icon: '...', title: 'Save', customHandler: save },
+        { id: 'load-btn', icon: '...', title: 'Load', customHandler: load }
+    ]
+});
+
+// Get current toolbar configuration
+const config = canvas.getToolbarConfig();
+console.log('Current toolbar:', config);
+
+// Listen for toolbar changes
+canvas.on('toolbarChange', (event) => {
+    console.log('Toolbar changed:', event.type, event);
+    // event.type: 'toolAdded', 'toolRemoved', 'actionAdded', 'actionRemoved', 'configChanged'
+});
+```
+
+### Real-World Examples
+
+**Example 1: Minimal Drawing App**
+```javascript
+// Keep only essential tools
+canvas.setToolbarConfig({
+    tools: [
+        { id: 'pen-tool', tool: 'pen', icon: 'M3 17.25V21h3.75...', title: 'Draw', active: true },
+        { id: 'select-tool', tool: 'select', icon: 'M2 2v6h2V4h4V2...', title: 'Select' }
+    ],
+    actions: [
+        { id: 'clear-btn', action: 'clearCanvas', icon: 'M19 6.41L17.59...', title: 'Clear', class: 'clear-btn' }
+    ]
+});
+```
+
+**Example 2: Add Custom Tools**
+```javascript
+// Add a custom eraser tool
+canvas.addTool({
+    id: 'eraser-tool',
+    tool: 'eraser',
+    icon: 'M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4 4 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l8.48-8.48c.79-.78 2.05-.78 2.84 0l2.11 2.12zm-1.41 1.41L12.7 7.1 16.9 11.3l2.12-2.12-4.19-4.2z',
+    title: 'Eraser',
+    customHandler: () => {
+        canvas.currentTool = 'eraser';
+        // Implement eraser logic
+    }
+}, 1); // Insert after pen tool
+
+// Add a layers button
+canvas.addAction({
+    id: 'layers-btn',
+    icon: 'M12 16l4-4H8l4 4zm0-8L8 4h8l-4 4z',
+    title: 'Layers',
+    customHandler: () => {
+        showLayersPanel();
+    }
+});
+```
+
+**Example 3: Context-Sensitive Toolbar**
+```javascript
+// Change toolbar based on selection
+canvas.on('selectionChange', ({ selectedElements }) => {
+    if (selectedElements.length > 0) {
+        // Show editing tools
+        if (!canvas.getToolbarConfig().actions.find(a => a.id === 'delete-btn')) {
+            canvas.addAction({
+                id: 'delete-btn',
+                icon: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
+                title: 'Delete',
+                customHandler: () => deleteSelected()
+            });
+        }
+    } else {
+        // Hide editing tools
+        canvas.removeAction('delete-btn');
+    }
+});
+```
+
 ## Event Handling
 
 ### Custom Event Listeners

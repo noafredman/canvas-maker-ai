@@ -63,6 +63,22 @@ class CanvasMaker {
         // Traditional event emitter system for React integration
         this.eventListeners = {};
         
+        // Toolbar configuration
+        this.toolbarConfig = {
+            tools: [
+                { id: 'pen-tool', tool: 'pen', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z', title: 'Pen Tool' },
+                { id: 'rectangle-tool', tool: 'rectangle', icon: 'M3 3v18h18V3H3zm16 16H5V5h14v14z', title: 'Rectangle Tool' },
+                { id: 'circle-tool', tool: 'circle', icon: 'M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z', title: 'Circle Tool' },
+                { id: 'text-tool', tool: 'text', icon: 'M5 4v3h5.5v12h3V7H19V4z', title: 'Text Tool' },
+                { id: 'select-tool', tool: 'select', icon: 'M2 2v6h2V4h4V2H2zm0 16v-6h2v4h4v2H2zm20 0h-6v2h4v-4h2v6zm0-16V2h-6v2h4v4h2V6z', title: 'Select Tool', active: true },
+                { id: 'nested-canvas-tool', tool: 'nested-canvas', icon: 'M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v8H8V8zm2 2v4h4v-4h-4z', title: 'Nested Canvas Tool' }
+            ],
+            actions: [
+                { id: 'make-real-btn', action: 'makeReal', icon: 'M12 2l3.09 8.26L22 12l-6.91 1.74L12 22l-3.09-8.26L2 12l6.91-1.74L12 2z', title: 'Make Real', class: 'make-real-btn' },
+                { id: 'clear-btn', action: 'clearCanvas', icon: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z', title: 'Clear Canvas', class: 'clear-btn' }
+            ]
+        };
+        
         // Touch gesture state
         this.touches = [];
         this.lastTouchDistance = 0;
@@ -122,6 +138,7 @@ class CanvasMaker {
         this.setupEventListeners();
         this.setupToolbar();
         this.setupFloatingToolbar();
+        this.rebuildToolbar(); // Build toolbar from config
         this.updateZoomIndicator();
         this.updateRecenterButton();
         this.updateCanvasCursor();
@@ -415,6 +432,147 @@ class CanvasMaker {
     showToolbar() {
         const toolbar = document.getElementById('floating-toolbar');
         if (toolbar) toolbar.style.display = 'flex';
+    }
+    
+    // Dynamic Toolbar Configuration API
+    addTool(toolConfig, position = -1) {
+        // toolConfig: { id, tool, icon, title, active?, customHandler? }
+        if (position === -1) {
+            this.toolbarConfig.tools.push(toolConfig);
+        } else {
+            this.toolbarConfig.tools.splice(position, 0, toolConfig);
+        }
+        this.rebuildToolbar();
+        this.emit('toolbarChange', { type: 'toolAdded', tool: toolConfig });
+    }
+    
+    removeTool(toolId) {
+        const index = this.toolbarConfig.tools.findIndex(t => t.id === toolId);
+        if (index > -1) {
+            const removed = this.toolbarConfig.tools.splice(index, 1)[0];
+            this.rebuildToolbar();
+            this.emit('toolbarChange', { type: 'toolRemoved', tool: removed });
+            return removed;
+        }
+        return null;
+    }
+    
+    addAction(actionConfig, position = -1) {
+        // actionConfig: { id, action, icon, title, class?, customHandler? }
+        if (position === -1) {
+            this.toolbarConfig.actions.push(actionConfig);
+        } else {
+            this.toolbarConfig.actions.splice(position, 0, actionConfig);
+        }
+        this.rebuildToolbar();
+        this.emit('toolbarChange', { type: 'actionAdded', action: actionConfig });
+    }
+    
+    removeAction(actionId) {
+        const index = this.toolbarConfig.actions.findIndex(a => a.id === actionId);
+        if (index > -1) {
+            const removed = this.toolbarConfig.actions.splice(index, 1)[0];
+            this.rebuildToolbar();
+            this.emit('toolbarChange', { type: 'actionRemoved', action: removed });
+            return removed;
+        }
+        return null;
+    }
+    
+    setToolbarConfig(config) {
+        // Complete toolbar reconfiguration
+        this.toolbarConfig = { ...config };
+        this.rebuildToolbar();
+        this.emit('toolbarChange', { type: 'configChanged', config: this.toolbarConfig });
+    }
+    
+    getToolbarConfig() {
+        return JSON.parse(JSON.stringify(this.toolbarConfig));
+    }
+    
+    rebuildToolbar() {
+        const toolbar = document.getElementById('floating-toolbar');
+        if (!toolbar) return;
+        
+        // Find the toolbar content container
+        const toolbarContent = toolbar.querySelector('.toolbar-content');
+        if (!toolbarContent) return;
+        
+        // Clear existing content
+        toolbarContent.innerHTML = '';
+        
+        // Build tools section
+        if (this.toolbarConfig.tools.length > 0) {
+            const toolsSection = document.createElement('div');
+            toolsSection.className = 'toolbar-section';
+            
+            this.toolbarConfig.tools.forEach(tool => {
+                const button = document.createElement('button');
+                button.id = tool.id;
+                button.className = `tool-btn ${tool.active ? 'active' : ''}`;
+                button.setAttribute('data-tool', tool.tool);
+                button.title = tool.title;
+                
+                button.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="${tool.icon}"/>
+                </svg>`;
+                
+                // Add event listener
+                if (tool.customHandler) {
+                    button.addEventListener('click', tool.customHandler);
+                } else {
+                    button.addEventListener('click', (e) => {
+                        // Default tool selection logic
+                        if (tool.tool) {
+                            const toolButtons = document.querySelectorAll('.tool-btn');
+                            toolButtons.forEach(b => b.classList.remove('active'));
+                            button.classList.add('active');
+                            this.currentTool = tool.tool;
+                            this.updateCanvasCursor();
+                        }
+                    });
+                }
+                
+                toolsSection.appendChild(button);
+            });
+            
+            toolbarContent.appendChild(toolsSection);
+        }
+        
+        // Add divider if we have both tools and actions
+        if (this.toolbarConfig.tools.length > 0 && this.toolbarConfig.actions.length > 0) {
+            const divider = document.createElement('div');
+            divider.className = 'toolbar-divider';
+            toolbarContent.appendChild(divider);
+        }
+        
+        // Build actions section
+        if (this.toolbarConfig.actions.length > 0) {
+            const actionsSection = document.createElement('div');
+            actionsSection.className = 'toolbar-section';
+            
+            this.toolbarConfig.actions.forEach(action => {
+                const button = document.createElement('button');
+                button.id = action.id;
+                button.className = action.class || 'tool-btn';
+                button.title = action.title;
+                
+                button.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="${action.icon}"/>
+                </svg>`;
+                
+                // Add event listener
+                if (action.customHandler) {
+                    button.addEventListener('click', action.customHandler);
+                } else if (action.action && this[action.action]) {
+                    button.addEventListener('click', this[action.action].bind(this));
+                }
+                
+                actionsSection.appendChild(button);
+            });
+            
+            toolbarContent.appendChild(actionsSection);
+        }
     }
     
     
