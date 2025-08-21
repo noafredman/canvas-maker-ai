@@ -614,8 +614,8 @@ class CanvasMaker {
             }
         }
         
-        if (!this.isDrawing && !this.isDragging && !this.isResizing) {
-            // Handle hover detection when not drawing, dragging, or resizing
+        if (!this.isDrawing && !this.isDragging && !this.isResizing && !this.isSelecting) {
+            // Handle hover detection when not drawing, dragging, resizing, or selecting
             this.handleHover(pos);
             return;
         }
