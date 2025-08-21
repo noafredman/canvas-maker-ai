@@ -64,24 +64,6 @@ h1 {
     color: white;
 }
 
-/* Drag toggle button styling */
-#drag-toggle {
-    margin-left: 8px;
-    border-left: 1px solid #e1e5e9;
-    padding-left: 12px;
-}
-
-#drag-toggle:not(.active) {
-    background: #f3f4f6;
-    color: #6b7280;
-    border-color: #d1d5db;
-}
-
-#drag-toggle.active {
-    background: #10b981;
-    border-color: #10b981;
-    color: white;
-}
 
 .make-real-btn {
     display: flex;
@@ -292,29 +274,55 @@ h1 {
     cursor: text;
 }
 
+/* Select tool cursor - always show default (arrow) cursor unless specific state */
 .canvas-container.select-cursor #canvas {
     cursor: default;
 }
 
-/* No tool selected - allow panning with grab cursor */
+/* When hovering over a component with select tool, show pointer */
+.canvas-container.select-cursor.hovering #canvas {
+    cursor: pointer;
+}
+
+/* When hovering over a draggable element with select tool, show grab cursor */
+.canvas-container.select-cursor.can-grab #canvas {
+    cursor: grab;
+}
+
+/* When dragging with select tool */
+.canvas-container.select-cursor.grabbing #canvas {
+    cursor: grabbing;
+}
+
+/* When hovering over a draggable element with drawing tools, show grab cursor */
+.canvas-container.pen-cursor.can-grab #canvas,
+.canvas-container.rectangle-cursor.can-grab #canvas,
+.canvas-container.circle-cursor.can-grab #canvas,
+.canvas-container.text-cursor.can-grab #canvas,
+.canvas-container.nested-canvas-cursor.can-grab #canvas {
+    cursor: grab;
+}
+
+/* When dragging with drawing tools */
+.canvas-container.pen-cursor.grabbing #canvas,
+.canvas-container.rectangle-cursor.grabbing #canvas,
+.canvas-container.circle-cursor.grabbing #canvas,
+.canvas-container.text-cursor.grabbing #canvas,
+.canvas-container.nested-canvas-cursor.grabbing #canvas {
+    cursor: grabbing;
+}
+
+/* When box selecting with select tool */
+.canvas-container.select-cursor.selecting #canvas {
+    cursor: crosshair;
+}
+
+/* No tool selected - pan mode with grab cursor */
 .canvas-container:not([class*="-cursor"]) #canvas {
     cursor: grab;
 }
 
 .canvas-container:not([class*="-cursor"]).grabbing #canvas {
-    cursor: grabbing;
-}
-
-/* Hover states */
-.canvas-container.hovering #canvas {
-    cursor: pointer;
-}
-
-.canvas-container.can-grab #canvas {
-    cursor: grab;
-}
-
-.canvas-container.grabbing #canvas {
     cursor: grabbing;
 }
 
