@@ -296,6 +296,15 @@ h1 {
     cursor: default;
 }
 
+/* No tool selected - allow panning with grab cursor */
+.canvas-container:not([class*="-cursor"]) #canvas {
+    cursor: grab;
+}
+
+.canvas-container:not([class*="-cursor"]).grabbing #canvas {
+    cursor: grabbing;
+}
+
 /* Hover states */
 .canvas-container.hovering #canvas {
     cursor: pointer;

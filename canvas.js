@@ -2,7 +2,7 @@ class CanvasMaker {
     constructor() {
         this.canvas = document.getElementById('canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.currentTool = 'pen';
+        this.currentTool = null; // No tool selected by default
         this.isDrawing = false;
         this.dragModeEnabled = true; // Default to drag mode enabled
         this.isSelecting = false;
@@ -105,20 +105,54 @@ class CanvasMaker {
     }
     
     setupCanvas() {
-        const rect = this.canvas.getBoundingClientRect();
+        // Try different approaches to detect actual available space
+        const toolbar = document.querySelector('.toolbar');
+        const toolbarHeight = toolbar ? toolbar.getBoundingClientRect().height : 0;
         
-        // Set canvas size to match the element size in CSS pixels
-        this.canvas.width = rect.width;
-        this.canvas.height = rect.height;
+        // Method 1: Use document.documentElement client dimensions
+        let availableWidth = document.documentElement.clientWidth;
+        let availableHeight = document.documentElement.clientHeight - toolbarHeight;
         
-        this.canvas.style.width = rect.width + 'px';
-        this.canvas.style.height = rect.height + 'px';
+        // Method 2: If that doesn't work, try visual viewport API
+        if (window.visualViewport) {
+            availableWidth = Math.min(availableWidth, window.visualViewport.width);
+            availableHeight = Math.min(availableHeight, window.visualViewport.height - toolbarHeight);
+        }
+        
+        // Method 3: Fallback to body dimensions
+        if (availableWidth <= 0 || availableHeight <= 0) {
+            const body = document.body;
+            const bodyRect = body.getBoundingClientRect();
+            availableWidth = bodyRect.width;
+            availableHeight = bodyRect.height - toolbarHeight;
+        }
+        
+        
+        // Set canvas size to match the available viewport
+        this.canvas.width = availableWidth;
+        this.canvas.height = availableHeight;
+        
+        // Update the app and container to use the calculated size
+        const app = document.querySelector('.app');
+        const container = this.canvas.parentElement;
+        
+        app.style.width = availableWidth + 'px';
+        app.style.height = (availableHeight + toolbarHeight) + 'px';
+        container.style.width = availableWidth + 'px';
+        container.style.height = availableHeight + 'px';
+        
+        // Ensure canvas fills the container
+        this.canvas.style.width = '100%';
+        this.canvas.style.height = '100%';
         
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
         this.ctx.lineWidth = 2;
         this.ctx.strokeStyle = '#333';
         this.ctx.fillStyle = 'transparent';
+        
+        // Redraw content after resize
+        this.redrawCanvas();
     }
     
     setupEventListeners() {
@@ -127,7 +161,25 @@ class CanvasMaker {
         this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
         this.canvas.addEventListener('click', this.handleClick.bind(this));
         
-        window.addEventListener('resize', this.setupCanvas.bind(this));
+        window.addEventListener('resize', () => {
+            // Use requestAnimationFrame + setTimeout to ensure DOM has updated
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    this.setupCanvas();
+                }, 10);
+            });
+        });
+        
+        // Also listen for visual viewport changes (for mobile and inspector)
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => {
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        this.setupCanvas();
+                    }, 10);
+                });
+            });
+        }
         window.addEventListener('keydown', this.handleKeyDown.bind(this));
         this.canvas.addEventListener('wheel', this.handleWheel.bind(this));
         
@@ -179,9 +231,17 @@ class CanvasMaker {
         
         toolButtons.forEach(btn => {
             btn.addEventListener('click', () => {
-                toolButtons.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this.currentTool = btn.dataset.tool;
+                // Check if clicking the already active tool
+                if (btn.classList.contains('active') && btn.dataset.tool === this.currentTool) {
+                    // Deselect the tool and return to pan mode
+                    btn.classList.remove('active');
+                    this.currentTool = null;
+                } else {
+                    // Select the new tool
+                    toolButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    this.currentTool = btn.dataset.tool;
+                }
                 this.updateCanvasCursor();
             });
         });
@@ -213,7 +273,11 @@ class CanvasMaker {
     updateCanvasCursor() {
         const container = document.querySelector('.canvas-container');
         container.className = 'canvas-container';
-        container.classList.add(`${this.currentTool}-cursor`);
+        
+        // Only add tool cursor if a tool is selected
+        if (this.currentTool) {
+            container.classList.add(`${this.currentTool}-cursor`);
+        }
         
         // Add state-specific classes
         if (this.isDrawing) {
@@ -282,8 +346,8 @@ class CanvasMaker {
         this.startX = pos.x;
         this.startY = pos.y;
         
-        // Check for panning (middle mouse button)
-        if (e.button === 1) {
+        // Check for panning (middle mouse button or no tool selected)
+        if (e.button === 1 || !this.currentTool) {
             this.isPanning = true;
             this.dragOffset.x = e.clientX;
             this.dragOffset.y = e.clientY;
