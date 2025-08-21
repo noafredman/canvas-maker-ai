@@ -154,10 +154,82 @@ camera.y = 300;  // Move viewport center to world Y: 300
 camera.zoom = 1.5;  // 150% zoom
 canvas.updateZoomIndicator();
 
+// Zoom methods (maintain viewport center during zoom)
+canvas.zoomIn();    // Zoom in by 20%
+canvas.zoomOut();   // Zoom out by 20%
+canvas.resetZoom(); // Reset to 100% zoom
+
 // Recenter to origin
 canvas.recenterCanvas();
 
 canvas.redrawCanvas();
+```
+
+### Camera Constraints (Virtual Bounds)
+```javascript
+// Set invisible boundaries that limit camera movement
+canvas.setCameraConstraints({
+  bounds: { x: -1000, y: -1000, width: 2000, height: 2000 },
+  behavior: 'contain'  // or 'inside' or 'free'
+});
+
+// Different constraint behaviors:
+// 'contain': Viewport cannot go outside bounds
+// 'inside': Camera center must stay within bounds  
+// 'free': No constraints (infinite canvas)
+
+// Get current constraints
+const constraints = canvas.getCameraConstraints();
+
+// Remove all constraints (back to infinite)
+canvas.clearCameraConstraints();
+```
+
+### Content-Based Dynamic Constraints
+```javascript
+// Automatically set constraints based on your content
+function updateConstraintsToContent() {
+  const shapes = canvas.activeCanvasContext.shapes;
+  const texts = canvas.activeCanvasContext.texts;
+  
+  if (shapes.length === 0 && texts.length === 0) {
+    canvas.clearCameraConstraints();
+    return;
+  }
+  
+  // Calculate bounding box of all content
+  let minX = Infinity, minY = Infinity;
+  let maxX = -Infinity, maxY = -Infinity;
+  
+  shapes.forEach(shape => {
+    minX = Math.min(minX, shape.x);
+    minY = Math.min(minY, shape.y);
+    maxX = Math.max(maxX, shape.x + shape.width);
+    maxY = Math.max(maxY, shape.y + shape.height);
+  });
+  
+  texts.forEach(text => {
+    minX = Math.min(minX, text.x);
+    minY = Math.min(minY, text.y);
+    maxX = Math.max(maxX, text.x + 200); // Approximate text width
+    maxY = Math.max(maxY, text.y + text.fontSize);
+  });
+  
+  // Add padding around content
+  const padding = 500;
+  canvas.setCameraConstraints({
+    bounds: {
+      x: minX - padding,
+      y: minY - padding, 
+      width: (maxX - minX) + (padding * 2),
+      height: (maxY - minY) + (padding * 2)
+    },
+    behavior: 'contain'
+  });
+}
+
+// Call after adding/removing content
+updateConstraintsToContent();
 ```
 
 ### World vs Screen Coordinates
