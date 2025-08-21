@@ -40,6 +40,8 @@ class CanvasMaker {
             maxZoom: 5
         };
         
+                 // Expose camera on window for external component access          
+     window.canvasCamera = this._camera;         
         // Optional camera constraints (null = infinite canvas)
         this.cameraConstraints = null;
         // Track the original center position for recenter functionality
