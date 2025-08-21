@@ -6,6 +6,7 @@ class CanvasMaker {
         // Make instance globally accessible for testing
         window.canvasMaker = this;
         this.currentTool = null; // No tool selected by default
+        this.showOriginMarker = false; // Hide origin marker by default, set to true for testing
         this.isDrawing = false;
         this.dragModeEnabled = true; // Default to drag mode enabled
         this.isSelecting = false;
@@ -135,11 +136,8 @@ class CanvasMaker {
         this.canvas.width = availableWidth;
         this.canvas.height = availableHeight;
         
-        // Center the world origin (0,0) on the screen
-        this._camera.x = availableWidth / 2;
-        this._camera.y = availableHeight / 2;
-        this.originalCenter.x = availableWidth / 2;
-        this.originalCenter.y = availableHeight / 2;
+        // Center the world origin (0,0) on the screen using unified setup
+        this.setupCanvasContext(this.mainCanvasContext, availableWidth, availableHeight);
         
         // Update the app and container to use the calculated size
         const app = document.querySelector('.app');
@@ -162,6 +160,38 @@ class CanvasMaker {
         
         // Redraw content after resize
         this.redrawCanvas();
+    }
+    
+    setupCanvasContext(canvasContext, width, height) {
+        // Unified canvas setup for consistent behavior across main and nested canvases
+        const { camera, canvas, ctx } = canvasContext;
+        
+        // Set canvas dimensions
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Set CSS size to match
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        
+        // Center the world origin (0,0) on the screen
+        camera.x = width / 2;
+        camera.y = height / 2;
+        camera.zoom = 1;
+        
+        // Ensure camera has proper zoom bounds
+        camera.minZoom = camera.minZoom || 0.1;
+        camera.maxZoom = camera.maxZoom || 5;
+        
+        // Set context properties
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        // Update original center for main canvas
+        if (canvasContext === this.mainCanvasContext) {
+            this.originalCenter.x = width / 2;
+            this.originalCenter.y = height / 2;
+        }
     }
     
     setupEventListeners() {
@@ -1118,17 +1148,20 @@ class CanvasMaker {
         const camera = this.activeCanvasContext.camera;
         const canvas = this.activeCanvasContext.canvas;
         
-        // Calculate where world origin (0,0) should appear on screen (center)
-        const targetScreenX = canvas.width / 2;
-        const targetScreenY = canvas.height / 2;
+        // Calculate current viewport center in world coordinates
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const worldCenter = this.canvasToWorld(centerX, centerY);
         
         const oldZoom = camera.zoom;
         const newZoom = Math.min(camera.maxZoom, oldZoom * 1.2);
         
-        // Adjust camera position to keep world origin (0,0) at screen center
-        camera.x = targetScreenX / newZoom;
-        camera.y = targetScreenY / newZoom;
+        // Adjust camera to keep current viewport center stable during zoom
         camera.zoom = newZoom;
+        const newWorldCenter = this.canvasToWorld(centerX, centerY);
+        
+        camera.x += newWorldCenter.x - worldCenter.x;
+        camera.y += newWorldCenter.y - worldCenter.y;
 
         this.redrawCanvas();
         this.updateZoomIndicator();
@@ -1139,17 +1172,20 @@ class CanvasMaker {
         const camera = this.activeCanvasContext.camera;
         const canvas = this.activeCanvasContext.canvas;
         
-        // Calculate where world origin (0,0) should appear on screen (center)
-        const targetScreenX = canvas.width / 2;
-        const targetScreenY = canvas.height / 2;
+        // Calculate current viewport center in world coordinates
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const worldCenter = this.canvasToWorld(centerX, centerY);
         
         const oldZoom = camera.zoom;
         const newZoom = Math.max(camera.minZoom, oldZoom / 1.2);
         
-        // Adjust camera position to keep world origin (0,0) at screen center
-        camera.x = targetScreenX / newZoom;
-        camera.y = targetScreenY / newZoom;
+        // Adjust camera to keep current viewport center stable during zoom
         camera.zoom = newZoom;
+        const newWorldCenter = this.canvasToWorld(centerX, centerY);
+        
+        camera.x += newWorldCenter.x - worldCenter.x;
+        camera.y += newWorldCenter.y - worldCenter.y;
 
         this.redrawCanvas();
         this.updateZoomIndicator();
@@ -1273,14 +1309,25 @@ class CanvasMaker {
                     newHeight: canvasHeight
                 });
                 
-                this.nestedCanvas.width = canvasWidth;
-                this.nestedCanvas.height = canvasHeight;
-                this.nestedCanvas.style.width = canvasWidth + 'px';
-                this.nestedCanvas.style.height = canvasHeight + 'px';
+                // Check if this is a new canvas (camera at default position)
+                const isNewCanvas = this.nestedCanvasContext && 
+                                   this.nestedCanvasContext.camera &&
+                                   this.nestedCanvasContext.camera.x === 0 && 
+                                   this.nestedCanvasContext.camera.y === 0 && 
+                                   this.nestedCanvasContext.camera.zoom === 1;
                 
-                // Reset context properties after resize
-                this.nestedCtx.lineCap = 'round';
-                this.nestedCtx.lineJoin = 'round';
+                if (isNewCanvas) {
+                    // Use unified setup for new nested canvases
+                    this.setupCanvasContext(this.nestedCanvasContext, canvasWidth, canvasHeight);
+                } else {
+                    // Just resize existing nested canvases without affecting camera
+                    this.nestedCanvas.width = canvasWidth;
+                    this.nestedCanvas.height = canvasHeight;
+                    this.nestedCanvas.style.width = canvasWidth + 'px';
+                    this.nestedCanvas.style.height = canvasHeight + 'px';
+                    this.nestedCtx.lineCap = 'round';
+                    this.nestedCtx.lineJoin = 'round';
+                }
             }
             
             // Redraw the canvas with the new dimensions
@@ -2624,29 +2671,31 @@ class CanvasMaker {
         ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
         ctx.beginPath();
         
-        // Draw origin marker at world (0,0)
-        // Transform world origin (0,0) to screen coordinates
-        const originScreenX = (0 + camera.x) * camera.zoom;
-        const originScreenY = (0 + camera.y) * camera.zoom;
-        
-        // Draw a red cross at the origin
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 3;
-        const crossSize = 20;
-        
-        // Horizontal line
-        ctx.moveTo(originScreenX - crossSize, originScreenY);
-        ctx.lineTo(originScreenX + crossSize, originScreenY);
-        
-        // Vertical line  
-        ctx.moveTo(originScreenX, originScreenY - crossSize);
-        ctx.lineTo(originScreenX, originScreenY + crossSize);
-        
-        ctx.stroke();
-        
-        // Draw a small red square at the exact origin
-        ctx.fillStyle = '#ff0000';
-        ctx.fillRect(originScreenX - 3, originScreenY - 3, 6, 6);
+        // Draw origin marker at world (0,0) if enabled (for testing)
+        if (this.showOriginMarker) {
+            // Transform world origin (0,0) to screen coordinates
+            const originScreenX = (0 + camera.x) * camera.zoom;
+            const originScreenY = (0 + camera.y) * camera.zoom;
+            
+            // Draw a red cross at the origin
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 3;
+            const crossSize = 20;
+            
+            // Horizontal line
+            ctx.moveTo(originScreenX - crossSize, originScreenY);
+            ctx.lineTo(originScreenX + crossSize, originScreenY);
+            
+            // Vertical line  
+            ctx.moveTo(originScreenX, originScreenY - crossSize);
+            ctx.lineTo(originScreenX, originScreenY + crossSize);
+            
+            ctx.stroke();
+            
+            // Draw a small red square at the exact origin
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(originScreenX - 3, originScreenY - 3, 6, 6);
+        }
         
         // Reset stroke style for grid
         ctx.strokeStyle = `rgba(150, 150, 150, ${opacity})`;
@@ -3104,7 +3153,7 @@ class CanvasMaker {
     }
     
     resetZoom() {
-        // Reset zoom to 100% (without changing position)
+        // Reset zoom to 100% (without changing camera position)
         const camera = this.activeCanvasContext.camera;
         camera.zoom = 1;
         
