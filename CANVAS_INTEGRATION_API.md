@@ -729,10 +729,112 @@ redrawCanvas(canvasContext) {
 - Automatic error handling prevents one component from breaking others
 - Better performance through intelligent redraw queueing
 
-### Hook System API Reference
+### React Integration with Event Emitter API
+
+**NEW**: Canvas Maker now includes a traditional event emitter API perfect for React components:
 
 ```javascript
-// Available hooks
+// React Hook for Canvas Camera
+import { useState, useEffect } from 'react';
+
+function useCanvasCamera(canvasMaker) {
+  const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 1 });
+  
+  useEffect(() => {
+    if (!canvasMaker) return;
+    
+    const handleCameraChange = (cameraData) => {
+      setCamera(cameraData);
+    };
+    
+    // Subscribe to camera changes
+    canvasMaker.on('cameraChange', handleCameraChange);
+    
+    // Get initial camera state
+    const initialCamera = canvasMaker.activeCanvasContext.camera;
+    setCamera({ x: initialCamera.x, y: initialCamera.y, zoom: initialCamera.zoom });
+    
+    // Cleanup on unmount
+    return () => canvasMaker.off('cameraChange', handleCameraChange);
+  }, [canvasMaker]);
+  
+  return camera;
+}
+
+// React Hook for Selection
+function useCanvasSelection(canvasMaker) {
+  const [selection, setSelection] = useState({ selectedElements: [], count: 0 });
+  
+  useEffect(() => {
+    if (!canvasMaker) return;
+    
+    const handleSelectionChange = (selectionData) => {
+      setSelection(selectionData);
+    };
+    
+    canvasMaker.on('selectionChange', handleSelectionChange);
+    
+    return () => canvasMaker.off('selectionChange', handleSelectionChange);
+  }, [canvasMaker]);
+  
+  return selection;
+}
+
+// React Component Example
+function MyCanvasOverlay({ canvasMaker }) {
+  const camera = useCanvasCamera(canvasMaker);
+  const selection = useCanvasSelection(canvasMaker);
+  
+  // Your React components will automatically re-render when camera or selection changes
+  return (
+    <div className="canvas-overlay">
+      <div className="camera-info">
+        Camera: {camera.x.toFixed(1)}, {camera.y.toFixed(1)} 
+        Zoom: {(camera.zoom * 100).toFixed(0)}%
+      </div>
+      <div className="selection-info">
+        Selected: {selection.count} elements
+      </div>
+      
+      {/* Position components based on camera */}
+      <MyWidget 
+        style={{
+          left: canvasMaker?.worldToCanvas(100, 100).x + 'px',
+          top: canvasMaker?.worldToCanvas(100, 100).y + 'px',
+          transform: `scale(${camera.zoom})`
+        }}
+      />
+    </div>
+  );
+}
+```
+
+### Event Emitter API Reference
+
+```javascript
+// Subscribe to events
+canvas.on('cameraChange', (camera) => {
+  // camera: { x, y, zoom }
+  console.log('Camera changed:', camera);
+});
+
+canvas.on('selectionChange', (selection) => {
+  // selection: { selectedElements: [], count: number }
+  console.log('Selection changed:', selection);
+});
+
+// Unsubscribe from events
+canvas.off('cameraChange', callbackFunction);
+
+// Available events:
+// - 'cameraChange': Emitted when camera position or zoom changes
+// - 'selectionChange': Emitted when selection changes
+```
+
+### Hook System API Reference (Advanced)
+
+```javascript
+// Available hooks for complex integrations
 const integration = canvas.integrateExternalComponent({
   onCameraChange: ({ camera, canvas }) => {
     // Triggered when: zoom, pan, recenter, resetZoom

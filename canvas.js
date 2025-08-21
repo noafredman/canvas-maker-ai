@@ -60,6 +60,9 @@ class CanvasMaker {
             onSelectionChange: []
         };
         
+        // Traditional event emitter system for React integration
+        this.eventListeners = {};
+        
         // Touch gesture state
         this.touches = [];
         this.lastTouchDistance = 0;
@@ -2613,6 +2616,7 @@ class CanvasMaker {
         
         this.updateCanvasCursor();
         this.redrawCanvas();
+        this.notifySelectionChange();
     }
     
     redrawCanvas(canvasContext = this.activeCanvasContext) {
@@ -3647,6 +3651,30 @@ class CanvasMaker {
         this.redrawCanvas();
     }
     
+    // Traditional Event Emitter API for React Integration
+    on(event, callback) {
+        if (!this.eventListeners[event]) {
+            this.eventListeners[event] = [];
+        }
+        this.eventListeners[event].push(callback);
+    }
+    
+    off(event, callback) {
+        if (!this.eventListeners[event]) return;
+        this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
+    }
+    
+    emit(event, data) {
+        if (!this.eventListeners[event]) return;
+        this.eventListeners[event].forEach(callback => {
+            try {
+                callback(data);
+            } catch (error) {
+                console.error(`Error in ${event} event listener:`, error);
+            }
+        });
+    }
+    
     // Hook System for Component Integration
     addHook(event, callback) {
         if (!this.hooks[event]) {
@@ -3678,14 +3706,39 @@ class CanvasMaker {
     // Camera change detection and notification
     notifyCameraChange() {
         const camera = this.activeCanvasContext.camera;
+        const cameraData = { 
+            x: camera.x, 
+            y: camera.y, 
+            zoom: camera.zoom 
+        };
+        
+        // Emit traditional event for React components
+        this.emit('cameraChange', cameraData);
+        
+        // Execute hooks for complex integrations
         this.executeHooks('onCameraChange', { 
-            camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
+            camera: cameraData,
             canvas: this.activeCanvasContext.canvas
         });
     }
     
+    // Helper method to update selection and notify
+    setSelection(elements) {
+        this.selectedElements = elements;
+        this.notifySelectionChange();
+    }
+    
     // Selection change notification
     notifySelectionChange() {
+        const selectionData = {
+            selectedElements: this.selectedElements,
+            count: this.selectedElements.length
+        };
+        
+        // Emit traditional event for React components
+        this.emit('selectionChange', selectionData);
+        
+        // Execute hooks for complex integrations
         this.executeHooks('onSelectionChange', {
             selectedElements: this.selectedElements,
             canvas: this.activeCanvasContext.canvas
