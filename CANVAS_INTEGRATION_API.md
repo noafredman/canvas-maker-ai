@@ -829,6 +829,7 @@ canvas.off('cameraChange', callbackFunction);
 // Available events:
 // - 'cameraChange': Emitted when camera position or zoom changes
 // - 'selectionChange': Emitted when selection changes
+// - 'toolbarMove': Emitted when floating toolbar is moved by user
 ```
 
 ### Hook System API Reference (Advanced)
@@ -912,6 +913,49 @@ const mouseWorld = canvas.canvasToWorld(mouseX, mouseY);
 // Access current camera state
 const camera = canvas.activeCanvasContext.camera;
 console.log('Camera:', { x: camera.x, y: camera.y, zoom: camera.zoom });
+```
+
+## Floating Toolbar API
+
+Canvas Maker includes a floating, draggable toolbar that external applications can control:
+
+```javascript
+// Control toolbar position
+canvas.setToolbarPosition(100, 50); // Move toolbar to x:100, y:50
+
+// Get current toolbar position
+const position = canvas.getToolbarPosition();
+console.log(position); // { x: 100, y: 50 }
+
+// Hide/show toolbar
+canvas.hideToolbar();
+canvas.showToolbar();
+
+// Listen for toolbar movements by user
+canvas.on('toolbarMove', ({ x, y }) => {
+    console.log('User moved toolbar to:', x, y);
+    // Save position to localStorage, sync with other components, etc.
+});
+
+// Example: Remember toolbar position
+function saveToolbarPosition() {
+    const pos = canvas.getToolbarPosition();
+    localStorage.setItem('toolbarPosition', JSON.stringify(pos));
+}
+
+function restoreToolbarPosition() {
+    const saved = localStorage.getItem('toolbarPosition');
+    if (saved) {
+        const pos = JSON.parse(saved);
+        canvas.setToolbarPosition(pos.x, pos.y);
+    }
+}
+
+// Save position when user moves it
+canvas.on('toolbarMove', saveToolbarPosition);
+
+// Restore on page load
+restoreToolbarPosition();
 ```
 
 ## Event Handling

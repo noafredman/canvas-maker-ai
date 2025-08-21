@@ -12,25 +12,74 @@ body {
 }
 
 .app {
-    display: flex;
-    flex-direction: column;
+    position: relative;
     height: 100vh;
+    overflow: hidden;
 }
 
-.toolbar {
+/* Floating Toolbar Styles */
+.floating-toolbar {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 12px 20px;
-    background: white;
-    border-bottom: 1px solid #e1e5e9;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    gap: 8px;
+    padding: 8px;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.floating-toolbar:hover {
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.toolbar-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    cursor: move;
+    color: #666;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.toolbar-drag-handle:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #333;
+}
+
+.toolbar-drag-handle:active {
+    background: rgba(0, 0, 0, 0.1);
+    color: #000;
+}
+
+.toolbar-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .toolbar-section {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
+}
+
+.toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.1);
+    margin: 0 4px;
 }
 
 h1 {
@@ -42,10 +91,11 @@ h1 {
 .tool-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
     background: transparent;
-    border: 1px solid #e1e5e9;
+    border: 1px solid rgba(0, 0, 0, 0.1);
     border-radius: 8px;
     cursor: pointer;
     font-size: 14px;
@@ -68,8 +118,9 @@ h1 {
 .make-real-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: none;
     border-radius: 8px;
@@ -85,7 +136,11 @@ h1 {
 }
 
 .clear-btn {
-    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
     background: #ef4444;
     border: none;
     border-radius: 8px;
@@ -100,8 +155,11 @@ h1 {
 }
 
 .canvas-container {
-    flex: 1;
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     overflow: hidden;
     background: white;
 }

@@ -121,6 +121,7 @@ class CanvasMaker {
         this.setupCanvas();
         this.setupEventListeners();
         this.setupToolbar();
+        this.setupFloatingToolbar();
         this.updateZoomIndicator();
         this.updateRecenterButton();
         this.updateCanvasCursor();
@@ -320,6 +321,100 @@ class CanvasMaker {
         clearBtn.addEventListener('click', this.clearCanvas.bind(this));
         closeModal.addEventListener('click', this.closeModal.bind(this));
         
+    }
+    
+    setupFloatingToolbar() {
+        const toolbar = document.getElementById('floating-toolbar');
+        const dragHandle = document.getElementById('toolbar-drag-handle');
+        
+        if (!toolbar || !dragHandle) return;
+        
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+        
+        // Store initial position for external API
+        this.toolbarPosition = { x: 20, y: 20 };
+        
+        dragHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDragging = true;
+            
+            const rect = toolbar.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+            
+            toolbar.style.transition = 'none';
+            document.body.style.userSelect = 'none';
+            
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        });
+        
+        const handleMouseMove = (e) => {
+            if (!isDragging) return;
+            
+            const x = e.clientX - dragOffset.x;
+            const y = e.clientY - dragOffset.y;
+            
+            // Constrain to viewport
+            const maxX = window.innerWidth - toolbar.offsetWidth;
+            const maxY = window.innerHeight - toolbar.offsetHeight;
+            
+            const constrainedX = Math.max(0, Math.min(maxX, x));
+            const constrainedY = Math.max(0, Math.min(maxY, y));
+            
+            toolbar.style.left = constrainedX + 'px';
+            toolbar.style.top = constrainedY + 'px';
+            
+            // Update stored position
+            this.toolbarPosition.x = constrainedX;
+            this.toolbarPosition.y = constrainedY;
+            
+            // Emit event for external apps
+            this.emit('toolbarMove', { x: constrainedX, y: constrainedY });
+        };
+        
+        const handleMouseUp = () => {
+            isDragging = false;
+            toolbar.style.transition = 'all 0.2s ease';
+            document.body.style.userSelect = '';
+            
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }
+    
+    // API methods for external apps to control toolbar
+    setToolbarPosition(x, y) {
+        const toolbar = document.getElementById('floating-toolbar');
+        if (!toolbar) return;
+        
+        // Constrain to viewport
+        const maxX = window.innerWidth - toolbar.offsetWidth;
+        const maxY = window.innerHeight - toolbar.offsetHeight;
+        
+        const constrainedX = Math.max(0, Math.min(maxX, x));
+        const constrainedY = Math.max(0, Math.min(maxY, y));
+        
+        toolbar.style.left = constrainedX + 'px';
+        toolbar.style.top = constrainedY + 'px';
+        
+        this.toolbarPosition.x = constrainedX;
+        this.toolbarPosition.y = constrainedY;
+    }
+    
+    getToolbarPosition() {
+        return { ...this.toolbarPosition };
+    }
+    
+    hideToolbar() {
+        const toolbar = document.getElementById('floating-toolbar');
+        if (toolbar) toolbar.style.display = 'none';
+    }
+    
+    showToolbar() {
+        const toolbar = document.getElementById('floating-toolbar');
+        if (toolbar) toolbar.style.display = 'flex';
     }
     
     
