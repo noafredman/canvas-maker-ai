@@ -39,6 +39,9 @@ class CanvasMaker {
             minZoom: 0.1,
             maxZoom: 5
         };
+        
+        // Optional camera constraints (null = infinite canvas)
+        this.cameraConstraints = null;
         // Track the original center position for recenter functionality
         this.originalCenter = { x: 0, y: 0 };
         this.isPanning = false;
@@ -104,6 +107,11 @@ class CanvasMaker {
         this.updateZoomIndicator();
         this.updateRecenterButton();
         this.updateCanvasCursor();
+        
+        // Reset canvas transform initially
+        this.canvas.style.transform = 'none';
+        this.canvas.style.transformOrigin = '0 0';
+        
         this.redrawCanvas();
     }
     
@@ -173,9 +181,10 @@ class CanvasMaker {
         canvas.style.width = width + 'px';
         canvas.style.height = height + 'px';
         
-        // Center the world origin (0,0) on the screen
-        camera.x = width / 2;
-        camera.y = height / 2;
+        // With CSS transforms: camera coordinates represent the world position at screen center
+        // Start with world origin (0,0) at screen center
+        camera.x = 0;
+        camera.y = 0;
         camera.zoom = 1;
         
         // Ensure camera has proper zoom bounds
@@ -357,19 +366,130 @@ class CanvasMaker {
     }
     
     canvasToWorld(canvasX, canvasY) {
+        // Convert screen coordinates to world coordinates with Canvas2D transforms
         const camera = this.activeCanvasContext.camera;
-        return {
-            x: canvasX / camera.zoom - camera.x,
-            y: canvasY / camera.zoom - camera.y
-        };
+        const canvas = this.activeCanvasContext.canvas;
+        
+        // Inverse transform: account for centering, then zoom, then camera offset
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Step 1: Remove canvas centering
+        const centeredX = canvasX - centerX;
+        const centeredY = canvasY - centerY;
+        
+        // Step 2: Remove zoom scaling
+        const unzoomedX = centeredX / camera.zoom;
+        const unzoomedY = centeredY / camera.zoom;
+        
+        // Step 3: Remove camera translation
+        const worldX = unzoomedX - camera.x;
+        const worldY = unzoomedY - camera.y;
+        
+        return { x: worldX, y: worldY };
     }
     
     worldToCanvas(worldX, worldY) {
+        // Convert world coordinates to screen coordinates with Canvas2D transforms
         const camera = this.activeCanvasContext.camera;
-        return {
-            x: (worldX + camera.x) * camera.zoom,
-            y: (worldY + camera.y) * camera.zoom
+        const canvas = this.activeCanvasContext.canvas;
+        
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Apply transform: camera translation, then zoom, then canvas centering
+        const translatedX = worldX + camera.x;
+        const translatedY = worldY + camera.y;
+        
+        const zoomedX = translatedX * camera.zoom;
+        const zoomedY = translatedY * camera.zoom;
+        
+        const screenX = zoomedX + centerX;
+        const screenY = zoomedY + centerY;
+        
+        return { x: screenX, y: screenY };
+    }
+    
+    applyCSSTransform(canvasContext) {
+        // Expose camera transformation as CSS custom properties for external components
+        // Don't apply CSS transform to canvas - we'll handle transforms in drawing code
+        const { camera, canvas } = canvasContext;
+        
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const translateX = centerX + (camera.x * camera.zoom);
+        const translateY = centerY + (camera.y * camera.zoom);
+        
+        const transform = `translate(${translateX}px, ${translateY}px) scale(${camera.zoom})`;
+        
+        // Set CSS custom properties for external components to read
+        canvas.style.setProperty('--camera-x', camera.x);
+        canvas.style.setProperty('--camera-y', camera.y);
+        canvas.style.setProperty('--camera-zoom', camera.zoom);
+        canvas.style.setProperty('--camera-transform', transform);
+        
+        // Expose on window for component access
+        window.canvasCSSTransform = {
+            x: camera.x,
+            y: camera.y, 
+            zoom: camera.zoom,
+            transform: transform
         };
+    }
+    
+    // Camera Constraints API
+    setCameraConstraints(constraints) {
+        // Set camera constraints: { bounds: {x, y, width, height}, behavior: 'free'|'contain'|'inside' }
+        this.cameraConstraints = constraints;
+        
+        // Apply constraints to current camera position
+        if (constraints) {
+            this.applyCameraConstraints();
+        }
+        
+        this.redrawCanvas();
+    }
+    
+    getCameraConstraints() {
+        return this.cameraConstraints;
+    }
+    
+    clearCameraConstraints() {
+        this.cameraConstraints = null;
+        this.redrawCanvas();
+    }
+    
+    applyCameraConstraints() {
+        if (!this.cameraConstraints) return;
+        
+        const camera = this.activeCanvasContext.camera;
+        const canvas = this.activeCanvasContext.canvas;
+        const { bounds, behavior = 'contain' } = this.cameraConstraints;
+        
+        if (!bounds) return;
+        
+        const viewportWidth = canvas.width / camera.zoom;
+        const viewportHeight = canvas.height / camera.zoom;
+        
+        if (behavior === 'contain') {
+            // Camera must stay within bounds - viewport cannot go outside bounds
+            const minCameraX = bounds.x + viewportWidth / 2;
+            const maxCameraX = bounds.x + bounds.width - viewportWidth / 2;
+            const minCameraY = bounds.y + viewportHeight / 2;
+            const maxCameraY = bounds.y + bounds.height - viewportHeight / 2;
+            
+            camera.x = Math.max(minCameraX, Math.min(maxCameraX, camera.x));
+            camera.y = Math.max(minCameraY, Math.min(maxCameraY, camera.y));
+            
+        } else if (behavior === 'inside') {
+            // Camera center must stay within bounds
+            camera.x = Math.max(bounds.x, Math.min(bounds.x + bounds.width, camera.x));
+            camera.y = Math.max(bounds.y, Math.min(bounds.y + bounds.height, camera.y));
+            
+        } else if (behavior === 'free') {
+            // No constraints applied
+            return;
+        }
     }
     
     handleMouseDown(e) {
@@ -552,6 +672,9 @@ class CanvasMaker {
             
             camera.x += deltaX / camera.zoom;
             camera.y += deltaY / camera.zoom;
+            
+            // Apply camera constraints
+            this.applyCameraConstraints();
             
             this.dragOffset.x = e.clientX;
             this.dragOffset.y = e.clientY;
@@ -1101,6 +1224,9 @@ class CanvasMaker {
                 
                 camera.x += newWorldPos.x - worldPos.x;
                 camera.y += newWorldPos.y - worldPos.y;
+                
+                // Apply camera constraints
+                this.applyCameraConstraints();
                 
                 this.redrawCanvas();
                 this.updateZoomIndicator();
@@ -2482,9 +2608,14 @@ class CanvasMaker {
         // Draw infinite grid background (for all canvases)
         this.drawGrid(canvasContext);
         
-        // Apply camera transformation
-        ctx.scale(camera.zoom, camera.zoom);
-        ctx.translate(camera.x, camera.y);
+        // Apply camera transformation via Canvas2D transforms (simpler and more reliable)
+        this.applyCSSTransform(canvasContext);
+        
+        // Apply Canvas2D transforms for camera
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2); // Center the canvas
+        ctx.scale(camera.zoom, camera.zoom);                // Apply zoom
+        ctx.translate(camera.x, camera.y);                  // Apply camera offset
         
         // Draw paths
         paths.forEach((path, index) => {
@@ -3160,11 +3291,13 @@ class CanvasMaker {
     recenterCanvas() {
         // Center world origin (0,0) on screen at current zoom level
         const camera = this.activeCanvasContext.camera;
-        const canvas = this.activeCanvasContext.canvas;
         
-        // Calculate camera position to center world origin (0,0) at current zoom
-        camera.x = canvas.width / 2 / camera.zoom;
-        camera.y = canvas.height / 2 / camera.zoom;
+        // With CSS transforms, camera (0,0) means world origin at screen center
+        camera.x = 0;
+        camera.y = 0;
+        
+        // Apply camera constraints
+        this.applyCameraConstraints();
         
         this.redrawCanvas();
         this.updateRecenterButton();
@@ -3183,10 +3316,12 @@ class CanvasMaker {
         // Reset zoom to 100%
         camera.zoom = 1;
         
-        // Adjust camera position to keep the same world point at viewport center
-        camera.x = centerX - worldCenter.x;
-        camera.y = centerY - worldCenter.y;
+        // Adjust camera to keep current viewport center stable during zoom
+        const newWorldCenter = this.canvasToWorld(centerX, centerY);
         
+        camera.x += newWorldCenter.x - worldCenter.x;
+        camera.y += newWorldCenter.y - worldCenter.y;
+
         this.redrawCanvas();
         this.updateZoomIndicator();
         this.updateRecenterButton();
@@ -3403,6 +3538,65 @@ class CanvasMaker {
         
         this.dragOffset.x = currentX;
         this.dragOffset.y = currentY;
+    }
+    
+    // Testing helper functions for camera constraints and CSS transforms
+    testCameraConstraints() {
+        console.log('Testing camera constraints with CSS transforms...');
+        
+        // Test 1: Set basic bounds
+        console.log('Test 1: Setting bounds to (-1000, -1000, 2000, 2000) with contain behavior');
+        this.setCameraConstraints({
+            bounds: { x: -1000, y: -1000, width: 2000, height: 2000 },
+            behavior: 'contain'
+        });
+        
+        console.log('Current camera:', this.camera);
+        console.log('Try panning to see constraints in action!');
+        console.log('Use testCameraConstraints2() for inside behavior test');
+        console.log('Use clearCameraConstraints() to remove constraints');
+    }
+    
+    testCameraConstraints2() {
+        console.log('Test 2: Setting bounds with inside behavior');
+        this.setCameraConstraints({
+            bounds: { x: -500, y: -500, width: 1000, height: 1000 },
+            behavior: 'inside'
+        });
+        
+        console.log('Current camera:', this.camera);
+        console.log('Camera center must stay within bounds');
+    }
+    
+    testCSSTransforms() {
+        console.log('Testing coordinate system...');
+        console.log('Camera coordinates:', this.camera);
+        console.log('Canvas size:', this.canvas.width, 'x', this.canvas.height);
+        
+        // Test coordinate conversion
+        const screenCenter = { x: this.canvas.width / 2, y: this.canvas.height / 2 };
+        const worldCenter = this.canvasToWorld(screenCenter.x, screenCenter.y);
+        console.log('Screen center to world:', screenCenter, '->', worldCenter);
+        
+        const backToScreen = this.worldToCanvas(worldCenter.x, worldCenter.y);
+        console.log('World back to screen:', worldCenter, '->', backToScreen);
+        
+        console.log('Canvas transform applied via Canvas2D transforms');
+    }
+    
+    testCoordinates() {
+        // Add a test rectangle at world origin
+        this.activeCanvasContext.shapes.push({
+            type: 'rectangle',
+            x: -50, y: -50,
+            width: 100, height: 100,
+            strokeColor: '#ff0000',
+            fillColor: 'rgba(255,0,0,0.2)'
+        });
+        
+        console.log('Added red test rectangle at world origin (-50,-50,100,100)');
+        console.log('It should appear centered on screen');
+        this.redrawCanvas();
     }
 }
 
