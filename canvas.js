@@ -346,12 +346,74 @@ class CanvasMaker {
         this.startX = pos.x;
         this.startY = pos.y;
         
-        // Check for panning (middle mouse button or no tool selected)
-        if (e.button === 1 || !this.currentTool) {
+        // Check for panning (middle mouse button)
+        if (e.button === 1) {
             this.isPanning = true;
             this.dragOffset.x = e.clientX;
             this.dragOffset.y = e.clientY;
             return;
+        }
+        
+        // If no tool is selected, act like select tool for object interaction or pan for empty areas
+        if (!this.currentTool) {
+            // Check if clicking on an element when drag mode is enabled
+            if (this.hoveredElement && this.dragModeEnabled) {
+                // Check if the clicked element is already selected - if so, start dragging
+                const isAlreadySelected = this.selectedElements.some(sel => {
+                    if (this.hoveredElement.type === 'shape') {
+                        return sel.type === 'shape' && sel.index === this.hoveredElement.index;
+                    } else if (this.hoveredElement.type === 'text') {
+                        return sel.type === 'text' && sel.index === this.hoveredElement.index;
+                    } else if (this.hoveredElement.type === 'path') {
+                        return sel.type === 'path' && sel.index === this.hoveredElement.index;
+                    } else if (this.hoveredElement.type === 'nested-canvas') {
+                        return sel.type === 'nested-canvas' && sel.index === this.hoveredElement.index;
+                    }
+                    return false;
+                });
+                
+                if (isAlreadySelected) {
+                    // Start dragging the selected elements
+                    this.isDragging = true;
+                    this.dragOffset.x = pos.x;
+                    this.dragOffset.y = pos.y;
+                } else {
+                    // Select the clicked element and start dragging
+                    this.selectedElements = [this.hoveredElement];
+                    this.isDragging = true;
+                    this.dragOffset.x = pos.x;
+                    this.dragOffset.y = pos.y;
+                }
+                this.updateCanvasCursor();
+                return;
+            }
+            
+            // Check if clicking on resize handle
+            const resizeHandle = this.getResizeHandleForContext(pos.x, pos.y, this.activeCanvasContext);
+            if (resizeHandle) {
+                this.isResizing = true;
+                this.resizeHandle = resizeHandle;
+                this.dragOffset.x = pos.x;
+                this.dragOffset.y = pos.y;
+                this.updateCanvasCursor();
+                return;
+            }
+            
+            // If clicking on empty area, start selection box or pan
+            const clickedElement = this.getElementAtPoint(pos.x, pos.y);
+            if (!clickedElement) {
+                // Start panning for empty areas
+                this.isPanning = true;
+                this.dragOffset.x = e.clientX;
+                this.dragOffset.y = e.clientY;
+                return;
+            } else {
+                // Start selection box behavior
+                this.isSelecting = true;
+                this.showSelectionBox(pos.x, pos.y);
+                this.updateCanvasCursor();
+                return;
+            }
         }
         
         this.isDrawing = true;
@@ -456,6 +518,57 @@ class CanvasMaker {
         
         const pos = this.getMousePos(e);
         
+        // Handle pan mode interactions (when no tool is selected)
+        if (!this.currentTool) {
+            if (this.isDragging) {
+                // Handle dragging elements
+                const deltaX = pos.x - this.dragOffset.x;
+                const deltaY = pos.y - this.dragOffset.y;
+                
+                this.selectedElements.forEach(element => {
+                    if (element.type === 'shape') {
+                        const shape = this.shapes[element.index];
+                        shape.x += deltaX;
+                        shape.y += deltaY;
+                    } else if (element.type === 'text') {
+                        const text = this.texts[element.index];
+                        text.x += deltaX;
+                        text.y += deltaY;
+                    } else if (element.type === 'path') {
+                        const path = this.paths[element.index];
+                        path.forEach(point => {
+                            point.x += deltaX;
+                            point.y += deltaY;
+                        });
+                    } else if (element.type === 'nested-canvas') {
+                        const nestedCanvas = this.nestedCanvases[element.index];
+                        nestedCanvas.x += deltaX;
+                        nestedCanvas.y += deltaY;
+                    }
+                });
+                
+                this.dragOffset.x = pos.x;
+                this.dragOffset.y = pos.y;
+                this.redrawCanvas();
+                return;
+            } else if (this.isResizing && this.resizeHandle) {
+                // Handle resizing elements
+                this.performResize(pos, this.resizeHandle, this.activeCanvasContext);
+                this.redrawCanvas();
+                return;
+            } else if (this.isSelecting) {
+                // Handle selection box
+                this.updateSelectionBox(this.startX, this.startY, pos.x, pos.y);
+                this.updatePreviewSelection(this.startX, this.startY, pos.x, pos.y);
+                this.redrawCanvas();
+                return;
+            } else {
+                // Handle hover detection when not in any interaction mode
+                this.handleHover(pos);
+                return;
+            }
+        }
+        
         if (!this.isDrawing) {
             // Handle hover detection when not drawing
             this.handleHover(pos);
@@ -527,6 +640,34 @@ class CanvasMaker {
             return;
         }
         
+        // Handle pan mode interactions (when no tool is selected)
+        if (!this.currentTool) {
+            const pos = this.getMousePos(e);
+            
+            if (this.isResizing) {
+                this.isResizing = false;
+                this.resizeHandle = null;
+                this.updateCanvasCursor();
+                this.redrawCanvas();
+                return;
+            } else if (this.isDragging) {
+                this.isDragging = false;
+                this.updateCanvasCursor();
+                this.redrawCanvas();
+                return;
+            } else if (this.isSelecting) {
+                this.isSelecting = false;
+                this.hideSelectionBox();
+                // Clear preview selection before finalizing the actual selection
+                this.activeCanvasContext.previewSelectedElements = [];
+                this.selectElementsInArea(this.startX, this.startY, pos.x, pos.y);
+                this.updateCanvasCursor();
+                this.redrawCanvas();
+                return;
+            }
+            return;
+        }
+        
         if (!this.isDrawing) return;
         
         const pos = this.getMousePos(e);
@@ -535,6 +676,14 @@ class CanvasMaker {
         if (this.currentTool === 'pen' && !this.isDragging && !this.isResizing) {
             this.paths.push([...this.currentPath]);
             this.currentPath = [];
+            
+            // Auto-switch to pan mode after drawing
+            this.currentTool = null;
+            this.selectedElements = [];
+            
+            // Update toolbar to show no tool as active
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            this.updateCanvasCursor();
         } else if (this.currentTool === 'rectangle') {
             const width = pos.x - this.startX;
             const height = pos.y - this.startY;
@@ -551,14 +700,12 @@ class CanvasMaker {
             this.previewEndX = undefined;
             this.previewEndY = undefined;
             
-            // Auto-switch to select mode and select the newly created shape
-            this.currentTool = 'select';
-            const newShapeIndex = this.shapes.length - 1;
-            this.selectedElements = [{ type: 'shape', index: newShapeIndex }];
+            // Auto-switch to pan mode after drawing
+            this.currentTool = null;
+            this.selectedElements = [];
             
-            // Update toolbar to show select tool as active
+            // Update toolbar to show no tool as active
             document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('select-tool').classList.add('active');
             
             this.updateCanvasCursor();
             this.redrawCanvas();
@@ -590,13 +737,12 @@ class CanvasMaker {
             this.previewEndX = undefined;
             this.previewEndY = undefined;
             
-            // Auto-switch to select mode and select the newly created shape
-            this.currentTool = 'select';
-            this.selectedElements = [{ type: 'shape', index: this.shapes.length - 1 }];
+            // Auto-switch to pan mode after drawing
+            this.currentTool = null;
+            this.selectedElements = [];
             
-            // Update toolbar to show select tool as active
+            // Update toolbar to show no tool as active
             document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('select-tool').classList.add('active');
             
             this.updateCanvasCursor();
             this.redrawCanvas();
@@ -630,13 +776,12 @@ class CanvasMaker {
             this.previewEndX = undefined;
             this.previewEndY = undefined;
             
-            // Auto-switch to select mode and select the newly created nested canvas
-            this.currentTool = 'select';
-            this.selectedElements = [{ type: 'nested-canvas', index: this.nestedCanvases.length - 1 }];
+            // Auto-switch to pan mode after drawing
+            this.currentTool = null;
+            this.selectedElements = [];
             
-            // Update toolbar to show select tool as active
+            // Update toolbar to show no tool as active
             document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('select-tool').classList.add('active');
             
             this.updateCanvasCursor();
             this.redrawCanvas();
@@ -680,13 +825,12 @@ class CanvasMaker {
             
             this.texts.push(newTextBox);
             
-            // Auto-switch to select mode and select the newly created text
-            this.currentTool = 'select';
-            this.selectedElements = [{ type: 'text', index: this.texts.length - 1 }];
+            // Auto-switch to pan mode after creating text
+            this.currentTool = null;
+            this.selectedElements = [];
             
-            // Update toolbar to show select tool as active
+            // Update toolbar to show no tool as active
             document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('select-tool').classList.add('active');
             
             // Create and show text input for immediate editing
             this.createTextInput(newTextBox, this.texts.length - 1);
