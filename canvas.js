@@ -119,7 +119,7 @@ class CanvasMaker {
             ],
             actions: [
                 { id: 'make-real-btn', action: 'makeReal', icon: 'M12 2l3.09 8.26L22 12l-6.91 1.74L12 22l-3.09-8.26L2 12l6.91-1.74L12 2z', title: 'Make Real', class: 'make-real-btn' },
-                { id: 'clear-btn', action: 'clearCanvas', icon: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z', title: 'Clear Canvas', class: 'clear-btn' }
+                { id: 'clear-btn', action: 'clearCanvas', icon: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z', title: 'Clear Canvas', class: 'clear-btn' }
             ]
         };
         
@@ -188,7 +188,9 @@ class CanvasMaker {
         
         this.setupCanvas();
         this.setupEventListeners();
+        // Always setup toolbar event listeners for existing HTML elements
         this.setupToolbar();
+        
         if (this.options.createToolbar) {
             this.setupFloatingToolbar();
             this.rebuildToolbar(); // Build toolbar from config
@@ -494,9 +496,15 @@ class CanvasMaker {
             });
         });
         
-        makeRealBtn.addEventListener('click', this.makeReal.bind(this));
-        clearBtn.addEventListener('click', this.clearCanvas.bind(this));
-        closeModal.addEventListener('click', this.closeModal.bind(this));
+        if (makeRealBtn) {
+            makeRealBtn.addEventListener('click', this.makeReal.bind(this));
+        }
+        if (clearBtn) {
+            clearBtn.addEventListener('click', this.clearCanvas.bind(this));
+        }
+        if (closeModal) {
+            closeModal.addEventListener('click', this.closeModal.bind(this));
+        }
         
     }
     
@@ -2839,6 +2847,13 @@ class CanvasMaker {
                 if (distance <= shape.radius) {
                     return { type: 'shape', index: i };
                 }
+            } else if (shape.type === 'reactComponent') {
+                // Handle custom React component shapes
+                const hit = x >= shape.x && x <= shape.x + shape.width &&
+                           y >= shape.y && y <= shape.y + shape.height;
+                if (hit) {
+                    return { type: 'shape', index: i };
+                }
             }
         }
         
@@ -3178,6 +3193,13 @@ class CanvasMaker {
                 if (distance <= shape.radius) {
                     return { type: 'shape', index: i };
                 }
+            } else if (shape.type === 'reactComponent') {
+                // Handle custom React component shapes
+                const hit = x >= shape.x && x <= shape.x + shape.width &&
+                           y >= shape.y && y <= shape.y + shape.height;
+                if (hit) {
+                    return { type: 'shape', index: i };
+                }
             }
         }
         
@@ -3283,6 +3305,12 @@ class CanvasMaker {
                     );
                     inSelection = distance <= shape.radius;
                 }
+            } else if (shape.type === 'reactComponent') {
+                // Handle React component shapes like rectangles
+                const rectRight = shape.x + shape.width;
+                const rectBottom = shape.y + shape.height;
+                inSelection = !(rectRight < minX || shape.x > maxX || 
+                               rectBottom < minY || shape.y > maxY);
             }
             if (inSelection) {
                 previewElements.push({ type: 'shape', index });
@@ -3431,6 +3459,18 @@ class CanvasMaker {
             } else if (shape.type === 'circle') {
                 ctx.arc(shape.x, shape.y, shape.radius, 0, 2 * Math.PI);
                 ctx.stroke();
+            } else if (shape.type === 'reactComponent') {
+                // Draw React component shapes as dashed rectangles to indicate they're external
+                ctx.setLineDash([5, 5]);
+                ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+                ctx.setLineDash([]); // Reset line dash
+                
+                // Optional: Draw component label
+                if (shape.label) {
+                    ctx.fillStyle = '#666';
+                    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+                    ctx.fillText(shape.label, shape.x + 5, shape.y + 15);
+                }
             }
         });
         
@@ -3653,6 +3693,13 @@ class CanvasMaker {
                     width: shape.radius * 2,
                     height: shape.radius * 2
                 };
+            } else if (shape.type === 'reactComponent') {
+                bounds = {
+                    x: shape.x,
+                    y: shape.y,
+                    width: shape.width,
+                    height: shape.height
+                };
             }
         } else if (element.type === 'nested-canvas') {
             const nestedCanvas = canvasContext.nestedCanvases[element.index];
@@ -3722,6 +3769,13 @@ class CanvasMaker {
                     width: shape.radius * 2,
                     height: shape.radius * 2
                 };
+            } else if (shape.type === 'reactComponent') {
+                bounds = {
+                    x: shape.x,
+                    y: shape.y,
+                    width: shape.width,
+                    height: shape.height
+                };
             }
         } else if (element.type === 'nested-canvas') {
             const nestedCanvas = this.activeCanvasContext.nestedCanvases[element.index];
@@ -3772,8 +3826,8 @@ class CanvasMaker {
         const deltaX = currentX - this.dragOffset.x;
         const deltaY = currentY - this.dragOffset.y;
         
-        // Check if it's a rectangle shape or a nested canvas (nested canvases are always rectangular)
-        if ((element.type === 'shape' && shape.type === 'rectangle') || element.type === 'nested-canvas') {
+        // Check if it's a rectangle shape, reactComponent shape, or a nested canvas (all are rectangular)
+        if ((element.type === 'shape' && (shape.type === 'rectangle' || shape.type === 'reactComponent')) || element.type === 'nested-canvas') {
             switch (this.resizeHandle) {
                 case 'nw': // top-left
                     shape.x += deltaX;
@@ -3833,15 +3887,27 @@ class CanvasMaker {
     }
     
     clearCanvas() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.paths = [];
-        this.shapes = [];
-        this.texts = [];
-        this.nestedCanvases = [];
+        // Clear the active canvas context
+        const canvasContext = this.activeCanvasContext;
+        canvasContext.paths.length = 0;
+        canvasContext.shapes.length = 0;
+        canvasContext.texts.length = 0;
+        canvasContext.nestedCanvases.length = 0;
+        canvasContext.selectedElements.length = 0;
+        
+        // Clear nested canvas data
         this.nestedCanvasData.clear();
-        this.selectedElements = [];
+        
+        // Reset hover state
         this.hoveredElement = null;
+        
+        // Hide selection box
         this.hideSelectionBox();
+        
+        // Clear the canvas and redraw
+        const ctx = canvasContext.ctx;
+        const canvas = canvasContext.canvas;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         this.redrawCanvas();
     }
     
@@ -4132,6 +4198,11 @@ class CanvasMaker {
                     shape.y - shape.radius >= minY && shape.y + shape.radius <= maxY) {
                     canvasContext.selectedElements.push({ type: 'shape', index });
                 }
+            } else if (shape.type === 'reactComponent') {
+                if (shape.x >= minX && shape.x + shape.width <= maxX &&
+                    shape.y >= minY && shape.y + shape.height <= maxY) {
+                    canvasContext.selectedElements.push({ type: 'shape', index });
+                }
             }
         });
         
@@ -4164,6 +4235,13 @@ class CanvasMaker {
                     y: shape.y - shape.radius,
                     width: shape.radius * 2,
                     height: shape.radius * 2
+                };
+            } else if (shape.type === 'reactComponent') {
+                bounds = {
+                    x: shape.x,
+                    y: shape.y,
+                    width: shape.width,
+                    height: shape.height
                 };
             }
         } else if (element.type === 'nested-canvas') {
@@ -4223,7 +4301,7 @@ class CanvasMaker {
         if (element.type === 'shape') {
             const shape = canvasContext.shapes[element.index];
             
-            if (shape.type === 'rectangle') {
+            if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
                 switch (this.resizeHandle) {
                     case 'top-left':
                         shape.x += deltaX;
@@ -4497,28 +4575,36 @@ class CanvasMaker {
     }
     
     // Safe external component integration helper
-    integrateExternalComponent(options) {
-        const { 
-            onCameraChange,
-            onSelectionChange,
-            onBeforeRedraw,
-            onAfterRedraw
-        } = options;
-        
-        if (onCameraChange) this.addHook('onCameraChange', onCameraChange);
-        if (onSelectionChange) this.addHook('onSelectionChange', onSelectionChange);
-        if (onBeforeRedraw) this.addHook('beforeRedraw', onBeforeRedraw);
-        if (onAfterRedraw) this.addHook('afterRedraw', onAfterRedraw);
-        
-        return {
-            // Return cleanup function
+    integrateExternalComponent(hooks) {
+        const integration = {
+            onCameraChange: hooks.onCameraChange || null,
+            onSelectionChange: hooks.onSelectionChange || null,
+            onBeforeRedraw: hooks.onBeforeRedraw || null,
+            onAfterRedraw: hooks.onAfterRedraw || null,
             cleanup: () => {
-                if (onCameraChange) this.removeHook('onCameraChange', onCameraChange);
-                if (onSelectionChange) this.removeHook('onSelectionChange', onSelectionChange);
-                if (onBeforeRedraw) this.removeHook('beforeRedraw', onBeforeRedraw);
-                if (onAfterRedraw) this.removeHook('afterRedraw', onAfterRedraw);
+                // Remove all hooks
+                if (integration.onCameraChange) this.removeHook('onCameraChange', integration.onCameraChange);
+                if (integration.onSelectionChange) this.removeHook('onSelectionChange', integration.onSelectionChange);
+                if (integration.onBeforeRedraw) this.removeHook('beforeRedraw', integration.onBeforeRedraw);
+                if (integration.onAfterRedraw) this.removeHook('afterRedraw', integration.onAfterRedraw);
             }
         };
+
+        // Register hooks with existing event system
+        if (integration.onCameraChange) {
+            this.addHook('onCameraChange', integration.onCameraChange);
+        }
+        if (integration.onSelectionChange) {
+            this.addHook('onSelectionChange', integration.onSelectionChange);
+        }
+        if (integration.onBeforeRedraw) {
+            this.addHook('beforeRedraw', integration.onBeforeRedraw);
+        }
+        if (integration.onAfterRedraw) {
+            this.addHook('afterRedraw', integration.onAfterRedraw);
+        }
+
+        return integration;
     }
 }
 
