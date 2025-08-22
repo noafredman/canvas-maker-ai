@@ -1635,6 +1635,87 @@ export default CompleteCanvasIntegration;
 
 7. **Use Throttled Events**: For high-frequency updates, rely on the built-in throttling in `duringPan` and `duringZoom` events.
 
+### DOM Element Synchronization
+
+Canvas Maker can synchronize external DOM elements (like React components) with the canvas coordinate system:
+
+```jsx
+import React, { useEffect, useRef } from 'react';
+
+const SynchronizedReactComponent = ({ canvasMaker }) => {
+  const componentRef = useRef(null);
+  const shapeRef = useRef(null);
+
+  useEffect(() => {
+    if (!canvasMaker || !componentRef.current) return;
+
+    // Add the React component as a canvas shape that syncs with camera
+    const shape = canvasMaker.addReactComponent(
+      componentRef.current, // DOM element
+      100, 200,             // x, y world coordinates
+      200, 150,             // width, height
+      {
+        label: 'React Component',
+        interactive: true,   // Can be selected and moved
+        strokeColor: '#3b82f6'
+      }
+    );
+
+    shapeRef.current = shape;
+
+    return () => {
+      // Cleanup when component unmounts
+      if (shapeRef.current) {
+        canvasMaker.removeReactComponent(shapeRef.current);
+      }
+    };
+  }, [canvasMaker]);
+
+  return (
+    <div
+      ref={componentRef}
+      style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white',
+        padding: '20px',
+        borderRadius: '8px',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+      }}
+    >
+      <h3>Synchronized React Component</h3>
+      <p>This component moves with canvas pan/zoom operations!</p>
+      <button onClick={() => alert('Button clicked!')}>
+        Interactive Button
+      </button>
+    </div>
+  );
+};
+```
+
+### Manual React Component Integration
+
+For more control, you can manually create reactComponent shapes:
+
+```jsx
+// Create a React component shape manually
+const reactShape = {
+  type: 'reactComponent',
+  x: 300,
+  y: 300,
+  width: 250,
+  height: 100,
+  domElement: myDomElement,
+  interactive: true,
+  label: 'Custom Component'
+};
+
+// Add to canvas
+canvasMaker.activeCanvasContext.shapes.push(reactShape);
+canvasMaker.redrawCanvas();
+
+// The DOM element will automatically sync with camera movements
+```
+
 ### Migration from Other Canvas Libraries
 
 Canvas Maker provides a modern, React-friendly alternative to tldraw and other canvas libraries:
@@ -1642,6 +1723,7 @@ Canvas Maker provides a modern, React-friendly alternative to tldraw and other c
 - **Container-based initialization** instead of requiring specific DOM structure
 - **Enhanced event system** with granular before/during/after events
 - **Component registration system** for automatic React component synchronization
+- **DOM element synchronization** for seamless React component integration
 - **Batch coordinate operations** for efficient updates
 - **Comprehensive viewport utilities** for responsive design
 

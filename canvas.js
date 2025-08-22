@@ -592,6 +592,47 @@ class CanvasMaker {
         return { ...this.toolbarPosition };
     }
     
+    // Add a React component as a shape that syncs with camera movements
+    addReactComponent(domElement, x, y, width, height, options = {}) {
+        const shape = {
+            type: 'reactComponent',
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            domElement: domElement,
+            interactive: options.interactive !== false, // Default to true
+            label: options.label || null,
+            strokeColor: options.strokeColor || '#333',
+            fillColor: options.fillColor || 'transparent',
+            ...options
+        };
+        
+        // Add to active canvas context
+        this.activeCanvasContext.shapes.push(shape);
+        
+        // Initial positioning
+        this.positionReactComponent(shape, this.activeCanvasContext.camera, this.activeCanvasContext.canvas);
+        
+        // Trigger redraw to show the component
+        this.redrawCanvas();
+        
+        // Return the shape for external reference
+        return shape;
+    }
+    
+    // Remove a React component shape
+    removeReactComponent(shape) {
+        const shapes = this.activeCanvasContext.shapes;
+        const index = shapes.indexOf(shape);
+        if (index > -1) {
+            shapes.splice(index, 1);
+            this.redrawCanvas();
+            return true;
+        }
+        return false;
+    }
+    
     // React Component Registration System
     
     // Register an external React component for tracking
@@ -1916,6 +1957,7 @@ class CanvasMaker {
                 
                 this.redrawCanvas();
                 this.updateZoomIndicator();
+                this.updateRecenterButton();
                 
                 // Emit afterZoom event (throttled to avoid spam during wheel zooming)
                 this.emitThrottled('afterZoom', { 
@@ -3471,6 +3513,11 @@ class CanvasMaker {
                     ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
                     ctx.fillText(shape.label, shape.x + 5, shape.y + 15);
                 }
+                
+                // Position associated DOM element to sync with camera
+                if (shape.domElement) {
+                    this.positionReactComponent(shape, camera, canvas);
+                }
             }
         });
         
@@ -3886,6 +3933,47 @@ class CanvasMaker {
         this.dragOffset.y = currentY;
     }
     
+    // Position React component DOM elements to sync with camera
+    positionReactComponent(shape, camera, canvas) {
+        const domElement = shape.domElement;
+        if (!domElement) return;
+        
+        // Convert world coordinates to screen coordinates using the same transform as canvas rendering
+        // This matches the canvas transformation: translate(width/2, height/2) -> scale(zoom) -> translate(camera.x, camera.y)
+        
+        // Apply the canvas transformation matrix to get screen coordinates
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Transform world coordinates (shape.x, shape.y) to screen coordinates
+        const screenX = centerX + (shape.x + camera.x) * camera.zoom;
+        const screenY = centerY + (shape.y + camera.y) * camera.zoom;
+        
+        // Calculate scaled dimensions
+        const scaledWidth = shape.width * camera.zoom;
+        const scaledHeight = shape.height * camera.zoom;
+        
+        // Update DOM element position and transform
+        domElement.style.position = 'absolute';
+        domElement.style.left = screenX + 'px';
+        domElement.style.top = screenY + 'px';
+        domElement.style.width = scaledWidth + 'px';
+        domElement.style.height = scaledHeight + 'px';
+        
+        // Apply transform origin at top-left for consistent scaling
+        domElement.style.transformOrigin = '0 0';
+        
+        // Optional: Add z-index to ensure proper layering
+        domElement.style.zIndex = '100';
+        
+        // Optional: Add pointer events handling
+        if (shape.interactive !== false) {
+            domElement.style.pointerEvents = 'auto';
+        } else {
+            domElement.style.pointerEvents = 'none';
+        }
+    }
+    
     clearCanvas() {
         // Clear the active canvas context
         const canvasContext = this.activeCanvasContext;
@@ -4081,12 +4169,10 @@ class CanvasMaker {
         const canvas = this.activeCanvasContext.canvas;
         const tolerance = 0.1;
         
-        // Check if world origin (0,0) is centered at current zoom level
-        const expectedCameraX = canvas.width / 2 / camera.zoom;
-        const expectedCameraY = canvas.height / 2 / camera.zoom;
+        // Check if world origin (0,0) is centered - camera should be at (0,0) for this
         const isAtOriginalCenter = 
-            Math.abs(camera.x - expectedCameraX) < tolerance && 
-            Math.abs(camera.y - expectedCameraY) < tolerance;
+            Math.abs(camera.x) < tolerance && 
+            Math.abs(camera.y) < tolerance;
         const isAt100Zoom = Math.abs(camera.zoom - 1) < tolerance;
         
         // Update main canvas buttons
