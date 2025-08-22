@@ -1,6 +1,45 @@
 class CanvasMaker {
-    constructor() {
-        this.canvas = document.getElementById('canvas');
+    constructor(containerOrCanvas = null, options = {}) {
+        // Parse constructor arguments
+        this.options = {
+            createCanvas: true,
+            createToolbar: true,
+            toolbarPosition: 'top-left',
+            width: 1200,
+            height: 800,
+            ...options
+        };
+        
+        // Handle container-based or canvas-based initialization
+        if (typeof containerOrCanvas === 'string') {
+            this.container = document.querySelector(containerOrCanvas);
+        } else if (containerOrCanvas && containerOrCanvas.nodeType === Node.ELEMENT_NODE) {
+            // Check if it's a canvas or container
+            if (containerOrCanvas.tagName === 'CANVAS') {
+                this.canvas = containerOrCanvas;
+                this.container = containerOrCanvas.parentElement;
+                this.options.createCanvas = false;
+            } else {
+                this.container = containerOrCanvas;
+            }
+        } else {
+            // Fallback to existing elements
+            this.canvas = document.getElementById('canvas');
+            this.container = this.canvas?.parentElement || document.body;
+            this.options.createCanvas = false;
+        }
+        
+        // Create DOM structure if needed
+        if (this.options.createCanvas && this.container) {
+            this.setupDOMStructure();
+        }
+        
+        // Initialize canvas references
+        this.canvas = this.canvas || (this.container ? this.container.querySelector('canvas') : null);
+        if (!this.canvas) {
+            throw new Error('Could not find or create canvas element');
+        }
+        
         this.ctx = this.canvas.getContext('2d');
         
         // Make instance globally accessible for testing
@@ -63,6 +102,11 @@ class CanvasMaker {
         // Traditional event emitter system for React integration
         this.eventListeners = {};
         
+        // Enhanced event system for React
+        this.panState = { isPanning: false, startCamera: null };
+        this.zoomState = { isZooming: false, startCamera: null };
+        this.throttledEvents = new Map();
+        
         // Toolbar configuration
         this.toolbarConfig = {
             tools: [
@@ -102,6 +146,14 @@ class CanvasMaker {
         this.currentNestedCanvasId = null;
         this.nestedCanvasData = new Map(); // Store individual nested canvas data
         
+        // React component registration system
+        this.externalComponents = new Map(); // Store external React components
+        this.componentCallbacks = {
+            onMount: [],
+            onUnmount: [],
+            onUpdate: []
+        };
+        
         // Main canvas context structure
         this.mainCanvasContext = {
             canvas: this.canvas,
@@ -137,8 +189,10 @@ class CanvasMaker {
         this.setupCanvas();
         this.setupEventListeners();
         this.setupToolbar();
-        this.setupFloatingToolbar();
-        this.rebuildToolbar(); // Build toolbar from config
+        if (this.options.createToolbar) {
+            this.setupFloatingToolbar();
+            this.rebuildToolbar(); // Build toolbar from config
+        }
         this.updateZoomIndicator();
         this.updateRecenterButton();
         this.updateCanvasCursor();
@@ -148,6 +202,112 @@ class CanvasMaker {
         this.canvas.style.transformOrigin = '0 0';
         
         this.redrawCanvas();
+    }
+    
+    setupDOMStructure() {
+        if (!this.container) return;
+        
+        // Create canvas container structure
+        this.container.style.position = 'relative';
+        this.container.style.overflow = 'hidden';
+        
+        // Create canvas element
+        this.canvas = document.createElement('canvas');
+        this.canvas.id = 'canvas';
+        this.canvas.width = this.options.width;
+        this.canvas.height = this.options.height;
+        this.canvas.style.width = '100%';
+        this.canvas.style.height = '100%';
+        this.canvas.style.display = 'block';
+        
+        // Create canvas controls
+        const canvasContainer = document.createElement('div');
+        canvasContainer.className = 'canvas-container';
+        canvasContainer.appendChild(this.canvas);
+        
+        // Create selection box
+        const selectionBox = document.createElement('div');
+        selectionBox.id = 'selection-box';
+        selectionBox.className = 'selection-box';
+        canvasContainer.appendChild(selectionBox);
+        
+        // Create zoom controls
+        const canvasControls = document.createElement('div');
+        canvasControls.className = 'canvas-controls';
+        canvasControls.innerHTML = `
+            <div class="zoom-controls">
+                <button id="zoom-out-btn" class="zoom-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 13H5v-2h14v2z"/>
+                    </svg>
+                </button>
+                <div id="zoom-indicator" class="zoom-indicator">100%</div>
+                <button id="zoom-in-btn" class="zoom-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                    </svg>
+                </button>
+            </div>
+            <button id="recenter-btn" class="recenter-btn" style="display: none;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                </svg>
+            </button>
+            <button id="reset-zoom-btn" class="recenter-btn" style="display: none;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    <text x="9.5" y="11" text-anchor="middle" font-size="6" font-weight="bold" fill="currentColor">100</text>
+                </svg>
+            </button>
+        `;
+        canvasContainer.appendChild(canvasControls);
+        
+        this.container.appendChild(canvasContainer);
+        
+        // Create floating toolbar if requested
+        if (this.options.createToolbar) {
+            const toolbar = document.createElement('div');
+            toolbar.id = 'floating-toolbar';
+            toolbar.className = 'floating-toolbar';
+            
+            // Position based on options
+            const positions = {
+                'top-left': { top: '20px', left: '20px' },
+                'top-right': { top: '20px', right: '20px' },
+                'bottom-left': { bottom: '20px', left: '20px' },
+                'bottom-right': { bottom: '20px', right: '20px' }
+            };
+            const pos = positions[this.options.toolbarPosition] || positions['top-left'];
+            Object.assign(toolbar.style, pos);
+            
+            toolbar.innerHTML = `
+                <div class="toolbar-drag-handle" id="toolbar-drag-handle">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="5" cy="7" r="1"/>
+                        <circle cx="12" cy="7" r="1"/>
+                        <circle cx="19" cy="7" r="1"/>
+                        <circle cx="5" cy="12" r="1"/>
+                        <circle cx="12" cy="12" r="1"/>
+                        <circle cx="19" cy="12" r="1"/>
+                        <circle cx="5" cy="17" r="1"/>
+                        <circle cx="12" cy="17" r="1"/>
+                        <circle cx="19" cy="17" r="1"/>
+                    </svg>
+                </div>
+                <div class="toolbar-content"></div>
+            `;
+            
+            this.container.appendChild(toolbar);
+        }
+        
+        // Create nested canvas overlay (simplified version)
+        const nestedOverlay = document.createElement('div');
+        nestedOverlay.id = 'nested-canvas-overlay';
+        nestedOverlay.className = 'nested-canvas-overlay';
+        nestedOverlay.style.display = 'none';
+        this.container.appendChild(nestedOverlay);
     }
     
     setupCanvas() {
@@ -424,6 +584,157 @@ class CanvasMaker {
         return { ...this.toolbarPosition };
     }
     
+    // React Component Registration System
+    
+    // Register an external React component for tracking
+    registerExternalComponent(componentId, componentRef, metadata = {}) {
+        const componentInfo = {
+            id: componentId,
+            ref: componentRef,
+            metadata: {
+                type: metadata.type || 'unknown',
+                layer: metadata.layer || 0,
+                syncWithCamera: metadata.syncWithCamera !== false, // Default true
+                syncWithSelection: metadata.syncWithSelection !== false, // Default true
+                ...metadata
+            },
+            registeredAt: Date.now()
+        };
+        
+        this.externalComponents.set(componentId, componentInfo);
+        
+        // Notify component mount callbacks
+        this.componentCallbacks.onMount.forEach(callback => {
+            try {
+                callback(componentInfo);
+            } catch (error) {
+                console.error('Error in component mount callback:', error);
+            }
+        });
+        
+        // Emit event for external listeners
+        this.emit('componentRegistered', componentInfo);
+        
+        return componentInfo;
+    }
+    
+    // Unregister an external React component
+    unregisterExternalComponent(componentId) {
+        const componentInfo = this.externalComponents.get(componentId);
+        if (!componentInfo) {
+            console.warn(`Component ${componentId} not found for unregistration`);
+            return false;
+        }
+        
+        // Notify component unmount callbacks
+        this.componentCallbacks.onUnmount.forEach(callback => {
+            try {
+                callback(componentInfo);
+            } catch (error) {
+                console.error('Error in component unmount callback:', error);
+            }
+        });
+        
+        // Emit event for external listeners
+        this.emit('componentUnregistered', componentInfo);
+        
+        this.externalComponents.delete(componentId);
+        return true;
+    }
+    
+    // Update component metadata
+    updateComponentMetadata(componentId, metadata) {
+        const componentInfo = this.externalComponents.get(componentId);
+        if (!componentInfo) {
+            console.warn(`Component ${componentId} not found for update`);
+            return false;
+        }
+        
+        const oldMetadata = { ...componentInfo.metadata };
+        componentInfo.metadata = { ...componentInfo.metadata, ...metadata };
+        
+        // Notify component update callbacks
+        this.componentCallbacks.onUpdate.forEach(callback => {
+            try {
+                callback(componentInfo, oldMetadata);
+            } catch (error) {
+                console.error('Error in component update callback:', error);
+            }
+        });
+        
+        // Emit event for external listeners
+        this.emit('componentUpdated', { component: componentInfo, oldMetadata });
+        
+        return true;
+    }
+    
+    // Get all registered components
+    getRegisteredComponents() {
+        return new Map(this.externalComponents);
+    }
+    
+    // Get a specific registered component
+    getRegisteredComponent(componentId) {
+        return this.externalComponents.get(componentId);
+    }
+    
+    // Bulk notify components based on criteria
+    notifyComponents(criteria, eventData) {
+        this.externalComponents.forEach((component, id) => {
+            // Check if component matches criteria
+            let shouldNotify = true;
+            
+            if (criteria.type && component.metadata.type !== criteria.type) {
+                shouldNotify = false;
+            }
+            
+            if (criteria.syncWithCamera !== undefined && component.metadata.syncWithCamera !== criteria.syncWithCamera) {
+                shouldNotify = false;
+            }
+            
+            if (criteria.syncWithSelection !== undefined && component.metadata.syncWithSelection !== criteria.syncWithSelection) {
+                shouldNotify = false;
+            }
+            
+            if (criteria.layer !== undefined && component.metadata.layer !== criteria.layer) {
+                shouldNotify = false;
+            }
+            
+            if (shouldNotify && component.ref && typeof component.ref.handleCanvasEvent === 'function') {
+                try {
+                    component.ref.handleCanvasEvent(eventData);
+                } catch (error) {
+                    console.error(`Error notifying component ${id}:`, error);
+                }
+            }
+        });
+    }
+    
+    // Add component lifecycle callbacks
+    onComponentMount(callback) {
+        this.componentCallbacks.onMount.push(callback);
+        return () => {
+            const index = this.componentCallbacks.onMount.indexOf(callback);
+            if (index > -1) this.componentCallbacks.onMount.splice(index, 1);
+        };
+    }
+    
+    onComponentUnmount(callback) {
+        this.componentCallbacks.onUnmount.push(callback);
+        return () => {
+            const index = this.componentCallbacks.onUnmount.indexOf(callback);
+            if (index > -1) this.componentCallbacks.onUnmount.splice(index, 1);
+        };
+    }
+    
+    onComponentUpdate(callback) {
+        this.componentCallbacks.onUpdate.push(callback);
+        return () => {
+            const index = this.componentCallbacks.onUpdate.indexOf(callback);
+            if (index > -1) this.componentCallbacks.onUpdate.splice(index, 1);
+        };
+    }
+    
     hideToolbar() {
         const toolbar = document.getElementById('floating-toolbar');
         if (toolbar) toolbar.style.display = 'none';
@@ -680,6 +991,70 @@ class CanvasMaker {
         return { x: screenX, y: screenY };
     }
     
+    // Enhanced coordinate conversion utilities for React integration
+    
+    // Batch convert multiple world coordinates to canvas coordinates
+    worldToBatch(worldPoints) {
+        return worldPoints.map(point => this.worldToCanvas(point.x, point.y));
+    }
+    
+    // Batch convert multiple canvas coordinates to world coordinates  
+    canvasToBatch(canvasPoints) {
+        return canvasPoints.map(point => this.canvasToWorld(point.x, point.y));
+    }
+    
+    // Get the current viewport bounds in world coordinates
+    getViewportBounds() {
+        const canvas = this.activeCanvasContext.canvas;
+        const topLeft = this.canvasToWorld(0, 0);
+        const bottomRight = this.canvasToWorld(canvas.width, canvas.height);
+        
+        return {
+            left: topLeft.x,
+            top: topLeft.y,
+            right: bottomRight.x,
+            bottom: bottomRight.y,
+            width: bottomRight.x - topLeft.x,
+            height: bottomRight.y - topLeft.y,
+            center: {
+                x: (topLeft.x + bottomRight.x) / 2,
+                y: (topLeft.y + bottomRight.y) / 2
+            }
+        };
+    }
+    
+    // Get viewport info including zoom and camera state
+    getViewportInfo() {
+        const camera = this.activeCanvasContext.camera;
+        const canvas = this.activeCanvasContext.canvas;
+        const bounds = this.getViewportBounds();
+        
+        return {
+            camera: { ...camera },
+            bounds,
+            canvasSize: { width: canvas.width, height: canvas.height },
+            pixelsPerWorldUnit: camera.zoom
+        };
+    }
+    
+    // Check if a world coordinate is visible in the current viewport
+    isPointInViewport(worldX, worldY, margin = 0) {
+        const bounds = this.getViewportBounds();
+        return worldX >= bounds.left - margin && 
+               worldX <= bounds.right + margin && 
+               worldY >= bounds.top - margin && 
+               worldY <= bounds.bottom + margin;
+    }
+    
+    // Check if a world rectangle intersects with the viewport
+    isRectInViewport(worldX, worldY, worldWidth, worldHeight, margin = 0) {
+        const bounds = this.getViewportBounds();
+        return !(worldX + worldWidth < bounds.left - margin || 
+                worldX > bounds.right + margin || 
+                worldY + worldHeight < bounds.top - margin || 
+                worldY > bounds.bottom + margin);
+    }
+    
     applyCSSTransform(canvasContext) {
         // Expose camera transformation as CSS custom properties for external components
         // Don't apply CSS transform to canvas - we'll handle transforms in drawing code
@@ -770,8 +1145,11 @@ class CanvasMaker {
         // Check for panning (middle mouse button)
         if (e.button === 1) {
             this.isPanning = true;
+            this.panState.isPanning = true;
+            this.panState.startCamera = { ...this.activeCanvasContext.camera };
             this.dragOffset.x = e.clientX;
             this.dragOffset.y = e.clientY;
+            this.emit('beforePan', { camera: this.panState.startCamera });
             return;
         }
         
@@ -842,8 +1220,11 @@ class CanvasMaker {
                 // Clicking on empty area - deselect and start panning
                 this.selectedElements = [];
                 this.isPanning = true;
+                this.panState.isPanning = true;
+                this.panState.startCamera = { ...this.activeCanvasContext.camera };
                 this.dragOffset.x = e.clientX;
                 this.dragOffset.y = e.clientY;
+                this.emit('beforePan', { camera: this.panState.startCamera });
                 this.redrawCanvas();
                 return;
             }
@@ -948,6 +1329,12 @@ class CanvasMaker {
             
             this.dragOffset.x = e.clientX;
             this.dragOffset.y = e.clientY;
+            
+            // Emit during-pan event (throttled)
+            this.emitThrottled('duringPan', { 
+                camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
+                delta: { x: deltaX, y: deltaY }
+            });
             
             this.redrawCanvas();
             this.updateRecenterButton();
@@ -1080,6 +1467,11 @@ class CanvasMaker {
         // Stop panning
         if (this.isPanning) {
             this.isPanning = false;
+            this.panState.isPanning = false;
+            this.emit('afterPan', { 
+                camera: { ...this.activeCanvasContext.camera },
+                startCamera: this.panState.startCamera
+            });
             return;
         }
         
@@ -1487,6 +1879,14 @@ class CanvasMaker {
             const newZoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, oldZoom * zoomFactor));
             
             if (newZoom !== oldZoom) {
+                // Emit beforeZoom event
+                this.emit('beforeZoom', { 
+                    camera: { ...camera },
+                    oldZoom,
+                    newZoom,
+                    zoomCenter: { x: canvasX, y: canvasY }
+                });
+                
                 // Zoom towards cursor position
                 const worldPos = this.canvasToWorld(canvasX, canvasY);
                 camera.zoom = newZoom;
@@ -1498,8 +1898,24 @@ class CanvasMaker {
                 // Apply camera constraints
                 this.applyCameraConstraints();
                 
+                // Emit duringZoom event (throttled for smooth wheel zooming)
+                this.emitThrottled('duringZoom', { 
+                    camera: { ...camera },
+                    oldZoom,
+                    newZoom,
+                    zoomCenter: { x: canvasX, y: canvasY }
+                });
+                
                 this.redrawCanvas();
                 this.updateZoomIndicator();
+                
+                // Emit afterZoom event (throttled to avoid spam during wheel zooming)
+                this.emitThrottled('afterZoom', { 
+                    camera: { ...camera },
+                    oldZoom,
+                    newZoom,
+                    zoomCenter: { x: canvasX, y: canvasY }
+                }, 100); // Longer delay for afterZoom to batch rapid wheel events
             }
         } else {
             // Two-finger scroll (pan)
@@ -1594,12 +2010,28 @@ class CanvasMaker {
         const oldZoom = camera.zoom;
         const newZoom = Math.min(camera.maxZoom, oldZoom * 1.2);
         
+        // Emit beforeZoom event
+        this.emit('beforeZoom', { 
+            camera: { ...camera },
+            oldZoom,
+            newZoom,
+            zoomCenter: { x: centerX, y: centerY }
+        });
+        
         // Adjust camera to keep current viewport center stable during zoom
         camera.zoom = newZoom;
         const newWorldCenter = this.canvasToWorld(centerX, centerY);
         
         camera.x += newWorldCenter.x - worldCenter.x;
         camera.y += newWorldCenter.y - worldCenter.y;
+        
+        // Emit afterZoom event
+        this.emit('afterZoom', { 
+            camera: { ...camera },
+            oldZoom,
+            newZoom,
+            zoomCenter: { x: centerX, y: centerY }
+        });
 
         this.redrawCanvas();
         this.updateZoomIndicator();
@@ -1619,12 +2051,28 @@ class CanvasMaker {
         const oldZoom = camera.zoom;
         const newZoom = Math.max(camera.minZoom, oldZoom / 1.2);
         
+        // Emit beforeZoom event
+        this.emit('beforeZoom', { 
+            camera: { ...camera },
+            oldZoom,
+            newZoom,
+            zoomCenter: { x: centerX, y: centerY }
+        });
+        
         // Adjust camera to keep current viewport center stable during zoom
         camera.zoom = newZoom;
         const newWorldCenter = this.canvasToWorld(centerX, centerY);
         
         camera.x += newWorldCenter.x - worldCenter.x;
         camera.y += newWorldCenter.y - worldCenter.y;
+        
+        // Emit afterZoom event
+        this.emit('afterZoom', { 
+            camera: { ...camera },
+            oldZoom,
+            newZoom,
+            zoomCenter: { x: centerX, y: centerY }
+        });
 
         this.redrawCanvas();
         this.updateZoomIndicator();
@@ -1987,8 +2435,11 @@ class CanvasMaker {
         // Check for panning (middle mouse button)
         if (e.button === 1) {
             this.isPanning = true;
+            this.panState.isPanning = true;
+            this.panState.startCamera = { ...this.activeCanvasContext.camera };
             this.dragOffset.x = e.clientX;
             this.dragOffset.y = e.clientY;
+            this.emit('beforePan', { camera: this.panState.startCamera });
             return;
         }
         
@@ -3617,14 +4068,33 @@ class CanvasMaker {
         const centerY = canvas.height / 2;
         const worldCenter = this.canvasToWorld(centerX, centerY);
         
+        const oldZoom = camera.zoom;
+        const newZoom = 1;
+        
+        // Emit beforeZoom event
+        this.emit('beforeZoom', { 
+            camera: { ...camera },
+            oldZoom,
+            newZoom,
+            zoomCenter: { x: centerX, y: centerY }
+        });
+        
         // Reset zoom to 100%
-        camera.zoom = 1;
+        camera.zoom = newZoom;
         
         // Adjust camera to keep current viewport center stable during zoom
         const newWorldCenter = this.canvasToWorld(centerX, centerY);
         
         camera.x += newWorldCenter.x - worldCenter.x;
         camera.y += newWorldCenter.y - worldCenter.y;
+        
+        // Emit afterZoom event
+        this.emit('afterZoom', { 
+            camera: { ...camera },
+            oldZoom,
+            newZoom,
+            zoomCenter: { x: centerX, y: centerY }
+        });
 
         this.redrawCanvas();
         this.updateZoomIndicator();
@@ -3928,6 +4398,20 @@ class CanvasMaker {
         });
     }
     
+    // Throttled event emission for high-frequency events
+    emitThrottled(event, data, delay = 16) { // ~60fps
+        const key = event;
+        
+        if (this.throttledEvents.has(key)) {
+            clearTimeout(this.throttledEvents.get(key));
+        }
+        
+        this.throttledEvents.set(key, setTimeout(() => {
+            this.emit(event, data);
+            this.throttledEvents.delete(key);
+        }, delay));
+    }
+    
     // Hook System for Component Integration
     addHook(event, callback) {
         if (!this.hooks[event]) {
@@ -3973,6 +4457,13 @@ class CanvasMaker {
             camera: cameraData,
             canvas: this.activeCanvasContext.canvas
         });
+        
+        // Notify registered React components that sync with camera
+        this.notifyComponents({ syncWithCamera: true }, {
+            type: 'cameraChange',
+            camera: cameraData,
+            viewport: this.getViewportInfo()
+        });
     }
     
     // Helper method to update selection and notify
@@ -3995,6 +4486,13 @@ class CanvasMaker {
         this.executeHooks('onSelectionChange', {
             selectedElements: this.selectedElements,
             canvas: this.activeCanvasContext.canvas
+        });
+        
+        // Notify registered React components that sync with selection
+        this.notifyComponents({ syncWithSelection: true }, {
+            type: 'selectionChange',
+            selectedElements: this.selectedElements,
+            count: this.selectedElements.length
         });
     }
     

@@ -1244,4 +1244,405 @@ function importCanvas(jsonData) {
 }
 ```
 
+---
+
+## React Integration Guide
+
+### Container-Based Initialization
+
+Canvas Maker now supports container-based initialization for better framework integration:
+
+```javascript
+// Traditional initialization (creates own canvas)
+const canvas = new CanvasMaker('#my-container', {
+  createCanvas: true,
+  createToolbar: true,
+  width: 1200,
+  height: 800
+});
+
+// React-friendly initialization (use existing elements)
+const canvas = new CanvasMaker(canvasElement, {
+  createCanvas: false,
+  createToolbar: false
+});
+```
+
+### React Component Examples
+
+#### Basic React Canvas Component
+
+```jsx
+import React, { useRef, useEffect, useState } from 'react';
+
+const CanvasComponent = ({ onCanvasReady, children }) => {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [canvasMaker, setCanvasMaker] = useState(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Initialize Canvas Maker with container
+    const canvas = new CanvasMaker(containerRef.current, {
+      createCanvas: true,
+      createToolbar: false, // We'll create our own toolbar
+      width: 1200,
+      height: 800
+    });
+
+    setCanvasMaker(canvas);
+    onCanvasReady?.(canvas);
+
+    return () => {
+      // Cleanup if needed
+      canvas.destroy?.();
+    };
+  }, []);
+
+  return (
+    <div className="canvas-wrapper">
+      <div ref={containerRef} className="canvas-container" />
+      {children}
+    </div>
+  );
+};
+```
+
+#### Enhanced React Integration with Event System
+
+```jsx
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+
+const EnhancedCanvasComponent = () => {
+  const [canvasMaker, setCanvasMaker] = useState(null);
+  const [cameraState, setCameraState] = useState({ x: 0, y: 0, zoom: 1 });
+  const [selection, setSelection] = useState([]);
+  const [isPanning, setIsPanning] = useState(false);
+  const [isZooming, setIsZooming] = useState(false);
+
+  const handleCanvasReady = useCallback((canvas) => {
+    setCanvasMaker(canvas);
+
+    // Enhanced pan/zoom event listeners
+    canvas.on('beforePan', ({ camera }) => {
+      setIsPanning(true);
+    });
+
+    canvas.on('duringPan', ({ camera, delta }) => {
+      setCameraState(camera);
+      // Update any React components that need real-time pan feedback
+    });
+
+    canvas.on('afterPan', ({ camera, startCamera }) => {
+      setIsPanning(false);
+      setCameraState(camera);
+      // Trigger any cleanup or final updates
+    });
+
+    canvas.on('beforeZoom', ({ camera, oldZoom, newZoom, zoomCenter }) => {
+      setIsZooming(true);
+    });
+
+    canvas.on('duringZoom', ({ camera, oldZoom, newZoom, zoomCenter }) => {
+      setCameraState(camera);
+      // Real-time zoom feedback for React components
+    });
+
+    canvas.on('afterZoom', ({ camera, oldZoom, newZoom, zoomCenter }) => {
+      setIsZooming(false);
+      setCameraState(camera);
+    });
+
+    // Selection events
+    canvas.on('selectionChange', ({ selectedElements, count }) => {
+      setSelection(selectedElements);
+    });
+
+    // Camera change events (for any camera movement)
+    canvas.on('cameraChange', (cameraData) => {
+      setCameraState(cameraData);
+    });
+  }, []);
+
+  return (
+    <div className="enhanced-canvas-wrapper">
+      <CanvasComponent onCanvasReady={handleCanvasReady}>
+        <div className="canvas-info">
+          <div>Camera: x={cameraState.x.toFixed(2)}, y={cameraState.y.toFixed(2)}, zoom={cameraState.zoom.toFixed(2)}</div>
+          <div>Selection: {selection.length} items</div>
+          <div>State: {isPanning ? 'Panning' : isZooming ? 'Zooming' : 'Idle'}</div>
+        </div>
+      </CanvasComponent>
+    </div>
+  );
+};
+```
+
+#### React Component Registration System
+
+```jsx
+import React, { useRef, useEffect } from 'react';
+
+const SyncedCanvasOverlay = ({ canvasMaker, type = 'overlay' }) => {
+  const componentRef = useRef(null);
+  const componentId = useRef(`overlay-${Math.random().toString(36).substr(2, 9)}`);
+
+  useEffect(() => {
+    if (!canvasMaker) return;
+
+    // Register this React component with Canvas Maker
+    const registration = canvasMaker.registerExternalComponent(
+      componentId.current,
+      {
+        // Component interface for Canvas Maker
+        handleCanvasEvent: (eventData) => {
+          switch (eventData.type) {
+            case 'cameraChange':
+              // Update component based on camera changes
+              if (componentRef.current) {
+                const { camera, viewport } = eventData;
+                componentRef.current.style.transform = 
+                  `translate(${-camera.x * camera.zoom}px, ${-camera.y * camera.zoom}px) scale(${camera.zoom})`;
+              }
+              break;
+            case 'selectionChange':
+              // React to selection changes
+              console.log('Selection changed:', eventData.selectedElements);
+              break;
+          }
+        }
+      },
+      {
+        type,
+        syncWithCamera: true,
+        syncWithSelection: true,
+        layer: 1
+      }
+    );
+
+    return () => {
+      // Cleanup: unregister component
+      canvasMaker.unregisterExternalComponent(componentId.current);
+    };
+  }, [canvasMaker, type]);
+
+  return (
+    <div 
+      ref={componentRef}
+      className="synced-overlay"
+      style={{
+        position: 'absolute',
+        pointerEvents: 'none',
+        transformOrigin: '0 0'
+      }}
+    >
+      <div className="overlay-content">
+        Synced React Overlay
+      </div>
+    </div>
+  );
+};
+```
+
+### Advanced Coordinate Conversion Utilities
+
+```jsx
+import React, { useState, useEffect } from 'react';
+
+const CoordinateUtilityExample = ({ canvasMaker }) => {
+  const [worldPoints, setWorldPoints] = useState([
+    { x: 100, y: 100 },
+    { x: 200, y: 200 },
+    { x: 300, y: 300 }
+  ]);
+  const [screenPoints, setScreenPoints] = useState([]);
+  const [viewportInfo, setViewportInfo] = useState(null);
+
+  useEffect(() => {
+    if (!canvasMaker) return;
+
+    const updateCoordinates = () => {
+      // Batch convert world coordinates to screen coordinates
+      const converted = canvasMaker.worldToBatch(worldPoints);
+      setScreenPoints(converted);
+
+      // Get comprehensive viewport information
+      const viewport = canvasMaker.getViewportInfo();
+      setViewportInfo(viewport);
+    };
+
+    // Update on camera changes
+    canvasMaker.on('cameraChange', updateCoordinates);
+    updateCoordinates(); // Initial update
+
+    return () => {
+      canvasMaker.off('cameraChange', updateCoordinates);
+    };
+  }, [canvasMaker, worldPoints]);
+
+  const addRandomPoint = () => {
+    const bounds = canvasMaker?.getViewportBounds();
+    if (bounds) {
+      const newPoint = {
+        x: bounds.left + Math.random() * bounds.width,
+        y: bounds.top + Math.random() * bounds.height
+      };
+      setWorldPoints(prev => [...prev, newPoint]);
+    }
+  };
+
+  const checkVisibility = (point) => {
+    return canvasMaker?.isPointInViewport(point.x, point.y);
+  };
+
+  return (
+    <div className="coordinate-utility">
+      <h3>Coordinate Conversion Example</h3>
+      
+      <button onClick={addRandomPoint}>Add Random Point</button>
+      
+      <div className="points-display">
+        {worldPoints.map((worldPoint, index) => {
+          const screenPoint = screenPoints[index];
+          const isVisible = checkVisibility(worldPoint);
+          
+          return (
+            <div key={index} className={`point ${isVisible ? 'visible' : 'hidden'}`}>
+              <div>World: ({worldPoint.x.toFixed(2)}, {worldPoint.y.toFixed(2)})</div>
+              {screenPoint && (
+                <div>Screen: ({screenPoint.x.toFixed(2)}, {screenPoint.y.toFixed(2)})</div>
+              )}
+              <div>Visible: {isVisible ? 'Yes' : 'No'}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {viewportInfo && (
+        <div className="viewport-info">
+          <h4>Viewport Info</h4>
+          <div>Bounds: {JSON.stringify(viewportInfo.bounds, null, 2)}</div>
+          <div>Canvas Size: {viewportInfo.canvasSize.width} x {viewportInfo.canvasSize.height}</div>
+          <div>Pixels per World Unit: {viewportInfo.pixelsPerWorldUnit}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+### Complete React Integration Example
+
+```jsx
+import React, { useState, useRef, useEffect } from 'react';
+
+const CompleteCanvasIntegration = () => {
+  const [canvasMaker, setCanvasMaker] = useState(null);
+  const [registeredComponents, setRegisteredComponents] = useState(new Map());
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Initialize with container-based approach
+    const canvas = new CanvasMaker(containerRef.current, {
+      createCanvas: true,
+      createToolbar: true,
+      toolbarPosition: 'top-left',
+      width: 1200,
+      height: 800
+    });
+
+    // Set up component lifecycle tracking
+    const unsubscribeMountCallback = canvas.onComponentMount((component) => {
+      console.log('Component mounted:', component);
+      setRegisteredComponents(prev => new Map(prev).set(component.id, component));
+    });
+
+    const unsubscribeUnmountCallback = canvas.onComponentUnmount((component) => {
+      console.log('Component unmounted:', component);
+      setRegisteredComponents(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(component.id);
+        return newMap;
+      });
+    });
+
+    setCanvasMaker(canvas);
+
+    return () => {
+      unsubscribeMountCallback();
+      unsubscribeUnmountCallback();
+      canvas.destroy?.();
+    };
+  }, []);
+
+  const addShape = () => {
+    if (!canvasMaker) return;
+    
+    const viewport = canvasMaker.getViewportBounds();
+    canvasMaker.activeCanvasContext.shapes.push({
+      type: 'rectangle',
+      x: viewport.center.x - 50,
+      y: viewport.center.y - 25,
+      width: 100,
+      height: 50,
+      strokeColor: '#333',
+      fillColor: '#f0f0f0'
+    });
+    canvasMaker.redrawCanvas();
+  };
+
+  return (
+    <div className="complete-integration">
+      <div className="controls">
+        <button onClick={addShape}>Add Shape at Viewport Center</button>
+        <div>Registered Components: {registeredComponents.size}</div>
+      </div>
+      
+      <div className="canvas-area">
+        <div ref={containerRef} className="canvas-container" />
+        
+        {/* React overlays that sync with canvas */}
+        {canvasMaker && (
+          <>
+            <SyncedCanvasOverlay canvasMaker={canvasMaker} type="debug" />
+            <CoordinateUtilityExample canvasMaker={canvasMaker} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default CompleteCanvasIntegration;
+```
+
+### Best Practices for React Integration
+
+1. **Use Container-Based Initialization**: Let Canvas Maker create the canvas element for better compatibility.
+
+2. **Leverage Enhanced Events**: Use the granular pan/zoom events for smooth React state synchronization.
+
+3. **Register React Components**: Use the component registration system for automatic notifications.
+
+4. **Batch Coordinate Conversions**: Use `worldToBatch()` and `canvasToBatch()` for efficient coordinate operations.
+
+5. **Monitor Viewport Changes**: Use `getViewportInfo()` and `getViewportBounds()` for responsive React components.
+
+6. **Clean Up Properly**: Always unregister components and remove event listeners in useEffect cleanup.
+
+7. **Use Throttled Events**: For high-frequency updates, rely on the built-in throttling in `duringPan` and `duringZoom` events.
+
+### Migration from Other Canvas Libraries
+
+Canvas Maker provides a modern, React-friendly alternative to tldraw and other canvas libraries:
+
+- **Container-based initialization** instead of requiring specific DOM structure
+- **Enhanced event system** with granular before/during/after events
+- **Component registration system** for automatic React component synchronization
+- **Batch coordinate operations** for efficient updates
+- **Comprehensive viewport utilities** for responsive design
+
 This API provides everything needed to integrate the canvas system as a tldraw replacement while maintaining full compatibility with the existing drag, select, and resize functionality.
