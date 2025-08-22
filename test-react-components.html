@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test React Component Integration</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Mock React component styles */
+        .mock-react-component {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .mock-react-component:hover {
+            border-color: #3b82f6;
+            transform: scale(1.02);
+        }
+        
+        .mock-react-component h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+        }
+        
+        .mock-react-component p {
+            margin: 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .mock-button-component {
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .mock-button-component:hover {
+            background: #059669;
+            transform: translateY(-1px);
+        }
+        
+        .test-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 2000;
+        }
+        
+        .test-controls button {
+            display: block;
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+        }
+        
+        .test-controls button:hover {
+            background: #f5f5f5;
+        }
+        
+        .test-controls button:last-child {
+            margin-bottom: 0;
+        }
+        
+        .test-log {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 300px;
+            height: 200px;
+            background: #1a1a1a;
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-y: auto;
+            z-index: 2000;
+        }
+        
+        /* Canvas visibility styles */
+        #app-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #f0f0f0;
+            border: 2px solid #333;
+        }
+        
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: white;
+            border: 1px solid #ccc;
+        }
+        
+        canvas {
+            display: block;
+            background: white;
+            border: 1px dashed #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+    
+    <!-- Test Controls -->
+    <div class="test-controls">
+        <h4 style="margin: 0 0 12px 0;">Test Controls</h4>
+        <button id="test-add-component">Add React Component</button>
+        <button id="test-add-button">Add Button Component</button>
+        <button id="test-zoom-in">Zoom In</button>
+        <button id="test-zoom-out">Zoom Out</button>
+        <button id="test-pan-right">Pan Right</button>
+        <button id="test-pan-left">Pan Left</button>
+        <button id="test-remove-all">Remove All Components</button>
+        <button id="run-automated-test">Run Automated Test</button>
+        <hr style="margin: 12px 0;">
+        <button id="save-logs" style="background: #3b82f6; color: white; font-weight: bold;">💾 Save Logs & Notify</button>
+    </div>
+    
+    <!-- Test Log -->
+    <div class="test-log" id="test-log">
+        <div>Test Log:</div>
+        <div>Initializing CanvasMaker...</div>
+    </div>
+    
+    <script src="canvas.js"></script>
+    <script>
+        // Test state
+        let canvasMaker;
+        let testComponents = [];
+        let testLog = document.getElementById('test-log');
+        let interactionLogs = [];
+        
+        // Logging function
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = { timestamp, message, type };
+            interactionLogs.push(logEntry);
+            
+            if (testLog) {
+                const color = type === 'error' ? '#ff6b6b' : 
+                            type === 'interaction' ? '#4ecdc4' :
+                            type === 'canvas' ? '#95e1d3' :
+                            type === 'component' ? '#f3a683' : '#00ff00';
+                testLog.innerHTML += `<div style="color: ${color}">${timestamp}: ${message}</div>`;
+                testLog.scrollTop = testLog.scrollHeight;
+            }
+            console.log(`${timestamp}: [${type}] ${message}`);
+        }
+        
+        // Create mock React component DOM element
+        function createMockReactComponent(title, description) {
+            const component = document.createElement('div');
+            component.className = 'mock-react-component';
+            component.innerHTML = `
+                <h3>${title}</h3>
+                <p>${description}</p>
+            `;
+            
+            // Add click handler to simulate React component interaction
+            component.addEventListener('click', (e) => {
+                log(`Mock component "${title}" clicked at (${e.clientX}, ${e.clientY})`, 'interaction');
+                component.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
+                setTimeout(() => {
+                    component.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                }, 500);
+            });
+            
+            return component;
+        }
+        
+        // Create mock button component
+        function createMockButtonComponent(text) {
+            const button = document.createElement('button');
+            button.className = 'mock-button-component';
+            button.textContent = text;
+            
+            button.addEventListener('click', (e) => {
+                log(`Mock button "${text}" clicked at (${e.clientX}, ${e.clientY})`, 'interaction');
+                button.style.background = '#ef4444';
+                setTimeout(() => {
+                    button.style.background = '#10b981';
+                }, 300);
+            });
+            
+            return button;
+        }
+        
+        // Initialize CanvasMaker
+        try {
+            const container = document.getElementById('app-container');
+            canvasMaker = new CanvasMaker(container, {
+                createCanvas: true,
+                createToolbar: true,
+                width: window.innerWidth,
+                height: window.innerHeight
+            });
+            
+            log('CanvasMaker initialized successfully');
+            
+            // Debug canvas info
+            const canvas = canvasMaker.canvas;
+            log(`Canvas element: ${canvas ? 'found' : 'not found'}`);
+            if (canvas) {
+                log(`Canvas size: ${canvas.width}x${canvas.height}`);
+                log(`Canvas style: ${canvas.style.width} x ${canvas.style.height}`);
+                log(`Canvas parent: ${canvas.parentElement ? canvas.parentElement.className : 'none'}`);
+            }
+            
+            // Test method availability
+            log(`addReactComponent: ${typeof canvasMaker.addReactComponent}`);
+            log(`removeReactComponent: ${typeof canvasMaker.removeReactComponent}`);
+            log(`positionReactComponent: ${typeof canvasMaker.positionReactComponent}`);
+            
+            // Set up comprehensive event tracking
+            setupEventTracking();
+            
+            // Set up test event handlers
+            setupTestControls();
+            
+            // Add initial test component
+            setTimeout(() => {
+                addTestComponent();
+            }, 1000);
+            
+        } catch (error) {
+            log(`Error initializing CanvasMaker: ${error.message}`, 'error');
+        }
+        
+        function setupEventTracking() {
+            // Track canvas events
+            canvasMaker.canvas.addEventListener('click', (e) => {
+                const rect = canvasMaker.canvas.getBoundingClientRect();
+                const canvasX = e.clientX - rect.left;
+                const canvasY = e.clientY - rect.top;
+                const worldPos = canvasMaker.canvasToWorld(canvasX, canvasY);
+                log(`Canvas clicked at screen:(${canvasX.toFixed(1)}, ${canvasY.toFixed(1)}) world:(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`, 'canvas');
+            });
+            
+            // Note: Removed duplicate mousedown listener that was interfering with CanvasMaker's handler
+            
+            canvasMaker.canvas.addEventListener('mouseup', (e) => {
+                const rect = canvasMaker.canvas.getBoundingClientRect();
+                const canvasX = e.clientX - rect.left;
+                const canvasY = e.clientY - rect.top;
+                log(`Canvas mouseup at (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)})`, 'canvas');
+            });
+            
+            canvasMaker.canvas.addEventListener('mousemove', (e) => {
+                // Throttle mousemove logging
+                if (!this.lastMouseMoveLog || Date.now() - this.lastMouseMoveLog > 100) {
+                    const rect = canvasMaker.canvas.getBoundingClientRect();
+                    const canvasX = e.clientX - rect.left;
+                    const canvasY = e.clientY - rect.top;
+                    const worldPos = canvasMaker.canvasToWorld(canvasX, canvasY);
+                    const element = canvasMaker.getElementAtPoint(worldPos.x, worldPos.y);
+                    if (element) {
+                        log(`Mouse over ${element.type} at world:(${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`, 'canvas');
+                    }
+                    this.lastMouseMoveLog = Date.now();
+                }
+            });
+            
+            // Track camera changes and redraw calls
+            const originalRedraw = canvasMaker.redrawCanvas.bind(canvasMaker);
+            canvasMaker.redrawCanvas = function() {
+                log(`[REDRAW] redrawCanvas called - components in activeCanvasContext: ${this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent').length}`, 'canvas');
+                const result = originalRedraw();
+                const camera = this.camera;
+                if (!this.lastCameraLog || 
+                    Math.abs(camera.x - this.lastCameraLog.x) > 1 || 
+                    Math.abs(camera.y - this.lastCameraLog.y) > 1 ||
+                    camera.zoom !== this.lastCameraLog.zoom) {
+                    log(`Camera updated - pos:(${camera.x.toFixed(1)}, ${camera.y.toFixed(1)}) zoom:${camera.zoom.toFixed(2)}`, 'canvas');
+                    this.lastCameraLog = { x: camera.x, y: camera.y, zoom: camera.zoom };
+                }
+                return result;
+            };
+            
+            // Track component lifecycle
+            const originalAddComponent = canvasMaker.addReactComponent.bind(canvasMaker);
+            canvasMaker.addReactComponent = function(...args) {
+                const shape = originalAddComponent(...args);
+                log(`React component added - id:${shape.id} pos:(${shape.x.toFixed(1)}, ${shape.y.toFixed(1)}) size:${shape.width}x${shape.height}`, 'component');
+                return shape;
+            };
+            
+            const originalRemoveComponent = canvasMaker.removeReactComponent.bind(canvasMaker);
+            canvasMaker.removeReactComponent = function(shape) {
+                const result = originalRemoveComponent(shape);
+                if (result) {
+                    log(`React component removed - id:${shape.id}`, 'component');
+                }
+                return result;
+            };
+        }
+        
+        function setupTestControls() {
+            document.getElementById('test-add-component').addEventListener('click', () => {
+                log('Button clicked: Add React Component', 'interaction');
+                addTestComponent();
+            });
+            document.getElementById('test-add-button').addEventListener('click', () => {
+                log('Button clicked: Add Button Component', 'interaction');
+                addTestButton();
+            });
+            document.getElementById('test-zoom-in').addEventListener('click', () => {
+                log('Button clicked: Zoom In', 'interaction');
+                canvasMaker.zoomIn();
+            });
+            document.getElementById('test-zoom-out').addEventListener('click', () => {
+                log('Button clicked: Zoom Out', 'interaction');
+                canvasMaker.zoomOut();
+            });
+            document.getElementById('test-pan-right').addEventListener('click', () => {
+                log('Button clicked: Pan Right', 'interaction');
+                canvasMaker.camera.x += 50;
+                canvasMaker.redrawCanvas();
+            });
+            document.getElementById('test-pan-left').addEventListener('click', () => {
+                log('Button clicked: Pan Left', 'interaction');
+                canvasMaker.camera.x -= 50;
+                canvasMaker.redrawCanvas();
+            });
+            document.getElementById('test-remove-all').addEventListener('click', () => {
+                log('Button clicked: Remove All Components', 'interaction');
+                removeAllComponents();
+            });
+            document.getElementById('run-automated-test').addEventListener('click', () => {
+                log('Button clicked: Run Automated Test', 'interaction');
+                runAutomatedTest();
+            });
+            document.getElementById('save-logs').addEventListener('click', saveLogs);
+        }
+        
+        function addTestComponent() {
+            try {
+                const componentCount = testComponents.length + 1;
+                const mockComponent = createMockReactComponent(
+                    `Component ${componentCount}`,
+                    `This is test component #${componentCount}`
+                );
+                
+                // Random position for variety
+                const x = Math.random() * 400 - 200;
+                const y = Math.random() * 300 - 150;
+                
+                const shape = canvasMaker.addReactComponent(
+                    mockComponent,
+                    x, y,
+                    200, 100,
+                    {
+                        label: `React Component ${componentCount}`,
+                        interactive: true,
+                        strokeColor: '#3b82f6'
+                    }
+                );
+                
+                testComponents.push({ shape, element: mockComponent });
+                log(`Added React component "${shape.label}" at (${x.toFixed(0)}, ${y.toFixed(0)}) - Total components: ${testComponents.length}`, 'component');
+                
+            } catch (error) {
+                log(`Error adding component: ${error.message}`);
+            }
+        }
+        
+        function addTestButton() {
+            try {
+                const buttonCount = testComponents.filter(c => c.element.tagName === 'BUTTON').length + 1;
+                const mockButton = createMockButtonComponent(`Action ${buttonCount}`);
+                
+                const x = Math.random() * 300 - 150;
+                const y = Math.random() * 200 - 100;
+                
+                const shape = canvasMaker.addReactComponent(
+                    mockButton,
+                    x, y,
+                    120, 40,
+                    {
+                        label: `Button ${buttonCount}`,
+                        interactive: true,
+                        strokeColor: '#10b981'
+                    }
+                );
+                
+                testComponents.push({ shape, element: mockButton });
+                log(`Added button component "${shape.label}" at (${x.toFixed(0)}, ${y.toFixed(0)}) - Total components: ${testComponents.length}`, 'component');
+                
+            } catch (error) {
+                log(`Error adding button: ${error.message}`);
+            }
+        }
+        
+        function removeAllComponents() {
+            try {
+                let removedCount = 0;
+                testComponents.forEach(({ shape }) => {
+                    if (canvasMaker.removeReactComponent(shape)) {
+                        removedCount++;
+                    }
+                });
+                
+                testComponents = [];
+                log(`Removed ${removedCount} components`);
+                
+            } catch (error) {
+                log(`Error removing components: ${error.message}`);
+            }
+        }
+        
+        // Automated test sequence
+        async function runAutomatedTest() {
+            log('Starting automated test sequence...');
+            
+            try {
+                // Clear existing components
+                removeAllComponents();
+                await sleep(500);
+                
+                // Test 1: Add multiple components
+                log('Test 1: Adding multiple components');
+                for (let i = 0; i < 3; i++) {
+                    addTestComponent();
+                    await sleep(300);
+                }
+                
+                // Test 2: Test zoom synchronization
+                log('Test 2: Testing zoom synchronization');
+                canvasMaker.zoomIn();
+                await sleep(1000);
+                canvasMaker.zoomIn();
+                await sleep(1000);
+                canvasMaker.zoomOut();
+                await sleep(1000);
+                canvasMaker.resetZoom();
+                await sleep(1000);
+                
+                // Test 3: Test pan synchronization
+                log('Test 3: Testing pan synchronization');
+                canvasMaker.camera.x = 100;
+                canvasMaker.camera.y = 50;
+                canvasMaker.redrawCanvas();
+                await sleep(1000);
+                
+                canvasMaker.camera.x = -100;
+                canvasMaker.camera.y = -50;
+                canvasMaker.redrawCanvas();
+                await sleep(1000);
+                
+                canvasMaker.recenterCanvas();
+                await sleep(1000);
+                
+                // Test 4: Add button components
+                log('Test 4: Adding button components');
+                for (let i = 0; i < 2; i++) {
+                    addTestButton();
+                    await sleep(300);
+                }
+                
+                // Test 5: Test component removal
+                log('Test 5: Testing component removal');
+                await sleep(1000);
+                if (testComponents.length > 0) {
+                    const componentToRemove = testComponents[0];
+                    canvasMaker.removeReactComponent(componentToRemove.shape);
+                    testComponents.splice(0, 1);
+                    log('Removed first component');
+                }
+                
+                log('Automated test sequence completed successfully!');
+                
+            } catch (error) {
+                log(`Automated test failed: ${error.message}`);
+            }
+        }
+        
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        // Save logs function
+        function saveLogs() {
+            log('=== SAVING INTERACTION LOGS ===', 'info');
+            
+            // Create summary
+            const summary = {
+                timestamp: new Date().toISOString(),
+                totalLogs: interactionLogs.length,
+                logsByType: {},
+                componentsState: {
+                    total: testComponents.length,
+                    components: testComponents.map(tc => ({
+                        id: tc.shape.id,
+                        type: tc.shape.type,
+                        label: tc.shape.label,
+                        position: { x: tc.shape.x, y: tc.shape.y },
+                        size: { width: tc.shape.width, height: tc.shape.height }
+                    }))
+                },
+                cameraState: {
+                    x: canvasMaker.camera.x,
+                    y: canvasMaker.camera.y,
+                    zoom: canvasMaker.camera.zoom
+                }
+            };
+            
+            // Count logs by type
+            interactionLogs.forEach(log => {
+                summary.logsByType[log.type] = (summary.logsByType[log.type] || 0) + 1;
+            });
+            
+            // Save to file
+            const filename = `canvas-test-logs-${Date.now()}.json`;
+            const data = {
+                summary: summary,
+                logs: interactionLogs
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log(`Logs saved to ${filename}`, 'info');
+            log('You can now read the logs to analyze the interaction behavior', 'info');
+            
+            // Also save a simplified version to localStorage for easy access
+            localStorage.setItem('canvasTestLogs', JSON.stringify(data));
+            log('Logs also saved to localStorage as "canvasTestLogs"', 'info');
+        }
+        
+        // Global test functions for Puppeteer
+        window.testAPI = {
+            addComponent: addTestComponent,
+            addButton: addTestButton,
+            removeAll: removeAllComponents,
+            runAutomated: runAutomatedTest,
+            getComponentCount: () => testComponents.length,
+            getCanvasMaker: () => canvasMaker,
+            getLogs: () => testLog ? testLog.innerHTML : '',
+            testMethodsExist: () => {
+                if (!canvasMaker) return { addReactComponent: false, removeReactComponent: false, positionReactComponent: false };
+                return {
+                    addReactComponent: typeof canvasMaker.addReactComponent === 'function',
+                    removeReactComponent: typeof canvasMaker.removeReactComponent === 'function',
+                    positionReactComponent: typeof canvasMaker.positionReactComponent === 'function'
+                };
+            }
+        };
+    </script>
+</body>
+</html>
