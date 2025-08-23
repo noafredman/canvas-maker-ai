@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CanvasMaker HTML Rendering Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .controls button {
+            margin: 5px;
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .controls button:hover {
+            background: #0056b3;
+        }
+        
+        .canvas-wrapper {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        /* Style for HTML rendered components */
+        .react-component-html {
+            border: 1px dashed #007bff;
+            transition: all 0.15s ease;
+        }
+        
+        .react-component-html:hover {
+            border-color: #0056b3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .react-component-html.editing {
+            border: 2px solid #3b82f6;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        .react-component-html button {
+            width: 100%;
+            height: 100%;
+            border: 2px solid #000;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .react-component-html button:hover {
+            transform: scale(1.05);
+            transition: transform 0.2s;
+        }
+        
+        .react-component-html .card {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            box-sizing: border-box;
+        }
+        
+        .react-component-html .card h3 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+        }
+        
+        .react-component-html .card p {
+            margin: 0;
+            font-size: 12px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CanvasMaker HTML Rendering Test</h1>
+        <p>Testing HTML rendering for React component shapes</p>
+        
+        <div class="controls">
+            <button onclick="addButton()">Add Button Component</button>
+            <button onclick="addCard()">Add Card Component</button>
+            <button onclick="addForm()">Add Form Component</button>
+            <button onclick="addCenterButton()">Add Button at World (0,0)</button>
+            <button onclick="addExactCenterButton()">Add Button at Exact Canvas Center</button>
+            <button onclick="clearComponents()">Clear All</button>
+            <button onclick="testZoom()">Test Zoom</button>
+            <button onclick="testPan()">Test Pan</button>
+            <br>
+            <small style="color: #666; margin-top: 10px; display: block;">
+                <strong>Instructions:</strong> 
+                • Single-click to select/drag components<br>
+                • Double-click to enter edit mode (interact with buttons/forms)<br>
+                • Press ESC or click outside to exit edit mode
+            </small>
+        </div>
+        
+        <div class="canvas-wrapper" id="canvas-container"></div>
+        
+        <div class="log" id="log">
+            <div><strong>Log:</strong></div>
+        </div>
+    </div>
+
+    <script src="canvas.js"></script>
+    <script>
+        let canvasMaker;
+        let componentCount = 0;
+        
+        // Initialize CanvasMaker
+        function initializeCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvasMaker = new CanvasMaker(container, {
+                width: 1000,
+                height: 600,
+                createToolbar: true
+            });
+            
+            log('CanvasMaker initialized with HTML rendering support');
+            
+            // Listen for component clicks
+            canvasMaker.canvas.addEventListener('canvasComponentClick', (e) => {
+                log(`Component clicked: ${e.detail.shape.id}`);
+            });
+        }
+        
+        // Add a button component
+        function addButton() {
+            componentCount++;
+            // First component goes exactly at center, others get random offsets
+            const offsetX = componentCount === 1 ? 0 : (Math.random() - 0.5) * 200;
+            const offsetY = componentCount === 1 ? 0 : (Math.random() - 0.5) * 200;
+            
+            const buttonHTML = `<button onclick="alert('Button ${componentCount} clicked!')">Button ${componentCount}</button>`;
+            
+            const shape = canvasMaker.addReactComponentWithHTML(offsetX, offsetY, 120, 40, buttonHTML, {
+                id: 'button-' + componentCount,
+                fill: '#ff6b6b', // Red for random buttons
+                coordinateSystem: 'center'
+            });
+            
+            if (componentCount === 1) {
+                log(`Added button component #${componentCount} at EXACT CENTER (0, 0)`);
+            } else {
+                log(`Added button component #${componentCount} at center + (${offsetX}, ${offsetY}) [rounded: (${offsetX.toFixed(0)}, ${offsetY.toFixed(0)})]`);
+            }
+            return shape;
+        }
+        
+        // Add a card component
+        function addCard() {
+            componentCount++;
+            // First component goes exactly at center, others get random offsets
+            const offsetX = componentCount === 1 ? 0 : (Math.random() - 0.5) * 300;
+            const offsetY = componentCount === 1 ? 0 : (Math.random() - 0.5) * 200;
+            
+            const cardHTML = `
+                <div class="card">
+                    <h3>Card ${componentCount}</h3>
+                    <p>This is a React component rendered as HTML on the canvas</p>
+                </div>
+            `;
+            
+            const shape = canvasMaker.addReactComponentWithHTML(offsetX, offsetY, 200, 120, cardHTML, {
+                id: 'card-' + componentCount,
+                fill: 'transparent',
+                coordinateSystem: 'center'
+            });
+            
+            if (componentCount === 1) {
+                log(`Added card component #${componentCount} at EXACT CENTER (0, 0)`);
+            } else {
+                log(`Added card component #${componentCount} at center + (${offsetX.toFixed(0)}, ${offsetY.toFixed(0)})`);
+            }
+            return shape;
+        }
+        
+        // Add a form component
+        function addForm() {
+            componentCount++;
+            // First component goes exactly at center, others get random offsets
+            const offsetX = componentCount === 1 ? 0 : (Math.random() - 0.5) * 300;
+            const offsetY = componentCount === 1 ? 0 : (Math.random() - 0.5) * 200;
+            
+            const formHTML = `
+                <div style="padding: 10px; background: white; border-radius: 6px; height: 100%; box-sizing: border-box;">
+                    <h4 style="margin: 0 0 10px 0; color: #333;">Form ${componentCount}</h4>
+                    <input type="text" placeholder="Enter text" style="width: 100%; margin-bottom: 8px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                    <button style="width: 100%; padding: 6px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">Submit</button>
+                </div>
+            `;
+            
+            const shape = canvasMaker.addReactComponentWithHTML(offsetX, offsetY, 180, 100, formHTML, {
+                id: 'form-' + componentCount,
+                fill: '#f8f9fa',
+                coordinateSystem: 'center'
+            });
+            
+            if (componentCount === 1) {
+                log(`Added form component #${componentCount} at EXACT CENTER (0, 0)`);
+            } else {
+                log(`Added form component #${componentCount} at center + (${offsetX.toFixed(0)}, ${offsetY.toFixed(0)})`);
+            }
+            return shape;
+        }
+        
+        // Add a button at exact canvas center using center coordinate system
+        function addExactCenterButton() {
+            componentCount++;
+            
+            const buttonHTML = `<button onclick="alert('Exact Center Button ${componentCount} clicked!')">Exact Center ${componentCount}</button>`;
+            
+            // Use center coordinates with zero offset for exact canvas center
+            const shape = canvasMaker.addReactComponentWithHTML(0, 0, 160, 40, buttonHTML, {
+                id: 'exact-center-' + componentCount,
+                fill: '#9b59b6',
+                coordinateSystem: 'center'
+            });
+            
+            log(`Added button at exact canvas center using coordinateSystem: 'center' with (0, 0) offset`);
+            return shape;
+        }
+        
+        // Add a button at exact center using helper method
+        function addCenterButton() {
+            componentCount++;
+            
+            const buttonHTML = `<button onclick="alert('Center Button ${componentCount} clicked!')">Center Button ${componentCount}</button>`;
+            
+            // Use world coordinates (0, 0) for exact center
+            const shape = canvasMaker.addReactComponentWithHTML(0, 0, 140, 40, buttonHTML, {
+                id: 'center-button-' + componentCount,
+                fill: '#e74c3c',
+                coordinateSystem: 'world'
+            });
+            
+            log(`Added button at exact world center (0, 0)`);
+            return shape;
+        }
+        
+        // Clear all components
+        function clearComponents() {
+            // Get all reactComponent shapes
+            const reactShapes = canvasMaker.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+            
+            // Remove each one
+            reactShapes.forEach(shape => {
+                canvasMaker.removeReactComponent(shape);
+            });
+            
+            componentCount = 0;
+            log('Cleared all components');
+        }
+        
+        // Test zoom functionality
+        function testZoom() {
+            log('Testing zoom - zooming in...');
+            canvasMaker.zoomIn();
+            
+            setTimeout(() => {
+                log('Zooming out...');
+                canvasMaker.zoomOut();
+            }, 1000);
+        }
+        
+        // Test pan functionality  
+        function testPan() {
+            log('Testing pan - moving camera...');
+            const camera = canvasMaker.activeCanvasContext.camera;
+            const originalX = camera.x;
+            const originalY = camera.y;
+            
+            // Pan right and down
+            camera.x += 100;
+            camera.y += 50;
+            canvasMaker.redrawCanvas();
+            
+            setTimeout(() => {
+                log('Returning to original position...');
+                camera.x = originalX;
+                camera.y = originalY;
+                canvasMaker.redrawCanvas();
+            }, 1000);
+        }
+        
+        // Logging function
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span style="color: #666;">${time}:</span> ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[HTML-RENDER-TEST] ${message}`);
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCanvas();
+            
+            // Add a demo component
+            setTimeout(() => {
+                addButton();
+                addCard();
+            }, 500);
+        });
+        
+        // Monitor for HTML components
+        setInterval(() => {
+            if (canvasMaker && canvasMaker.htmlComponents) {
+                const count = canvasMaker.htmlComponents.size;
+                const status = document.querySelector('#component-status');
+                if (!status) {
+                    const statusDiv = document.createElement('div');
+                    statusDiv.id = 'component-status';
+                    statusDiv.style.cssText = 'position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 8px; border-radius: 4px; font-size: 12px;';
+                    document.body.appendChild(statusDiv);
+                }
+                document.getElementById('component-status').textContent = `HTML Components: ${count}`;
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

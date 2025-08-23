@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Coordinate Fix</title>
+    <style>
+        body { margin: 0; padding: 20px; font-family: system-ui; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border: 1px solid #ccc; }
+        .canvas-wrapper { width: 100%; height: 400px; border: 2px solid #000; position: relative; }
+        .controls { margin-bottom: 20px; }
+        .controls button { margin: 5px; padding: 8px 16px; }
+        .log { background: #f5f5f5; padding: 10px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Coordinate Fix Test</h1>
+        
+        <div class="controls">
+            <button onclick="testCenter()">Test Center Component</button>
+            <button onclick="testClick()">Test Click Detection</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        
+        <div class="canvas-wrapper" id="canvas-container"></div>
+        
+        <div class="log" id="log">
+            <strong>Test Log:</strong><br>
+        </div>
+    </div>
+
+    <script src="canvas.js"></script>
+    <script>
+        let canvasMaker;
+        let componentCount = 0;
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `${time}: ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[TEST] ${message}`);
+        }
+        
+        function testCenter() {
+            if (!canvasMaker) {
+                log("ERROR: CanvasMaker not initialized");
+                return;
+            }
+            
+            componentCount++;
+            
+            // Test: Add component at center using center coordinate system
+            const buttonHTML = `<button onclick="alert('Center test ${componentCount}')">Center Test ${componentCount}</button>`;
+            
+            const shape = canvasMaker.addReactComponentWithHTML(0, 0, 120, 40, buttonHTML, {
+                id: `center-test-${componentCount}`,
+                fill: '#4CAF50',
+                coordinateSystem: 'center'
+            });
+            
+            log(`Added center component at (0,0) - should appear at canvas center`);
+            log(`Shape position: (${shape.x.toFixed(1)}, ${shape.y.toFixed(1)})`);
+            
+            // Test coordinate transformation
+            const camera = canvasMaker.activeCanvasContext.camera;
+            const canvas = canvasMaker.activeCanvasContext.canvas;
+            
+            log(`Camera: x=${camera.x}, y=${camera.y}, zoom=${camera.zoom}`);
+            log(`Canvas size: ${canvas.width}x${canvas.height}`);
+            
+            // Test canvasToWorld at canvas center
+            const centerWorldPos = canvasMaker.canvasToWorld(canvas.width/2, canvas.height/2);
+            log(`Canvas center (${canvas.width/2}, ${canvas.height/2}) maps to world (${centerWorldPos.x.toFixed(1)}, ${centerWorldPos.y.toFixed(1)})`);
+            
+            // Test worldToCanvas at world origin
+            const originScreenPos = canvasMaker.worldToCanvas(0, 0);
+            log(`World origin (0, 0) maps to screen (${originScreenPos.x.toFixed(1)}, ${originScreenPos.y.toFixed(1)})`);
+        }
+        
+        function testClick() {
+            log("Click test: Click on the canvas to test coordinate detection");
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '<strong>Test Log:</strong><br>';
+        }
+        
+        // Initialize CanvasMaker
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                const container = document.getElementById('canvas-container');
+                canvasMaker = new CanvasMaker(container, {
+                    width: 600,
+                    height: 400,
+                    createToolbar: false
+                });
+                
+                log('CanvasMaker initialized successfully');
+                log(`Initial camera: x=${canvasMaker.activeCanvasContext.camera.x}, y=${canvasMaker.activeCanvasContext.camera.y}, zoom=${canvasMaker.activeCanvasContext.camera.zoom}`);
+                
+                // Add click listener for testing
+                canvasMaker.canvas.addEventListener('click', (e) => {
+                    const rect = canvasMaker.canvas.getBoundingClientRect();
+                    const canvasX = e.clientX - rect.left;
+                    const canvasY = e.clientY - rect.top;
+                    const worldPos = canvasMaker.canvasToWorld(canvasX, canvasY);
+                    
+                    log(`CLICK - Screen: (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)}) -> World: (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+                });
+                
+            } catch (error) {
+                log(`ERROR: Failed to initialize CanvasMaker - ${error.message}`);
+            }
+        });
+    </script>
+</body>
+</html>

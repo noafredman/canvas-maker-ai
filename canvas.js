@@ -55,6 +55,7 @@ class CanvasMaker {
         this.isDragging = false;
         this.isResizing = false;
         this.resizeHandle = null;
+        this.justFinishedResize = false;
         this.startX = 0;
         this.startY = 0;
         // Initialize arrays that will be used in main canvas context
@@ -147,6 +148,11 @@ class CanvasMaker {
         // Nested canvas state
         this._nestedCanvases = []; // Array to store nested canvas shapes
         this.isNestedCanvasOpen = false;
+        
+        // HTML rendering layer for React components
+        this.htmlRenderingLayer = null;
+        this.htmlComponents = new Map(); // Map of shape.id -> DOM element
+        this.editingComponentId = null; // Track which component is in edit mode
         this.currentNestedCanvasId = null;
         this.nestedCanvasData = new Map(); // Store individual nested canvas data
         
@@ -190,6 +196,9 @@ class CanvasMaker {
             console.error('Nested canvas overlay element not found!');
         }
         
+        // Ensure HTML rendering layer is created
+        this.ensureHTMLRenderingLayer();
+        
         this.setupCanvas();
         this.setupEventListeners();
         // Always setup toolbar event listeners for existing HTML elements
@@ -208,6 +217,43 @@ class CanvasMaker {
         this.canvas.style.transformOrigin = '0 0';
         
         this.redrawCanvas();
+    }
+    
+    ensureHTMLRenderingLayer() {
+        // Create HTML rendering layer if it doesn't exist
+        if (!this.htmlRenderingLayer) {
+            const canvasParent = this.canvas.parentElement;
+            
+            // Check if rendering layer already exists
+            this.htmlRenderingLayer = canvasParent.querySelector('.html-rendering-layer');
+            
+            if (!this.htmlRenderingLayer) {
+                // Create the HTML rendering layer
+                this.htmlRenderingLayer = document.createElement('div');
+                this.htmlRenderingLayer.className = 'html-rendering-layer';
+                this.htmlRenderingLayer.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                    z-index: 1;
+                    overflow: hidden;
+                    transform-origin: top left;
+                `;
+                
+                // Insert after canvas
+                canvasParent.style.position = 'relative';
+                if (this.canvas.nextSibling) {
+                    canvasParent.insertBefore(this.htmlRenderingLayer, this.canvas.nextSibling);
+                } else {
+                    canvasParent.appendChild(this.htmlRenderingLayer);
+                }
+                
+                console.log('[HTML-RENDER] Created HTML rendering layer');
+            }
+        }
     }
     
     setupDOMStructure() {
@@ -440,8 +486,39 @@ class CanvasMaker {
         if (this.boundClick) {
             this.canvas.removeEventListener('click', this.boundClick);
         }
-        this.boundClick = this.handleClick.bind(this);
+        this.boundClick = (e) => {
+            console.log(`[EVENT] Click event received on canvas at`, e.clientX, e.clientY);
+            console.log(`[EVENT] Event target:`, e.target);
+            return this.handleClick(e);
+        };
         this.canvas.addEventListener('click', this.boundClick);
+        
+        // Fix: Add click handler to canvas-container to forward clicks to canvas
+        const canvasContainer = this.canvas.parentElement;
+        if (canvasContainer && canvasContainer.classList.contains('canvas-container')) {
+            canvasContainer.addEventListener('click', (e) => {
+                // If click is on the container itself (not a child element), forward to canvas
+                if (e.target === canvasContainer) {
+                    console.log('[CONTAINER-CLICK] Forwarding click from container to canvas');
+                    // Create a new click event and dispatch it to the canvas
+                    const forwardedEvent = new MouseEvent('click', {
+                        bubbles: e.bubbles,
+                        cancelable: e.cancelable,
+                        clientX: e.clientX,
+                        clientY: e.clientY,
+                        button: e.button,
+                        buttons: e.buttons,
+                        relatedTarget: e.relatedTarget
+                    });
+                    this.canvas.dispatchEvent(forwardedEvent);
+                }
+            });
+        }
+        
+        // Add debug click listener to document to see what's getting clicked
+        document.addEventListener('click', (e) => {
+            console.log(`[DOC-CLICK] Document click on:`, e.target.tagName, e.target.className);
+        });
         
         window.addEventListener('resize', () => {
             // Use requestAnimationFrame + setTimeout to ensure DOM has updated
@@ -658,6 +735,114 @@ class CanvasMaker {
         
         // Return the shape for external reference
         return shape;
+    }
+    
+    // Add a React component with HTML/React content for HTML rendering
+    //
+    // COORDINATE SYSTEMS:
+    // • 'world' (default): World coordinates - absolute position on the infinite canvas
+    //   - (0,0) is the origin of the canvas world
+    //   - Coordinates don't change when user pans/zooms
+    //   - Use this for placing components at fixed world positions
+    //
+    // • 'screen': Screen/canvas pixel coordinates
+    //   - (0,0) is top-left corner of the visible canvas element
+    //   - Coordinates are in canvas pixels (not affected by zoom/pan)
+    //   - Use this for UI elements that should appear at specific screen positions
+    //
+    // • 'center': Viewport center relative coordinates
+    //   - (0,0) is the current center of the viewport
+    //   - Coordinates are offsets from viewport center in world units
+    //   - Use this for placing components relative to what user is currently viewing
+    //
+    addReactComponentWithHTML(x, y, width, height, content, options = {}) {
+        // Handle coordinate system based on options
+        let finalX = x;
+        let finalY = y;
+        
+        if (options.coordinateSystem === 'screen') {
+            // Convert screen/canvas coordinates to world coordinates
+            // Input: (x,y) in canvas pixels from top-left corner of canvas
+            // Output: world coordinates at that screen position
+            const worldPos = this.canvasToWorld(x, y);
+            finalX = worldPos.x;
+            finalY = worldPos.y;
+        } else if (options.coordinateSystem === 'center') {
+            // Position relative to current viewport center (world coordinates)
+            // Input: (x,y) as offset from viewport center
+            // Output: world coordinates accounting for current camera position
+            const camera = this.activeCanvasContext.camera;
+            const canvas = this.activeCanvasContext.canvas;
+            
+            // Get viewport center in world coordinates
+            const canvasCenterX = canvas.width / 2;
+            const canvasCenterY = canvas.height / 2;
+            console.log(`[COORD-DEBUG] Canvas center pixels: ${canvasCenterX}, ${canvasCenterY}`);
+            
+            const viewportCenterWorld = this.canvasToWorld(canvasCenterX, canvasCenterY);
+            console.log(`[COORD-DEBUG] canvasToWorld(${canvasCenterX}, ${canvasCenterY}) = (${viewportCenterWorld.x}, ${viewportCenterWorld.y})`);
+            
+            console.log(`[COORD-DEBUG] Canvas size: ${canvas.width}x${canvas.height}`);
+            console.log(`[COORD-DEBUG] Canvas center: ${canvas.width/2}, ${canvas.height/2}`);
+            console.log(`[COORD-DEBUG] Viewport center world: ${viewportCenterWorld.x}, ${viewportCenterWorld.y}`);
+            console.log(`[COORD-DEBUG] Camera: x=${camera.x}, y=${camera.y}, zoom=${camera.zoom}`);
+            
+            // Apply offset and center the component  
+            console.log(`[COORD-DEBUG] Input offset: x=${x}, y=${y}`);
+            console.log(`[COORD-DEBUG] Viewport center world: ${viewportCenterWorld.x}, ${viewportCenterWorld.y}`);
+            
+            finalX = viewportCenterWorld.x + x;
+            finalY = viewportCenterWorld.y + y;
+            
+            console.log(`[COORD-DEBUG] Calculation: ${viewportCenterWorld.x} + ${x} = ${finalX}`);
+            console.log(`[COORD-DEBUG] Calculation: ${viewportCenterWorld.y} + ${y} = ${finalY}`);
+            console.log(`[COORD-DEBUG] Final position: ${finalX}, ${finalY}`);
+        }
+        // Default: use coordinates as-is (world coordinates)
+        // Input: (x,y) in world coordinate units
+        // Output: same world coordinates
+        
+        const shape = {
+            type: 'reactComponent',
+            id: options.id || Date.now() + Math.random(),
+            x: finalX,
+            y: finalY,
+            width: width,
+            height: height,
+            fillColor: options.fill || options.fillColor || 'transparent',
+            strokeColor: options.stroke || options.strokeColor || '#333',
+            htmlContent: typeof content === 'string' ? content : null,
+            reactContent: typeof content !== 'string' ? content : null,
+            ...options
+        };
+        
+        // Add to active canvas context
+        this.activeCanvasContext.shapes.push(shape);
+        
+        // Trigger redraw to create and position the HTML element
+        this.redrawCanvas();
+        
+        // Return the shape for external reference
+        return shape;
+    }
+    
+    // Helper method to add component at viewport center
+    // Uses world coordinates - positions relative to the current viewport center
+    addReactComponentAtCenter(width, height, content, options = {}) {
+        // Position at viewport center (0, 0 offset from center)
+        return this.addReactComponentWithHTML(0, 0, width, height, content, {
+            coordinateSystem: 'center',
+            ...options
+        });
+    }
+    
+    // Helper method to add component at screen coordinates
+    // Uses screen/canvas pixel coordinates - useful for UI elements
+    addReactComponentAtScreenPos(screenX, screenY, width, height, content, options = {}) {
+        return this.addReactComponentWithHTML(screenX, screenY, width, height, content, {
+            coordinateSystem: 'screen',
+            ...options
+        });
     }
     
     // Remove a React component shape
@@ -1067,6 +1252,8 @@ class CanvasMaker {
         const camera = this.activeCanvasContext.camera;
         const canvas = this.activeCanvasContext.canvas;
         
+        console.log(`[CANVAS-TO-WORLD] Input: (${canvasX}, ${canvasY}) Camera: x=${camera.x}, y=${camera.y}, zoom=${camera.zoom}`);
+        
         // Inverse transform: account for centering, then zoom, then camera offset
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
@@ -1074,14 +1261,17 @@ class CanvasMaker {
         // Step 1: Remove canvas centering
         const centeredX = canvasX - centerX;
         const centeredY = canvasY - centerY;
+        console.log(`[CANVAS-TO-WORLD] After centering: (${centeredX}, ${centeredY})`);
         
         // Step 2: Remove zoom scaling
         const unzoomedX = centeredX / camera.zoom;
         const unzoomedY = centeredY / camera.zoom;
+        console.log(`[CANVAS-TO-WORLD] After unzoom: (${unzoomedX.toFixed(1)}, ${unzoomedY.toFixed(1)})`);
         
-        // Step 3: Remove camera translation
+        // Step 3: Remove camera translation (inverse of canvas transform)
         const worldX = unzoomedX - camera.x;
         const worldY = unzoomedY - camera.y;
+        console.log(`[CANVAS-TO-WORLD] Final world: (${worldX.toFixed(1)}, ${worldY.toFixed(1)})`);
         
         return { x: worldX, y: worldY };
     }
@@ -1094,9 +1284,9 @@ class CanvasMaker {
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
         
-        // Apply transform: camera translation, then zoom, then canvas centering
-        const translatedX = worldX + camera.x;
-        const translatedY = worldY + camera.y;
+        // Apply transform: remove camera translation, then zoom, then canvas centering
+        const translatedX = worldX - camera.x;
+        const translatedY = worldY - camera.y;
         
         const zoomedX = translatedX * camera.zoom;
         const zoomedY = translatedY * camera.zoom;
@@ -1597,7 +1787,10 @@ class CanvasMaker {
     }
     
     handleMouseUp(e) {
-        console.log('handleMouseUp called - currentTool:', this.currentTool, 'isDragging:', this.isDragging, 'isDrawing:', this.isDrawing);
+        console.log('[MOUSEUP] handleMouseUp called - currentTool:', this.currentTool, 'isDragging:', this.isDragging, 'isDrawing:', this.isDrawing);
+        
+        // Don't prevent default to allow click events
+        // e.preventDefault(); // Removed this if present
         
         // Stop panning
         if (this.isPanning) {
@@ -1651,9 +1844,15 @@ class CanvasMaker {
         // Handle select tool separately as it doesn't use isDrawing
         if (this.currentTool === 'select') {
             if (this.isResizing) {
+                console.log('[RESIZE-END] Ending resize, selected elements:', this.selectedElements.length);
                 this.isResizing = false;
                 this.resizeHandle = null;
+                this.justFinishedResize = true; // Flag to prevent immediate click deselection
                 this.updateCanvasCursor();
+                // Keep component selected and redraw to show resize handles
+                console.log('[RESIZE-END] About to redraw with selected elements:', this.selectedElements.length);
+                this.redrawCanvas();
+                console.log('[RESIZE-END] Redraw completed, selected elements:', this.selectedElements.length);
             } else if (this.isDragging) {
                 console.log('Select tool - stopping drag');
                 this.isDragging = false;
@@ -1814,6 +2013,15 @@ class CanvasMaker {
     handleClick(e) {
         const pos = this.getMousePos(e);
         
+        console.log(`[CLICK] handleClick called at (${pos.x}, ${pos.y}) - editMode: ${this.editingComponentId || 'none'}`);
+        
+        // Prevent click handling immediately after resize to avoid deselection
+        if (this.justFinishedResize) {
+            console.log(`[CLICK] Ignoring click after resize completion`);
+            this.justFinishedResize = false;
+            return;
+        }
+        
         // Check if clicking on a React component first (for any tool)
         console.log(`[CLICK] Checking React component click at (${pos.x}, ${pos.y})`);
         if (this.handleReactComponentClick(pos)) {
@@ -1856,12 +2064,16 @@ class CanvasMaker {
             // Handle selection for select tool or no tool selected
             const clickedElement = this.getElementAtPoint(pos.x, pos.y);
             
+            console.log(`[CLICK] getElementAtPoint returned:`, clickedElement);
+            
             if (clickedElement) {
                 // Select the clicked element
                 this.selectedElements = [clickedElement];
+                console.log(`[CLICK] Selected element:`, clickedElement);
             } else {
                 // If clicking on empty space, deselect all
                 this.selectedElements = [];
+                console.log(`[CLICK] Deselected all - no element at click position`);
             }
             
             this.redrawCanvas();
@@ -1869,32 +2081,45 @@ class CanvasMaker {
     }
     
     // Handle clicks on canvas-rendered React components
-    handleReactComponentClick(pos) {
-        if (!this.canvasComponents) return false;
+    handleReactComponentClick(worldPos) {
+        // pos is already in world coordinates from getMousePos()
+        console.log(`[REACT-CLICK] Testing click at world (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
         
-        // Check all React components for click interaction
-        for (const [id, shape] of this.canvasComponents) {
-            if (shape.canvasRenderer && shape.canvasRenderer.eventHandlers.has('click')) {
-                const clickHandler = shape.canvasRenderer.eventHandlers.get('click');
+        // Check all React components in shapes array
+        const reactShapes = this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+        console.log(`[REACT-CLICK] Found ${reactShapes.length} React components to test`);
+        
+        for (const shape of reactShapes) {
+            console.log(`[REACT-CLICK] Testing shape ${shape.id} at (${shape.x.toFixed(1)}, ${shape.y.toFixed(1)}) size ${shape.width}x${shape.height}`);
+            
+            // Test if click is within component bounds
+            const isInBounds = worldPos.x >= shape.x && 
+                              worldPos.x <= shape.x + shape.width &&
+                              worldPos.y >= shape.y && 
+                              worldPos.y <= shape.y + shape.height;
+            
+            console.log(`[REACT-CLICK] Click in bounds: ${isInBounds}`);
+            
+            if (isInBounds) {
+                console.log(`[REACT-CLICK] Component ${shape.id} clicked! Selecting...`);
                 
-                // Convert screen coordinates to world coordinates
-                const worldPos = this.canvasToWorld(pos.x, pos.y);
+                // Select the component
+                this.activeCanvasContext.selectedElements = [{ type: 'shape', index: this.activeCanvasContext.shapes.indexOf(shape) }];
                 
-                const handled = clickHandler({
-                    x: worldPos.x,
-                    y: worldPos.y,
-                    canvasX: pos.x,
-                    canvasY: pos.y
-                });
-                
-                if (handled) {
-                    // Trigger re-render to reflect any component state changes
-                    this.requestCanvasUpdate();
-                    return true; // Event was handled
+                // Check if we're in edit mode for this component
+                if (this.editingComponentId === shape.id) {
+                    console.log(`[REACT-CLICK] Component ${shape.id} is in edit mode - allowing HTML interaction`);
+                    return false; // Allow HTML element to handle the click
+                } else {
+                    console.log(`[REACT-CLICK] Component ${shape.id} selected for dragging/manipulation`);
+                    // Trigger re-render to show selection
+                    this.redrawCanvas();
+                    return true; // We handled the click for selection
                 }
             }
         }
         
+        console.log(`[REACT-CLICK] No React component at click position`);
         return false; // No component handled the event
     }
     
@@ -2272,6 +2497,25 @@ class CanvasMaker {
     
     handleDoubleClick(e) {
         const pos = this.getMousePos(e);
+        
+        // First check for React components
+        const worldPos = this.canvasToWorld(pos.x, pos.y);
+        const reactShapes = this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+        
+        for (const shape of reactShapes) {
+            const isInBounds = worldPos.x >= shape.x && 
+                              worldPos.x <= shape.x + shape.width &&
+                              worldPos.y >= shape.y && 
+                              worldPos.y <= shape.y + shape.height;
+            
+            if (isInBounds) {
+                console.log(`[DOUBLE-CLICK] Entering edit mode for React component ${shape.id}`);
+                this.enterComponentEditMode(shape);
+                return;
+            }
+        }
+        
+        // Check for other element types
         const clickedElement = this.getElementAtPoint(pos.x, pos.y);
         
         // Check if user double-clicked on a text box
@@ -2290,6 +2534,13 @@ class CanvasMaker {
         // Check if user double-clicked on a nested canvas
         else if (clickedElement && clickedElement.type === 'nested-canvas') {
             this.openNestedCanvas(clickedElement.index);
+        }
+        // Check if user double-clicked on a React component
+        else if (clickedElement && clickedElement.type === 'shape') {
+            const shape = this.shapes[clickedElement.index];
+            if (shape.type === 'reactComponent') {
+                this.enterComponentEditMode(shape);
+            }
         }
     }
     
@@ -2800,6 +3051,8 @@ class CanvasMaker {
             if (this.isResizing) {
                 this.isResizing = false;
                 this.resizeHandle = null;
+                // Keep component selected and redraw to show resize handles
+                this.redrawCanvas(this.nestedCanvasContext);
             } else if (this.isDragging) {
                 this.isDragging = false;
             } else if (this.isSelecting) {
@@ -3642,26 +3895,9 @@ class CanvasMaker {
                 }
             }
             
-            // Render React component content if it's a React component
+            // Render React component content using HTML rendering
             if (shape.type === 'reactComponent') {
-                console.log(`[DRAW] Drawing React component ${shape.id}, has renderer: ${!!shape.canvasRenderer}, ctx valid: ${!!ctx}`);
-                console.log(`[DRAW] Canvas state - transform:`, ctx.getTransform());
-                
-                if (shape.canvasRenderer) {
-                    console.log(`[DRAW] About to render component at (${shape.x}, ${shape.y})`);
-                    this.renderComponentToCanvas(ctx, shape, camera);
-                    console.log(`[DRAW] Finished rendering component ${shape.id}`);
-                } else {
-                    console.warn(`[DRAW] React component ${shape.id} missing canvasRenderer!`);
-                    // Try to re-register it
-                    if (shape.domElement) {
-                        console.log(`[DRAW] Re-registering component ${shape.id}`);
-                        this.registerCanvasComponent(shape);
-                        if (shape.canvasRenderer) {
-                            this.renderComponentToCanvas(ctx, shape, camera);
-                        }
-                    }
-                }
+                this.renderReactComponentHTML(shape, camera);
             }
             
             // Draw stroke/outline for shapes
@@ -3791,6 +4027,12 @@ class CanvasMaker {
         
         // Restore context before drawing UI elements
         ctx.restore();
+        
+        // Update HTML component positions and clean up removed ones
+        if (canvasContext === this.activeCanvasContext) {
+            this.cleanupHTMLComponents(shapes);
+            this.updateAllHTMLComponents(camera);
+        }
     }
     
     drawGrid(canvasContext) {
@@ -3881,7 +4123,9 @@ class CanvasMaker {
     }
     
     drawResizeHandles(canvasContext) {
+        console.log('[DRAW-HANDLES] Drawing resize handles, selected elements:', canvasContext.selectedElements.length);
         if (canvasContext.selectedElements.length !== 1) {
+            console.log('[DRAW-HANDLES] Not drawing handles - wrong selection count:', canvasContext.selectedElements.length);
             return; // Only show handles for single selection
         }
         
@@ -3931,6 +4175,7 @@ class CanvasMaker {
         }
         
         if (bounds) {
+            console.log('[DRAW-HANDLES] Drawing handles for bounds:', bounds);
             // Draw handles in world space (with camera transformations applied)
             canvasContext.ctx.fillStyle = '#3b82f6'; // Blue
             canvasContext.ctx.strokeStyle = '#ffffff'; // White border
@@ -4002,7 +4247,7 @@ class CanvasMaker {
         
         // Work in world coordinates (much simpler and more reliable)
         const handleSize = 8; // Handle size in world coordinates - canvas transform handles scaling
-        const tolerance = 4; // Tolerance in world coordinates - canvas transform handles scaling
+        const tolerance = 6; // 6px radius around resize handles for precise interaction
         
         // Create handles in world coordinates matching the drawing function
         const handles = [
@@ -4022,6 +4267,32 @@ class CanvasMaker {
                 worldY >= handle.y - tolerance && worldY <= handle.y + handleSize + tolerance) {
                 return handle.type;
             }
+        }
+        
+        // If not on a handle, check if hovering over container edges for edge resizing
+        const edgeTolerance = 6; // 6px radius around edges for precise interaction
+        
+        // Check if near edges (but only allow resize from outside or very close to edge)
+        const nearLeft = Math.abs(worldX - bounds.x) <= edgeTolerance;
+        const nearRight = Math.abs(worldX - (bounds.x + bounds.width)) <= edgeTolerance;
+        const nearTop = Math.abs(worldY - bounds.y) <= edgeTolerance;
+        const nearBottom = Math.abs(worldY - (bounds.y + bounds.height)) <= edgeTolerance;
+        
+        // Only allow edge resizing if we're actually near an edge, not deep inside component
+        const isNearAnyEdge = nearLeft || nearRight || nearTop || nearBottom;
+        
+        if (isNearAnyEdge) {
+            // Corner resizing (prioritize corners over edges)
+            if (nearLeft && nearTop) return 'nw';
+            if (nearRight && nearTop) return 'ne'; 
+            if (nearLeft && nearBottom) return 'sw';
+            if (nearRight && nearBottom) return 'se';
+            
+            // Edge resizing - only if close to that specific edge
+            if (nearLeft) return 'w';
+            if (nearRight) return 'e';
+            if (nearTop) return 'n';
+            if (nearBottom) return 's';
         }
         
         return null;
@@ -4095,6 +4366,26 @@ class CanvasMaker {
         
         this.dragOffset.x = currentX;
         this.dragOffset.y = currentY;
+        
+        // Update HTML component size in real-time during resize for React components
+        if (element.type === 'shape' && shape.type === 'reactComponent') {
+            this.updateReactComponentHTML(shape);
+        }
+    }
+    
+    // Helper function to update React component HTML during resize
+    updateReactComponentHTML(shape) {
+        const htmlElement = this.htmlComponents.get(shape.id);
+        if (htmlElement) {
+            console.log(`[RESIZE-HTML] Updating HTML size to ${shape.width}x${shape.height} for component ${shape.id}`);
+            console.log(`[RESIZE-HTML] Current element size:`, htmlElement.style.width, htmlElement.style.height);
+            
+            // Use the current active canvas context's camera for transform
+            this.updateHTMLElementTransform(htmlElement, shape, this.activeCanvasContext.camera);
+            
+            console.log(`[RESIZE-HTML] Updated element size:`, htmlElement.style.width, htmlElement.style.height);
+            console.log(`[RESIZE-HTML] Element computed size:`, getComputedStyle(htmlElement).width, getComputedStyle(htmlElement).height);
+        }
     }
     
     // Register React component for canvas-based rendering and interaction
@@ -4310,6 +4601,318 @@ class CanvasMaker {
             console.error('Error drawing component:', error);
             // Fallback to placeholder
             this.drawComponentPlaceholder(ctx, { x, y, width, height });
+        }
+    }
+    
+    // Render React component as actual HTML element
+    renderReactComponentHTML(shape, camera) {
+        if (!shape.htmlContent && !shape.reactContent && !shape.domElement) {
+            console.warn(`[HTML-RENDER] React component ${shape.id} has no content to render`);
+            return;
+        }
+        
+        // Get or create HTML element for this shape
+        let element = this.htmlComponents.get(shape.id);
+        if (!element) {
+            element = this.createHTMLElement(shape);
+            if (!element) return;
+            this.htmlComponents.set(shape.id, element);
+        }
+        
+        // Update element position and size based on canvas transform
+        this.updateHTMLElementTransform(element, shape, camera);
+    }
+    
+    // Create HTML element for React component shape
+    createHTMLElement(shape) {
+        if (!this.htmlRenderingLayer) {
+            console.warn('[HTML-RENDER] HTML rendering layer not initialized');
+            return null;
+        }
+        
+        let element = document.createElement('div');
+        element.className = 'react-component-html';
+        element.dataset.shapeId = shape.id;
+        element.style.cssText = `
+            position: absolute;
+            pointer-events: none;
+            box-sizing: border-box;
+            transform-origin: top left;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: outline 0.15s ease, opacity 0.1s ease;
+        `;
+        
+        // Create content wrapper - make it transparent to mouse events initially
+        const contentWrapper = document.createElement('div');
+        contentWrapper.style.cssText = `
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        `;
+        
+        // Function to update pointer events based on edit mode
+        let lastMode = null; // Track mode to avoid redundant updates
+        const updatePointerEvents = () => {
+            const isInEditMode = this.editingComponentId === shape.id;
+            const currentMode = isInEditMode ? 'edit' : 'select';
+            
+            // Skip if mode hasn't changed
+            if (lastMode === currentMode) return;
+            lastMode = currentMode;
+            
+            if (isInEditMode) {
+                // In edit mode - allow interaction with HTML content
+                contentWrapper.style.pointerEvents = 'auto';
+                element.style.opacity = '1';
+                // console.log(`[HTML-MODE] Component ${shape.id} set to EDIT mode - HTML interactive`);
+            } else {
+                // Not in edit mode - make transparent so clicks go to canvas
+                contentWrapper.style.pointerEvents = 'none';  
+                element.style.opacity = '0.95'; // Slightly transparent when not in edit mode
+                // console.log(`[HTML-MODE] Component ${shape.id} set to SELECTION mode - clicks pass through`);
+            }
+        };
+        
+        // Set initial state
+        updatePointerEvents();
+        
+        // Store update function on element so we can call it later
+        contentWrapper._updatePointerEvents = updatePointerEvents;
+        
+        // Set content based on shape properties
+        if (shape.htmlContent) {
+            // HTML string content
+            contentWrapper.innerHTML = shape.htmlContent;
+        } else if (shape.reactContent) {
+            // React component (for now, treat as HTML)
+            if (typeof shape.reactContent === 'string') {
+                contentWrapper.innerHTML = shape.reactContent;
+            } else {
+                // For actual React components, you'd need to render them here
+                // This is a simplified approach for now
+                contentWrapper.innerHTML = '<div>React Component</div>';
+            }
+        } else if (shape.domElement) {
+            // Existing DOM element
+            if (shape.domElement.cloneNode) {
+                contentWrapper.appendChild(shape.domElement.cloneNode(true));
+            } else {
+                contentWrapper.innerHTML = shape.domElement.innerHTML || shape.domElement.textContent || 'DOM Element';
+            }
+        }
+        
+        element.appendChild(contentWrapper);
+        
+        this.htmlRenderingLayer.appendChild(element);
+        console.log(`[HTML-RENDER] Created HTML element for component ${shape.id}`);
+        return element;
+    }
+    
+    // Update HTML element position and size based on canvas transform
+    updateHTMLElementTransform(element, shape, camera) {
+        const canvas = this.canvas;
+        
+        // Apply the same transform as the canvas
+        // Canvas transform: translate(center) -> scale(zoom) -> translate(camera)
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Set base size (unscaled)
+        element.style.width = `${shape.width}px`;
+        element.style.height = `${shape.height}px`;
+        
+        // Apply transform to match canvas coordinate system exactly
+        // Canvas transform: translate(center) -> scale(zoom) -> translate(camera)
+        // So final position = center + (shape_position * zoom) + (camera * zoom)
+        const translateX = centerX + shape.x * camera.zoom + camera.x * camera.zoom;
+        const translateY = centerY + shape.y * camera.zoom + camera.y * camera.zoom;
+        
+        console.log(`[HTML-POS] Shape ${shape.id}: world(${shape.x}, ${shape.y}) -> screen(${translateX}, ${translateY})`);
+        
+        element.style.left = '0px';
+        element.style.top = '0px';
+        element.style.transform = `translate(${translateX}px, ${translateY}px) scale(${camera.zoom})`;
+        
+        // Ensure element is visible
+        element.style.display = 'block';
+        
+        // Only allow pointer events if in edit mode
+        if (this.editingComponentId === shape.id) {
+            element.style.pointerEvents = 'auto';
+        } else {
+            element.style.pointerEvents = 'none';
+        }
+    }
+    
+    // Clean up HTML elements for removed components
+    cleanupHTMLComponents(activeShapes) {
+        const activeShapeIds = new Set(activeShapes.filter(s => s.type === 'reactComponent').map(s => s.id));
+        
+        for (const [shapeId, element] of this.htmlComponents) {
+            if (!activeShapeIds.has(shapeId)) {
+                element.remove();
+                this.htmlComponents.delete(shapeId);
+                console.log(`[HTML-RENDER] Cleaned up HTML element for removed component ${shapeId}`);
+            }
+        }
+    }
+    
+    // Update all HTML component positions (called during pan/zoom)
+    updateAllHTMLComponents(camera = null) {
+        if (!camera) camera = this.activeCanvasContext.camera;
+        
+        for (const [shapeId, element] of this.htmlComponents) {
+            // Find the corresponding shape
+            const shape = this.activeCanvasContext.shapes.find(s => s.id === shapeId && s.type === 'reactComponent');
+            if (shape) {
+                this.updateHTMLElementTransform(element, shape, camera);
+            }
+        }
+    }
+    
+    // Enter edit mode for a React component
+    enterComponentEditMode(shape) {
+        console.log(`[HTML-RENDER] Entering edit mode for component ${shape.id}`);
+        
+        // Exit any existing edit mode
+        if (this.editingComponentId) {
+            this.exitComponentEditMode();
+        }
+        
+        // Set the new editing component
+        this.editingComponentId = shape.id;
+        
+        // Get the HTML element
+        const element = this.htmlComponents.get(shape.id);
+        if (!element) return;
+        
+        // Update pointer events using the stored function
+        const contentWrapper = element.querySelector('div');
+        if (contentWrapper && contentWrapper._updatePointerEvents) {
+            contentWrapper._updatePointerEvents();
+        }
+        
+        element.classList.add('editing');
+        
+        // Add visual indicator with smooth transition
+        element.style.outline = '2px solid #3b82f6';
+        element.style.outlineOffset = '2px';
+        element.style.opacity = '1';
+        
+        // Listen for clicks outside to exit edit mode
+        setTimeout(() => {
+            console.log(`[EDIT-MODE] Adding outside click listener`);
+            document.addEventListener('mousedown', this.handleEditModeOutsideClick);
+        }, 100);
+        
+        // Listen for ESC key
+        console.log(`[EDIT-MODE] Adding ESC key listener`);
+        document.addEventListener('keydown', this.handleEditModeEscape);
+    }
+    
+    // Exit edit mode for the current component
+    exitComponentEditMode() {
+        if (!this.editingComponentId) {
+            console.log(`[EDIT-EXIT] exitComponentEditMode called but no component in edit mode`);
+            return;
+        }
+        
+        const componentId = this.editingComponentId;
+        console.log(`[EDIT-EXIT] Starting exit process for component ${componentId}`);
+        
+        const element = this.htmlComponents.get(this.editingComponentId);
+        console.log(`[EDIT-EXIT] Found element:`, element ? 'YES' : 'NO');
+        
+        // Clear editing state FIRST
+        this.editingComponentId = null;
+        console.log(`[EDIT-EXIT] Cleared editingComponentId`);
+        
+        if (element) {
+            // Now update pointer events (will use the cleared editingComponentId)
+            const contentWrapper = element.querySelector('div');
+            console.log(`[EDIT-EXIT] Found contentWrapper:`, contentWrapper ? 'YES' : 'NO');
+            
+            if (contentWrapper && contentWrapper._updatePointerEvents) {
+                console.log(`[EDIT-EXIT] Calling _updatePointerEvents`);
+                contentWrapper._updatePointerEvents();
+            }
+            
+            element.classList.remove('editing');
+            console.log(`[EDIT-EXIT] Removed editing class`);
+            
+            // Remove visual indicator
+            element.style.outline = 'none';
+            console.log(`[EDIT-EXIT] Removed outline`);
+        }
+        
+        // Remove event listeners
+        console.log(`[EDIT-EXIT] Removing event listeners`);
+        document.removeEventListener('mousedown', this.handleEditModeOutsideClick);
+        document.removeEventListener('keydown', this.handleEditModeEscape);
+        
+        // Brief delay to ensure event listeners are fully removed before next interaction
+        setTimeout(() => {
+            console.log(`[EDIT-EXIT] Event listeners removal confirmed`);
+        }, 10);
+        
+        console.log(`[EDIT-EXIT] Exit process completed for component ${componentId}`);
+        
+        // Force immediate update of all HTML components to ensure consistent state
+        this.htmlComponents.forEach((element, id) => {
+            const contentWrapper = element.querySelector('div');
+            if (contentWrapper && contentWrapper._updatePointerEvents) {
+                contentWrapper._updatePointerEvents();
+            }
+        });
+        
+        // Force a canvas redraw to ensure visual state is consistent
+        this.redrawCanvas();
+        
+        console.log(`[EDIT-EXIT] Forced state update and redraw`);
+    }
+    
+    // Handle clicks outside during edit mode
+    handleEditModeOutsideClick = (e) => {
+        console.log(`[EDIT-EXIT] Outside click detected, editing: ${this.editingComponentId}`);
+        console.log(`[EDIT-EXIT] Click target:`, e.target.tagName, e.target.className);
+        
+        if (!this.editingComponentId) return;
+        
+        const element = this.htmlComponents.get(this.editingComponentId);
+        if (element) {
+            const isOutside = !element.contains(e.target);
+            const isCanvasClick = e.target.tagName === 'CANVAS';
+            const isCanvasContainer = e.target.classList.contains('canvas-container');
+            
+            console.log(`[EDIT-EXIT] Click outside component: ${isOutside}`);
+            console.log(`[EDIT-EXIT] Canvas click: ${isCanvasClick}, Container click: ${isCanvasContainer}`);
+            console.log(`[EDIT-EXIT] Is resizing: ${this.isResizing}`);
+            
+            // Exit edit mode if clicking outside the component
+            // BUT stay in edit mode if currently resizing (to allow resize operations)
+            if (isOutside) {
+                if (this.isResizing) {
+                    console.log(`[EDIT-EXIT] Currently resizing - staying in edit mode`);
+                } else {
+                    console.log(`[EDIT-EXIT] Exiting edit mode due to outside click`);
+                    this.exitComponentEditMode();
+                }
+            }
+        }
+    }
+    
+    // Handle ESC key during edit mode
+    handleEditModeEscape = (e) => {
+        console.log(`[EDIT-EXIT] Key pressed: ${e.key}, editing: ${this.editingComponentId}`);
+        if (e.key === 'Escape') {
+            console.log(`[EDIT-EXIT] ESC key detected!`);
+            if (this.editingComponentId) {
+                console.log(`[EDIT-EXIT] Exiting edit mode due to ESC key for component: ${this.editingComponentId}`);
+                this.exitComponentEditMode();
+            } else {
+                console.log(`[EDIT-EXIT] ESC pressed but no component in edit mode`);
+            }
         }
     }
     
@@ -4810,7 +5413,7 @@ class CanvasMaker {
         
         // Work in world coordinates (much simpler and more reliable)
         const handleSize = 8; // Handle size in world coordinates - canvas transform handles scaling
-        const tolerance = 4; // Tolerance in world coordinates - canvas transform handles scaling
+        const tolerance = 6; // 6px radius around resize handles for precise interaction
         
         // Create handles in world coordinates matching the drawing function
         const handles = [
@@ -4830,6 +5433,32 @@ class CanvasMaker {
                 worldY >= handle.y - tolerance && worldY <= handle.y + handleSize + tolerance) {
                 return handle.type;
             }
+        }
+        
+        // If not on a handle, check if hovering over container edges for edge resizing
+        const edgeTolerance = 6; // 6px radius around edges for precise interaction
+        
+        // Check if near edges (but only allow resize from outside or very close to edge)
+        const nearLeft = Math.abs(worldX - bounds.x) <= edgeTolerance;
+        const nearRight = Math.abs(worldX - (bounds.x + bounds.width)) <= edgeTolerance;
+        const nearTop = Math.abs(worldY - bounds.y) <= edgeTolerance;
+        const nearBottom = Math.abs(worldY - (bounds.y + bounds.height)) <= edgeTolerance;
+        
+        // Only allow edge resizing if we're actually near an edge, not deep inside component
+        const isNearAnyEdge = nearLeft || nearRight || nearTop || nearBottom;
+        
+        if (isNearAnyEdge) {
+            // Corner resizing (prioritize corners over edges)
+            if (nearLeft && nearTop) return 'nw';
+            if (nearRight && nearTop) return 'ne'; 
+            if (nearLeft && nearBottom) return 'sw';
+            if (nearRight && nearBottom) return 'se';
+            
+            // Edge resizing - only if close to that specific edge
+            if (nearLeft) return 'w';
+            if (nearRight) return 'e';
+            if (nearTop) return 'n';
+            if (nearBottom) return 's';
         }
         
         return null;
@@ -4935,6 +5564,11 @@ class CanvasMaker {
         
         this.dragOffset.x = currentX;
         this.dragOffset.y = currentY;
+        
+        // Update HTML component size in real-time during resize for React components
+        if (element.type === 'shape' && canvasContext.shapes[element.index].type === 'reactComponent') {
+            this.updateReactComponentHTML(canvasContext.shapes[element.index]);
+        }
     }
     
     // Testing helper functions for camera constraints and CSS transforms
