@@ -608,6 +608,9 @@ class CanvasMaker {
         this.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this));
         this.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
         
+        // Context menu for components
+        this.canvas.addEventListener('contextmenu', this.handleContextMenu.bind(this));
+        
         // Recenter button
         if (this.recenterBtn) {
             this.recenterBtn.addEventListener('click', this.recenterCanvas.bind(this));
@@ -1392,9 +1395,22 @@ class CanvasMaker {
     }
     
     // Remove a React component shape
-    removeReactComponent(shape) {
-        // console.log('[REMOVE] removeReactComponent called for shape:', shape.id);
-        console.trace('Remove stack trace');
+    removeReactComponent(shapeOrId) {
+        // Handle both shape object and ID parameters
+        let shape;
+        if (typeof shapeOrId === 'string' || typeof shapeOrId === 'number') {
+            // Find shape by ID
+            shape = this.activeCanvasContext.shapes.find(s => s.id === shapeOrId);
+            if (!shape) {
+                console.warn(`[REMOVE] No reactComponent found with ID: ${shapeOrId}`);
+                return false;
+            }
+        } else {
+            // Direct shape object
+            shape = shapeOrId;
+        }
+        
+        console.log('[REMOVE] removeReactComponent called for shape:', shape.id);
         const shapes = this.activeCanvasContext.shapes;
         const index = shapes.indexOf(shape);
         if (index > -1) {
@@ -1424,10 +1440,71 @@ class CanvasMaker {
                 shape.domElement.parentElement.removeChild(shape.domElement);
             }
             
+            // Clean up from HTML rendering layer
+            if (this.htmlRenderingLayer) {
+                const htmlElement = this.htmlRenderingLayer.querySelector(`[data-component-id="${shape.id}"]`);
+                if (htmlElement) {
+                    htmlElement.remove();
+                }
+            }
+            
+            console.log(`[REMOVE] Successfully removed reactComponent ${shape.id} from both layers`);
             this.redrawCanvas();
             return true;
         }
         return false;
+    }
+    
+    // Clear all React components from both layers
+    clearAllReactComponents() {
+        console.log('[CLEAR-ALL] Clearing all React components');
+        const shapes = this.activeCanvasContext.shapes;
+        let removedCount = 0;
+        
+        // Create a copy of the array to avoid modification during iteration
+        const reactShapes = shapes.filter(shape => shape.type === 'reactComponent');
+        
+        for (const shape of reactShapes) {
+            // Clean up canvas renderer
+            if (shape.canvasRenderer) {
+                // Stop observing DOM changes
+                if (shape.canvasRenderer.observer) {
+                    shape.canvasRenderer.observer.disconnect();
+                }
+                
+                // Remove from canvas components registry
+                if (this.canvasComponents) {
+                    for (const [id, registeredShape] of this.canvasComponents) {
+                        if (registeredShape === shape) {
+                            this.canvasComponents.delete(id);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Remove DOM element from document
+            if (shape.domElement && shape.domElement.parentElement) {
+                shape.domElement.parentElement.removeChild(shape.domElement);
+            }
+            
+            // Clean up from HTML rendering layer
+            if (this.htmlRenderingLayer) {
+                const htmlElement = this.htmlRenderingLayer.querySelector(`[data-component-id="${shape.id}"]`);
+                if (htmlElement) {
+                    htmlElement.remove();
+                }
+            }
+            
+            removedCount++;
+        }
+        
+        // Remove all reactComponent shapes from the shapes array
+        this.activeCanvasContext.shapes = shapes.filter(shape => shape.type !== 'reactComponent');
+        
+        console.log(`[CLEAR-ALL] Successfully removed ${removedCount} React components from both layers`);
+        this.redrawCanvas();
+        return removedCount;
     }
     
     // React Component Registration System
@@ -3059,6 +3136,32 @@ class CanvasMaker {
             e.preventDefault();
             this.resetZoom();
         }
+        
+        // Layer management shortcuts
+        if (isModifierPressed && e.key === ']' && this.selectedElements.length > 0) {
+            e.preventDefault();
+            this.selectedElements.forEach(element => {
+                this.bringToFront(element);
+            });
+            this.redraw();
+        }
+        
+        if (isModifierPressed && e.key === '[' && this.selectedElements.length > 0) {
+            e.preventDefault();
+            this.selectedElements.forEach(element => {
+                this.sendToBack(element);
+            });
+            this.redraw();
+        }
+        
+        // Duplicate shortcut
+        if (isModifierPressed && e.key === 'd' && this.selectedElements.length > 0) {
+            e.preventDefault();
+            this.selectedElements.forEach(element => {
+                this.duplicateElement(element);
+            });
+            this.redraw();
+        }
     }
     
     handleWheel(e) {
@@ -3200,6 +3303,230 @@ class CanvasMaker {
             x: (this.touches[0].clientX + this.touches[1].clientX) / 2,
             y: (this.touches[0].clientY + this.touches[1].clientY) / 2
         };
+    }
+    
+    handleContextMenu(e) {
+        e.preventDefault(); // Prevent default browser context menu
+        
+        const pos = this.getMousePos(e);
+        const clickedElement = this.getElementAtPoint(pos.x, pos.y);
+        
+        if (clickedElement) {
+            this.showContextMenu(e, clickedElement);
+        }
+    }
+    
+    showContextMenu(e, element) {
+        // Remove any existing context menu
+        this.hideContextMenu();
+        
+        const contextMenu = document.createElement('div');
+        contextMenu.className = 'context-menu';
+        contextMenu.innerHTML = `
+            <div class="context-menu-item" data-action="bring-to-front">
+                <span>Bring to Front</span>
+                <span class="context-menu-shortcut">Ctrl+]</span>
+            </div>
+            <div class="context-menu-item" data-action="send-to-back">
+                <span>Send to Back</span>
+                <span class="context-menu-shortcut">Ctrl+[</span>
+            </div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" data-action="duplicate">
+                <span>Duplicate</span>
+                <span class="context-menu-shortcut">Ctrl+D</span>
+            </div>
+            <div class="context-menu-item" data-action="delete">
+                <span>Delete</span>
+                <span class="context-menu-shortcut">Del</span>
+            </div>
+        `;
+        
+        // Position menu at cursor
+        contextMenu.style.left = e.clientX + 'px';
+        contextMenu.style.top = e.clientY + 'px';
+        
+        // Add to DOM
+        document.body.appendChild(contextMenu);
+        this.currentContextMenu = contextMenu;
+        this.contextMenuElement = element;
+        
+        // Add event listeners
+        contextMenu.addEventListener('click', (e) => {
+            const action = e.target.closest('.context-menu-item')?.dataset.action;
+            if (action) {
+                this.handleContextMenuAction(action, element);
+            }
+            this.hideContextMenu();
+        });
+        
+        // Hide menu on outside click
+        setTimeout(() => {
+            document.addEventListener('click', this.hideContextMenu.bind(this), { once: true });
+        }, 10);
+    }
+    
+    hideContextMenu() {
+        if (this.currentContextMenu) {
+            this.currentContextMenu.remove();
+            this.currentContextMenu = null;
+            this.contextMenuElement = null;
+        }
+    }
+    
+    handleContextMenuAction(action, element) {
+        switch (action) {
+            case 'bring-to-front':
+                this.bringToFront(element);
+                break;
+            case 'send-to-back':
+                this.sendToBack(element);
+                break;
+            case 'duplicate':
+                this.duplicateElement(element);
+                break;
+            case 'delete':
+                this.deleteElement(element);
+                break;
+        }
+        this.redraw();
+    }
+    
+    bringToFront(element) {
+        const shapes = this.activeCanvasContext.shapes;
+        
+        if (element.type === 'shape') {
+            const shape = shapes[element.index];
+            if (shape) {
+                // Remove from current position and add to end (front)
+                shapes.splice(element.index, 1);
+                shapes.push(shape);
+                console.log(`[BRING-TO-FRONT] Moved shape to front`, shape);
+            }
+        } else if (element.type === 'text') {
+            // For text elements, we need to work with the texts array
+            const texts = this.activeCanvasContext.texts;
+            const text = texts[element.index];
+            if (text) {
+                texts.splice(element.index, 1);
+                texts.push(text);
+                console.log(`[BRING-TO-FRONT] Moved text to front`, text);
+            }
+        } else if (element.type === 'path') {
+            // For path elements, work with paths array
+            const paths = this.activeCanvasContext.paths;
+            const path = paths[element.index];
+            if (path) {
+                paths.splice(element.index, 1);
+                paths.push(path);
+                console.log(`[BRING-TO-FRONT] Moved path to front`, path);
+            }
+        }
+        
+        // Clear selection to avoid index issues
+        this.selectedElements = [];
+    }
+    
+    sendToBack(element) {
+        const shapes = this.activeCanvasContext.shapes;
+        
+        if (element.type === 'shape') {
+            const shape = shapes[element.index];
+            if (shape) {
+                // Remove from current position and add to beginning (back)
+                shapes.splice(element.index, 1);
+                shapes.unshift(shape);
+                console.log(`[SEND-TO-BACK] Moved shape to back`, shape);
+            }
+        } else if (element.type === 'text') {
+            const texts = this.activeCanvasContext.texts;
+            const text = texts[element.index];
+            if (text) {
+                texts.splice(element.index, 1);
+                texts.unshift(text);
+                console.log(`[SEND-TO-BACK] Moved text to back`, text);
+            }
+        } else if (element.type === 'path') {
+            const paths = this.activeCanvasContext.paths;
+            const path = paths[element.index];
+            if (path) {
+                paths.splice(element.index, 1);
+                paths.unshift(path);
+                console.log(`[SEND-TO-BACK] Moved path to back`, path);
+            }
+        }
+        
+        // Clear selection to avoid index issues
+        this.selectedElements = [];
+    }
+    
+    duplicateElement(element) {
+        if (element.type === 'shape') {
+            const shape = this.activeCanvasContext.shapes[element.index];
+            if (shape) {
+                const duplicate = {
+                    ...shape,
+                    id: Date.now() + Math.random(),
+                    x: shape.x + 20,
+                    y: shape.y + 20
+                };
+                this.activeCanvasContext.shapes.push(duplicate);
+                console.log(`[DUPLICATE] Created duplicate shape`, duplicate);
+                
+                // If it's a reactComponent, also duplicate the DOM element
+                if (shape.type === 'reactComponent' && shape.domElement) {
+                    const clonedElement = shape.domElement.cloneNode(true);
+                    duplicate.domElement = clonedElement;
+                    duplicate.canvasRenderer = this.createCanvasRenderer(clonedElement);
+                    // The duplicated component will be rendered on next redraw
+                }
+            }
+        } else if (element.type === 'text') {
+            const text = this.activeCanvasContext.texts[element.index];
+            if (text) {
+                const duplicate = {
+                    ...text,
+                    x: text.x + 20,
+                    y: text.y + 20
+                };
+                this.activeCanvasContext.texts.push(duplicate);
+                console.log(`[DUPLICATE] Created duplicate text`, duplicate);
+            }
+        } else if (element.type === 'path') {
+            const path = this.activeCanvasContext.paths[element.index];
+            if (path) {
+                const duplicate = {
+                    ...path,
+                    points: path.points.map(point => ({ ...point, x: point.x + 20, y: point.y + 20 }))
+                };
+                this.activeCanvasContext.paths.push(duplicate);
+                console.log(`[DUPLICATE] Created duplicate path`, duplicate);
+            }
+        }
+    }
+    
+    deleteElement(element) {
+        if (element.type === 'shape') {
+            const shape = this.activeCanvasContext.shapes[element.index];
+            if (shape) {
+                // If it's a reactComponent, clean up DOM element
+                if (shape.type === 'reactComponent') {
+                    this.removeReactComponent(shape.id);
+                } else {
+                    this.activeCanvasContext.shapes.splice(element.index, 1);
+                }
+                console.log(`[DELETE] Removed shape`, shape);
+            }
+        } else if (element.type === 'text') {
+            this.activeCanvasContext.texts.splice(element.index, 1);
+            console.log(`[DELETE] Removed text at index`, element.index);
+        } else if (element.type === 'path') {
+            this.activeCanvasContext.paths.splice(element.index, 1);
+            console.log(`[DELETE] Removed path at index`, element.index);
+        }
+        
+        // Clear selection
+        this.selectedElements = [];
     }
     
     zoomIn() {

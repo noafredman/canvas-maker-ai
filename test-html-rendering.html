@@ -54,6 +54,153 @@
             position: relative;
         }
         
+        #canvas {
+            border: 1px solid #ccc;
+            background: white;
+            display: block;
+        }
+
+        /* Floating Toolbar Styles */
+        .floating-toolbar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            user-select: none;
+        }
+
+        .toolbar-drag-handle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            cursor: move;
+            color: #666;
+            opacity: 0.6;
+        }
+
+        .toolbar-content {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .toolbar-section {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .toolbar-divider {
+            width: 1px;
+            height: 24px;
+            background: rgba(0, 0, 0, 0.1);
+            margin: 0 4px;
+        }
+
+        .tool-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #666;
+            transition: all 0.15s ease;
+        }
+
+        .tool-btn:hover {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+        }
+
+        .tool-btn.active {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .clear-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #666;
+            transition: all 0.15s ease;
+        }
+
+        .clear-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .canvas-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border-radius: 8px;
+            padding: 4px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .zoom-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .zoom-indicator {
+            padding: 0 8px;
+            font-size: 11px;
+            font-weight: 500;
+            color: #666;
+            min-width: 35px;
+            text-align: center;
+        }
+
+        .selection-box {
+            position: absolute;
+            border: 2px dashed #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+            pointer-events: none;
+            display: none;
+        }
+        
         .log {
             margin-top: 20px;
             padding: 15px;
@@ -144,9 +291,12 @@
             <button onclick="testPersistence()" style="background: #6f42c1;">💾 Test Persistence</button>
             <button onclick="testGranularClear()" style="background: #fd7e14;">🧹 Test Granular Clear</button>
             <button onclick="testResizeLimits()" style="background: #20c997;">📏 Test Resize Limits</button>
+            <button onclick="testClearBug()" style="background: #dc3545;">🐛 Test Clear Bug</button>
             <button onclick="testExternalConstraintAPI()" style="background: #6c757d;">⚙️ Test External Constraint API</button>
             <button onclick="clearComponents()">Clear All (Old Method)</button>
             <button onclick="testEnhancedClear()" style="background: #e74c3c;">🧪 Test Enhanced Clear()</button>
+            <button onclick="testClearHTMLComponentsOnly()" style="background: #20c997;">🎯 Test Clear HTML Only</button>
+            <button onclick="testBasicDrawing()" style="background: #17a2b8;">🎨 Test Basic Drawing</button>
             <button onclick="testZoom()">Test Zoom</button>
             <button onclick="testPan()">Test Pan</button>
             <br>
@@ -164,7 +314,96 @@
             </small>
         </div>
         
-        <div class="canvas-wrapper" id="canvas-container"></div>
+        <div class="canvas-wrapper" id="canvas-container">
+            <canvas id="canvas" width="800" height="600"></canvas>
+            <div id="selection-box" class="selection-box"></div>
+            
+            <!-- Floating Toolbar -->
+            <div id="floating-toolbar" class="floating-toolbar">
+                <div class="toolbar-drag-handle" id="toolbar-drag-handle">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="5" cy="7" r="1"/>
+                        <circle cx="12" cy="7" r="1"/>
+                        <circle cx="19" cy="7" r="1"/>
+                        <circle cx="5" cy="12" r="1"/>
+                        <circle cx="12" cy="12" r="1"/>
+                        <circle cx="19" cy="12" r="1"/>
+                        <circle cx="5" cy="17" r="1"/>
+                        <circle cx="12" cy="17" r="1"/>
+                        <circle cx="19" cy="17" r="1"/>
+                    </svg>
+                </div>
+                
+                <div class="toolbar-content">
+                    <div class="toolbar-section">
+                        <button id="pen-tool" class="tool-btn" data-tool="pen" title="Pen Tool">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                            </svg>
+                        </button>
+                        <button id="rectangle-tool" class="tool-btn" data-tool="rectangle" title="Rectangle Tool">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 3v18h18V3H3zm16 16H5V5h14v14z"/>
+                            </svg>
+                        </button>
+                        <button id="circle-tool" class="tool-btn" data-tool="circle" title="Circle Tool">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/>
+                            </svg>
+                        </button>
+                        <button id="text-tool" class="tool-btn" data-tool="text" title="Text Tool">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M5 4v3h5.5v12h3V7H19V4z"/>
+                            </svg>
+                        </button>
+                        <button id="select-tool" class="tool-btn active" data-tool="select" title="Select Tool">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M2 2v6h2V4h4V2H2zm0 16v-6h2v4h4v2H2zm20 0h-6v2h4v-4h2v6zm0-16V2h-6v2h4v4h2V6z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="toolbar-divider"></div>
+                    
+                    <div class="toolbar-section">
+                        <button id="clear-btn" class="clear-btn" title="Clear Canvas">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="canvas-controls">
+                <div class="zoom-controls">
+                    <button id="zoom-out-btn" class="zoom-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 13H5v-2h14v2z"/>
+                        </svg>
+                    </button>
+                    <div id="zoom-indicator" class="zoom-indicator">100%</div>
+                    <button id="zoom-in-btn" class="zoom-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                    </button>
+                </div>
+                <button id="recenter-btn" class="recenter-btn" style="display: none;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                    </svg>
+                </button>
+                <button id="reset-zoom-btn" class="recenter-btn" style="display: none;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        <text x="9.5" y="11" text-anchor="middle" font-size="6" font-weight="bold" fill="currentColor">100</text>
+                    </svg>
+                </button>
+            </div>
+        </div>
         
         <div class="log" id="log">
             <div><strong>Log:</strong></div>
@@ -176,21 +415,35 @@
         let canvasMaker;
         let componentCount = 0;
         
-        // Initialize CanvasMaker
+        // Initialize CanvasMaker - wait for the auto-created instance
         function initializeCanvas() {
-            const container = document.getElementById('canvas-container');
-            canvasMaker = new CanvasMaker(container, {
-                width: 1000,
-                height: 600,
-                createToolbar: true
-            });
-            
-            log('CanvasMaker initialized with HTML rendering support');
-            
-            // Listen for component clicks
-            canvasMaker.canvas.addEventListener('canvasComponentClick', (e) => {
-                log(`Component clicked: ${e.detail.shape.id}`);
-            });
+            // Wait for the auto-created CanvasMaker instance
+            const waitForCanvasMaker = () => {
+                if (window.canvasMaker) {
+                    canvasMaker = window.canvasMaker;
+                    log('Found auto-created CanvasMaker instance');
+                    log(`Canvas: ${canvasMaker.canvas ? canvasMaker.canvas.width + 'x' + canvasMaker.canvas.height : 'NOT FOUND'}`);
+                    
+                    // Listen for component clicks
+                    if (canvasMaker.canvas) {
+                        canvasMaker.canvas.addEventListener('canvasComponentClick', (e) => {
+                            log(`Component clicked: ${e.detail.shape.id}`);
+                        });
+                    }
+                    
+                    // Test basic functionality
+                    setTimeout(() => {
+                        addCenterButton();
+                        setTimeout(() => {
+                            addCard();
+                        }, 500);
+                    }, 100);
+                } else {
+                    // Try again in 100ms
+                    setTimeout(waitForCanvasMaker, 100);
+                }
+            };
+            waitForCanvasMaker();
         }
         
         // Add a button component
@@ -861,6 +1114,102 @@
             }, 1000);
         }
         
+        // Test clear bug with reactComponent container shapes
+        function testClearBug() {
+            log('🐛 TESTING CLEAR BUG - ReactComponent Container Persistence');
+            
+            // First clear everything to start clean
+            canvasMaker.clearAll();
+            
+            log('- Step 1: Testing with addHTMLComponent (outer app approach)...');
+            
+            // Test what the outer app is doing
+            const component = canvasMaker.addHTMLComponent(0, 0, 200, 100, 
+                '<div style="padding: 10px; background: #ff6b6b; color: white; text-align: center; border-radius: 4px;"><strong>Test Component</strong><br><small>Should disappear completely after clear()</small></div>', 
+                {id: 'test-clear-bug', isReactComponent: true}
+            );
+            
+            log(`  • HTML component created: ${component.id}`);
+            log(`  • Shapes in canvas: ${canvasMaker.activeCanvasContext.shapes.length}`);
+            log(`  • HTML components: ${canvasMaker.htmlComponents ? canvasMaker.htmlComponents.size : 0}`);
+            
+            // Show current state details
+            const reactShapes = canvasMaker.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+            log(`  • ReactComponent shapes: ${reactShapes.length}`);
+            reactShapes.forEach((shape, i) => {
+                log(`    ${i+1}. ID: ${shape.id}, Type: ${shape.type}, Size: ${shape.width}x${shape.height}`);
+            });
+            
+            setTimeout(() => {
+                log('- Step 2: Calling clear() method...');
+                log('  • Before clear() - Visual check: You should see a red component on canvas');
+                
+                // Call the clear method
+                canvasMaker.clear();
+                
+                setTimeout(() => {
+                    log('- Step 3: Checking state after clear()...');
+                    
+                    const shapesAfter = canvasMaker.activeCanvasContext.shapes.length;
+                    const htmlComponentsAfter = canvasMaker.htmlComponents ? canvasMaker.htmlComponents.size : 0;
+                    const reactShapesAfter = canvasMaker.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent').length;
+                    
+                    log(`  • Total shapes after clear(): ${shapesAfter}`);
+                    log(`  • HTML components after clear(): ${htmlComponentsAfter}`);
+                    log(`  • ReactComponent shapes after clear(): ${reactShapesAfter}`);
+                    
+                    // Visual verification
+                    log('  • After clear() - Visual check: Canvas should be completely empty');
+                    
+                    // Test result
+                    const isCleanlyCleared = shapesAfter === 0 && htmlComponentsAfter === 0 && reactShapesAfter === 0;
+                    
+                    if (isCleanlyCleared) {
+                        log('✅ SUCCESS: clear() properly removed all visual elements including reactComponent containers');
+                    } else {
+                        log('❌ BUG CONFIRMED: clear() left some elements behind');
+                        log(`   • Remaining shapes: ${shapesAfter}`);
+                        log(`   • Remaining HTML components: ${htmlComponentsAfter}`);
+                        log(`   • Remaining reactComponent shapes: ${reactShapesAfter}`);
+                        
+                        if (reactShapesAfter > 0) {
+                            log('   🔍 ReactComponent shapes still exist - this causes visual container persistence');
+                        }
+                    }
+                    
+                    // Force canvas inspection
+                    log('- Step 4: Canvas layer inspection...');
+                    const canvas = canvasMaker.activeCanvasContext.canvas;
+                    const ctx = canvasMaker.activeCanvasContext.ctx;
+                    
+                    // Get image data to check if canvas is truly empty
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const pixels = imageData.data;
+                    let hasVisiblePixels = false;
+                    
+                    // Check for non-transparent pixels (quick sample check)
+                    for (let i = 3; i < pixels.length; i += 4) { // Check alpha channel every 4th element
+                        if (pixels[i] > 0) {
+                            hasVisiblePixels = true;
+                            break;
+                        }
+                    }
+                    
+                    log(`  • Canvas has visible pixels: ${hasVisiblePixels}`);
+                    
+                    if (!hasVisiblePixels) {
+                        log('✅ Canvas layer is visually clean');
+                    } else {
+                        log('❌ Canvas layer still has visible content');
+                    }
+                    
+                    componentCount = 0;
+                    log('');
+                    log('🔍 BUG TEST COMPLETED - Check results above');
+                }, 100);
+            }, 1500);
+        }
+        
         // Logging function
         function log(message) {
             const logDiv = document.getElementById('log');
@@ -883,6 +1232,144 @@
             }, 500);
         });
         
+        // Test clearHTMLComponents specifically
+        function testClearHTMLComponentsOnly() {
+            log('🧪 TESTING clearHTMLComponents() Method');
+            
+            // Clear only HTML components first, preserve user-drawn shapes
+            canvasMaker.clearHTMLComponents();
+            
+            log('- Step 1: Adding mixed content...');
+            
+            // Add some regular shapes directly to the shapes array
+            canvasMaker.activeCanvasContext.shapes.push({
+                type: 'rectangle',
+                x: 50,
+                y: 50,
+                width: 100,
+                height: 100,
+                fillColor: '#28a745'
+            });
+            
+            canvasMaker.activeCanvasContext.shapes.push({
+                type: 'circle',
+                x: 200,
+                y: 100,
+                radius: 50,
+                fillColor: '#ffc107'
+            });
+            
+            // Trigger redraw to show the shapes
+            canvasMaker.redrawCanvas();
+            
+            // Add HTML components
+            const comp1 = canvasMaker.addHTMLComponent(300, 50, 150, 80,
+                '<div style="background: #17a2b8; color: white; padding: 10px; text-align: center;">HTML Component 1</div>',
+                { id: 'html-comp-1' }
+            );
+            
+            const comp2 = canvasMaker.addHTMLComponent(300, 150, 150, 80,
+                '<div style="background: #6f42c1; color: white; padding: 10px; text-align: center;">HTML Component 2</div>',
+                { id: 'html-comp-2' }
+            );
+            
+            log(`  • Added 2 regular shapes (rectangle, circle)`);
+            log(`  • Added 2 HTML components`);
+            log(`  • Total shapes: ${canvasMaker.activeCanvasContext.shapes.length}`);
+            log(`  • HTML components: ${canvasMaker.htmlComponents.size}`);
+            
+            // Debug: Show all shape types
+            log('  • Shape types before clear:');
+            canvasMaker.activeCanvasContext.shapes.forEach((shape, i) => {
+                log(`    ${i}: ${shape.type} (${shape.id || 'no-id'})`);
+            });
+            
+            setTimeout(() => {
+                log('- Step 2: Calling clearHTMLComponents()...');
+                canvasMaker.clearHTMLComponents();
+                
+                setTimeout(() => {
+                    log('- Step 3: Checking results...');
+                    
+                    const remainingShapes = canvasMaker.activeCanvasContext.shapes.length;
+                    const htmlComponents = canvasMaker.htmlComponents.size;
+                    const reactShapes = canvasMaker.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent').length;
+                    
+                    log(`  • Remaining shapes: ${remainingShapes}`);
+                    log(`  • HTML components: ${htmlComponents}`);
+                    log(`  • ReactComponent shapes: ${reactShapes}`);
+                    
+                    // Debug: Show remaining shape types
+                    log('  • Remaining shape types:');
+                    canvasMaker.activeCanvasContext.shapes.forEach((shape, i) => {
+                        log(`    ${i}: ${shape.type} (${shape.id || 'no-id'})`);
+                    });
+                    
+                    if (htmlComponents === 0 && reactShapes === 0 && remainingShapes === 2) {
+                        log('✅ SUCCESS: clearHTMLComponents() works correctly!');
+                        log('  - HTML components removed');
+                        log('  - Regular shapes preserved');
+                    } else {
+                        log('❌ ISSUE: clearHTMLComponents() did not work as expected');
+                        if (htmlComponents > 0) log('  - HTML components still present');
+                        if (reactShapes > 0) log('  - ReactComponent shapes still present');
+                        if (remainingShapes !== 2) log(`  - Wrong number of remaining shapes (expected 2, got ${remainingShapes})`);
+                    }
+                }, 500);
+            }, 1500);
+        }
+
+        // Debug function to test basic canvas drawing
+        function testBasicDrawing() {
+            log('🎨 Testing basic canvas drawing...');
+            
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Clear and draw a test rectangle
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(50, 50, 100, 100);
+            
+            // Draw a test circle
+            ctx.fillStyle = 'blue';
+            ctx.beginPath();
+            ctx.arc(200, 100, 30, 0, Math.PI * 2);
+            ctx.fill();
+            
+            log('  • Drew test shapes directly on canvas');
+            log(`  • Canvas dimensions: ${canvas.width} x ${canvas.height}`);
+            
+            // Test CanvasMaker state
+            if (canvasMaker) {
+                log(`  • CanvasMaker shapes: ${canvasMaker.activeCanvasContext.shapes.length}`);
+                log(`  • HTML components: ${canvasMaker.htmlComponents.size}`);
+                log(`  • Canvas element: ${canvasMaker.canvas ? 'found' : 'NOT FOUND'}`);
+                log(`  • HTML layer: ${canvasMaker.htmlRenderingLayer ? 'found' : 'NOT FOUND'}`);
+                
+                // Debug: Show all shapes in all contexts
+                log('  • Main context shapes:', canvasMaker.mainCanvasContext ? canvasMaker.mainCanvasContext.shapes.length : 'no main');
+                log('  • Nested context shapes:', canvasMaker.nestedCanvasContext ? canvasMaker.nestedCanvasContext.shapes.length : 'no nested');
+                log('  • Active context shapes:', canvasMaker.activeCanvasContext.shapes.length);
+                log('  • Active context is main:', canvasMaker.activeCanvasContext === canvasMaker.mainCanvasContext);
+                
+                // Show shapes in active context
+                if (canvasMaker.activeCanvasContext.shapes.length > 0) {
+                    log('  • Active context shape types:');
+                    canvasMaker.activeCanvasContext.shapes.forEach((shape, i) => {
+                        log(`    ${i}: ${shape.type} (${shape.id || 'no-id'})`);
+                    });
+                }
+                
+                // Try to restore CanvasMaker rendering
+                setTimeout(() => {
+                    log('  • Calling CanvasMaker redraw to restore grid...');
+                    canvasMaker.redrawCanvas();
+                    log('  • Grid should be restored now');
+                }, 1000);
+            }
+        }
+
         // Monitor for HTML components
         setInterval(() => {
             if (canvasMaker && canvasMaker.htmlComponents) {

@@ -2,7 +2,22 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.6)
+## Recent Updates (v1.7)
+
+### Component Layering & Context Menu System
+- ✅ **Right-click context menu** - Modern context menu with bring to front/back, duplicate, and delete options
+- ✅ **Layer management system** - Bring components to front/back by manipulating render order in arrays
+- ✅ **Keyboard shortcuts** - `Ctrl/Cmd + ]` (front), `Ctrl/Cmd + [` (back), `Ctrl/Cmd + D` (duplicate)
+- ✅ **Component duplication** - Create copies of any element including HTML components with DOM cloning
+- ✅ **Enhanced deletion** - Context menu and keyboard deletion with proper cleanup
+
+### Method Export Fixes & API Improvements  
+- 🐛 **Fixed removeReactComponent() accessibility** - Method now accepts both ID strings and shape objects
+- ✅ **Enhanced dual-layer cleanup** - Complete removal from canvas layer, HTML layer, and registry
+- ✅ **Added clearAllReactComponents()** - Efficiently remove all HTML components at once
+- ✅ **Method accessibility verified** - All React component methods properly exported on instance
+
+### Previous Updates (v1.6)
 
 ### Clear Method Bug Fixes & Integration Requirements
 - 🐛 **Fixed clear() reactComponent persistence bug** - `clear()` method now properly removes all reactComponent container shapes
@@ -1839,6 +1854,97 @@ const shape = canvas.addReactComponentWithHTML(0, 0, 250, 150, largeFormHTML, {
 - Rich text content with variable length
 - Data tables or lists with many items
 - Complex UI components with nested scrollable areas
+
+### Component Layering & Context Menu API
+
+Canvas Maker includes a complete layering system with right-click context menus for managing component order and duplication:
+
+#### Context Menu Features
+```javascript
+// Context menu automatically appears on right-click over any element
+// Available options:
+// - Bring to Front (Ctrl/Cmd + ])
+// - Send to Back (Ctrl/Cmd + [)  
+// - Duplicate (Ctrl/Cmd + D)
+// - Delete (Delete key)
+
+// The context menu handles all element types:
+// - Canvas shapes (rectangles, circles)
+// - Text elements
+// - Path elements (pen drawings)
+// - HTML components (reactComponent shapes)
+```
+
+#### Programmatic Layering Methods
+```javascript
+// Bring element to front (moves to end of render array)
+canvas.bringToFront(element);
+
+// Send element to back (moves to beginning of render array)  
+canvas.sendToBack(element);
+
+// Duplicate any element with automatic offset
+canvas.duplicateElement(element);
+
+// Delete element with proper cleanup
+canvas.deleteElement(element);
+
+// All methods trigger automatic canvas redraw
+```
+
+#### Layer Management with Selection
+```javascript
+// Work with selected elements
+if (canvas.selectedElements.length > 0) {
+    // Bring all selected to front
+    canvas.selectedElements.forEach(element => {
+        canvas.bringToFront(element);
+    });
+    
+    // Duplicate all selected elements
+    canvas.selectedElements.forEach(element => {
+        canvas.duplicateElement(element);
+    });
+    
+    canvas.redraw(); // Update display
+}
+```
+
+### Enhanced React Component API (v1.7)
+
+Fixed method export issues - all React component methods are now properly accessible:
+
+#### Core React Component Methods
+```javascript
+// Add HTML component (both signatures work)
+const shape = canvas.addReactComponent(domElement, x, y, width, height, options);
+const shape = canvas.addHTMLComponent(domElement, x, y, width, height, options); // Alias
+
+// Remove component by ID or shape object (FIXED in v1.7)
+canvas.removeReactComponent(componentId);        // ✅ Now works with ID string
+canvas.removeReactComponent(shapeObject);        // ✅ Also works with shape object
+
+// Position component in world coordinates
+canvas.positionReactComponent(shape, camera, canvas);
+
+// Clear all HTML components at once (NEW in v1.7)
+const removedCount = canvas.clearAllReactComponents();
+console.log(`Removed ${removedCount} components`);
+```
+
+#### Enhanced Dual-Layer Cleanup
+```javascript
+// removeReactComponent() now performs complete cleanup:
+// 1. Removes from shapes array (canvas layer)
+// 2. Removes DOM element from document 
+// 3. Cleans HTML rendering layer
+// 4. Disconnects mutation observers
+// 5. Clears component registry
+// 6. Triggers canvas redraw
+
+const success = canvas.removeReactComponent('component-123');
+console.log('Cleanup successful:', success); // true/false
+```
 
 ### Enhanced Persistence and State Management
 

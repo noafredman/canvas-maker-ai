@@ -601,3 +601,49 @@ body > #nested-canvas {
     background: rgba(0, 255, 0, 0.3) !important;
     border: 2px solid green !important;
 }
+
+/* Context Menu Styles */
+.context-menu {
+    position: absolute;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    z-index: 10000;
+    min-width: 180px;
+    padding: 6px 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    backdrop-filter: blur(12px);
+    user-select: none;
+}
+
+.context-menu-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    color: #374151;
+}
+
+.context-menu-item:hover {
+    background-color: #f3f4f6;
+}
+
+.context-menu-item:active {
+    background-color: #e5e7eb;
+}
+
+.context-menu-shortcut {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-left: 24px;
+}
+
+.context-menu-divider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.1);
+    margin: 6px 0;
+}

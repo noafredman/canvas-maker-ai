@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CanvasMaker Layering Test</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .instructions {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .instructions ul {
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        .test-component {
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .test-component-2 {
+            padding: 10px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="instructions">
+        <h3>🎨 CanvasMaker Layering Test</h3>
+        <ul>
+            <li><strong>Right-click</strong> on any shape/component to open context menu</li>
+            <li><strong>Bring to Front:</strong> Right-click → "Bring to Front" or <kbd>Ctrl/Cmd + ]</kbd></li>
+            <li><strong>Send to Back:</strong> Right-click → "Send to Back" or <kbd>Ctrl/Cmd + [</kbd></li>
+            <li><strong>Duplicate:</strong> Right-click → "Duplicate" or <kbd>Ctrl/Cmd + D</kbd></li>
+            <li><strong>Delete:</strong> Right-click → "Delete" or <kbd>Delete</kbd> key</li>
+        </ul>
+    </div>
+    
+    <div id="app">
+        <!-- CanvasMaker will auto-initialize here -->
+    </div>
+
+    <script src="canvas.js"></script>
+    <script>
+        // Wait for CanvasMaker to auto-initialize
+        setTimeout(() => {
+            const canvas = window.canvasMaker;
+            
+            if (canvas) {
+                console.log('🎨 CanvasMaker layering test initialized');
+                
+                // Create some test shapes for layering
+                
+                // Add a large blue rectangle (background)
+                const bgRect = document.createElement('div');
+                bgRect.style.cssText = `
+                    width: 200px;
+                    height: 150px;
+                    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: 600;
+                    font-size: 18px;
+                    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                `;
+                bgRect.textContent = 'Background Layer';
+                canvas.addHTMLComponent(bgRect, 100, 100, 200, 150);
+                
+                // Add a medium green circle (middle)
+                const midCircle = document.createElement('div');
+                midCircle.style.cssText = `
+                    width: 120px;
+                    height: 120px;
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: 600;
+                    font-size: 14px;
+                    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+                `;
+                midCircle.textContent = 'Middle Layer';
+                canvas.addHTMLComponent(midCircle, 150, 120, 120, 120);
+                
+                // Add a small red square (foreground)
+                const fgSquare = document.createElement('div');
+                fgSquare.style.cssText = `
+                    width: 80px;
+                    height: 80px;
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: 600;
+                    font-size: 12px;
+                    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                `;
+                fgSquare.textContent = 'Front Layer';
+                canvas.addHTMLComponent(fgSquare, 180, 140, 80, 80);
+                
+                console.log('✅ Test components added! Right-click to test layering.');
+            } else {
+                console.error('❌ CanvasMaker not found');
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
