@@ -4,11 +4,12 @@ This document provides a complete guide for integrating the Canvas Maker system 
 
 ## Recent Updates (v1.6)
 
-### Clear Method Bug Fixes
+### Clear Method Bug Fixes & Integration Requirements
 - 🐛 **Fixed clear() reactComponent persistence bug** - `clear()` method now properly removes all reactComponent container shapes
 - 🐛 **Fixed clearHTMLComponents() shape filtering** - Method now correctly preserves regular canvas shapes while removing only HTML components
 - ✅ **Added addHTMLComponent() alias** - Backward compatibility method for external applications
 - ✅ **Enhanced clear method reliability** - All granular clear methods now handle reactComponent shapes correctly
+- ⚠️ **CRITICAL: External app persistence integration** - Apps using persistence must clear stored state when calling clear methods
 
 ### Previous Updates (v1.5)
 
@@ -1951,6 +1952,80 @@ console.log('Cleared all content - both shapes and HTML components');
 canvas.clear(); // Same as clearAll()
 // Bug fix: Now properly removes reactComponent container shapes in React integrations
 ```
+
+## ⚠️ **CRITICAL: Persistence Integration Warning**
+
+**If your external application uses persistence** (localStorage, sessionStorage, database, etc.), you **MUST** clear the stored state when calling CanvasMaker clear methods. **The clear methods only clear the active CanvasMaker instance - they do not clear your app's persistence layer.**
+
+### Common Integration Mistake
+```javascript
+// ❌ WRONG: This will restore cleared content immediately!
+canvas.clear();                    // Clears CanvasMaker ✅
+loadPersistedCanvasState();        // Restores everything back ❌
+// Result: HTML components and containers still visible
+```
+
+### Correct Integration Patterns
+
+**Pattern 1: Clear persistence first**
+```javascript
+// ✅ CORRECT: Clear persistence, then CanvasMaker
+localStorage.removeItem('your-canvas-persistence-key');
+sessionStorage.removeItem('your-canvas-state');
+canvas.clear(); // Now stays cleared
+```
+
+**Pattern 2: Prevent restoration after clear**
+```javascript
+// ✅ CORRECT: Clear CanvasMaker, prevent restoration
+canvas.clear();
+this.skipNextPersistenceLoad = true; // Your app's flag
+// Don't call your persistence restoration logic
+```
+
+**Pattern 3: Clear both simultaneously**
+```javascript
+// ✅ CORRECT: Clear both CanvasMaker and persistence
+await Promise.all([
+    canvas.clear(),
+    clearPersistentStorage(), // Your persistence clearing function
+    yourDatabase.clearCanvasState() // If using database
+]);
+```
+
+### Debug Clear Issues
+
+If components/containers still appear after `canvas.clear()`:
+
+```javascript
+// 1. Check if your app is restoring persistence
+console.log('Before clear:', canvas.activeCanvasContext.shapes.length);
+canvas.clear();
+console.log('After clear:', canvas.activeCanvasContext.shapes.length); // Should be 0
+
+setTimeout(() => {
+    console.log('After timeout:', canvas.activeCanvasContext.shapes.length);
+    // If this is > 0, your app is restoring persistence!
+}, 100);
+
+// 2. Check localStorage/sessionStorage
+console.log('Stored state:', localStorage.getItem('your-persistence-key'));
+// If this contains canvas data, clear it!
+
+// 3. Verify HTML components are cleared
+console.log('HTML components:', canvas.htmlComponents.size); // Should be 0
+```
+
+### Integration Checklist
+
+When implementing clear functionality:
+- [ ] ✅ Call `canvas.clear()` or granular clear methods
+- [ ] ✅ Clear your app's localStorage/sessionStorage canvas data
+- [ ] ✅ Clear your app's database/API stored canvas state  
+- [ ] ✅ Prevent automatic persistence restoration after clear
+- [ ] ✅ Test that components/containers disappear completely
+- [ ] ✅ Verify `canvas.activeCanvasContext.shapes.length === 0` after clear
+- [ ] ✅ Verify `canvas.htmlComponents.size === 0` after clear
 
 #### Understanding Auto-Created Shapes
 
