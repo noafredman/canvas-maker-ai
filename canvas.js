@@ -935,6 +935,242 @@ class CanvasMaker {
         
         return shape.hasOverflow || false;
     }
+
+    // Get HTML component data for persistence
+    getHTMLComponentData(componentId) {
+        const shape = this.activeCanvasContext.shapes.find(s => s.id === componentId && s.type === 'reactComponent');
+        if (!shape) {
+            return null;
+        }
+
+        return {
+            id: shape.id,
+            x: shape.x,
+            y: shape.y,
+            width: shape.width,
+            height: shape.height,
+            htmlContent: shape.htmlContent,
+            reactContent: shape.reactContent,
+            domElement: shape.domElement ? {
+                tagName: shape.domElement.tagName,
+                innerHTML: shape.domElement.innerHTML,
+                className: shape.domElement.className,
+                attributes: Array.from(shape.domElement.attributes || []).map(attr => ({
+                    name: attr.name,
+                    value: attr.value
+                }))
+            } : null,
+            coordinateSystem: shape.coordinateSystem || 'world',
+            fill: shape.fill,
+            strokeColor: shape.strokeColor,
+            scrollableSize: shape.scrollableSize,
+            hasOverflow: shape.hasOverflow,
+            overflowInfo: shape.overflowInfo,
+            customProperties: shape.customProperties || {}
+        };
+    }
+
+    // Get all HTML components data
+    getAllHTMLComponentsData() {
+        const reactShapes = this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+        return reactShapes.map(shape => this.getHTMLComponentData(shape.id)).filter(data => data !== null);
+    }
+
+    // Create HTML component from data
+    createHTMLComponentFromData(componentData) {
+        if (!componentData || !componentData.id) {
+            console.warn('[CREATE-FROM-DATA] Invalid component data provided');
+            return null;
+        }
+
+        let content = null;
+        if (componentData.htmlContent) {
+            content = componentData.htmlContent;
+        } else if (componentData.reactContent) {
+            content = componentData.reactContent;
+        } else if (componentData.domElement) {
+            // Recreate DOM element from serialized data
+            const element = document.createElement(componentData.domElement.tagName);
+            element.innerHTML = componentData.domElement.innerHTML;
+            element.className = componentData.domElement.className;
+            
+            if (componentData.domElement.attributes) {
+                componentData.domElement.attributes.forEach(attr => {
+                    element.setAttribute(attr.name, attr.value);
+                });
+            }
+            content = element;
+        }
+
+        if (!content) {
+            console.warn('[CREATE-FROM-DATA] No valid content found in component data');
+            return null;
+        }
+
+        const options = {
+            id: componentData.id,
+            coordinateSystem: componentData.coordinateSystem || 'world',
+            fill: componentData.fill,
+            strokeColor: componentData.strokeColor,
+            customProperties: componentData.customProperties || {}
+        };
+
+        const shape = this.addReactComponentWithHTML(
+            componentData.x, 
+            componentData.y, 
+            componentData.width, 
+            componentData.height, 
+            content, 
+            options
+        );
+
+        // Restore additional properties
+        if (componentData.scrollableSize) {
+            shape.scrollableSize = componentData.scrollableSize;
+            this.setComponentScrollableSize(componentData.id, 
+                componentData.scrollableSize.width, 
+                componentData.scrollableSize.height);
+        }
+
+        console.log(`[CREATE-FROM-DATA] Restored HTML component: ${componentData.id}`);
+        return shape;
+    }
+
+    // Set persistence filter function for custom state control
+    setPersistenceFilter(filterFn) {
+        this.persistenceFilter = filterFn;
+        console.log('[PERSISTENCE] Custom persistence filter set');
+    }
+
+    // Export complete canvas state including HTML components
+    exportState() {
+        const context = this.activeCanvasContext;
+        
+        // Apply persistence filter if set
+        const applyFilter = (item, type) => {
+            if (this.persistenceFilter) {
+                return this.persistenceFilter(item, type);
+            }
+            return true;
+        };
+
+        const state = {
+            version: '1.3',
+            timestamp: Date.now(),
+            camera: {
+                x: context.camera.x,
+                y: context.camera.y,
+                zoom: context.camera.zoom
+            },
+            canvas: {
+                width: context.canvas.width,
+                height: context.canvas.height
+            },
+            paths: context.paths.filter(path => applyFilter(path, 'path')),
+            shapes: context.shapes.filter(shape => applyFilter(shape, 'shape')),
+            texts: context.texts.filter(text => applyFilter(text, 'text')),
+            nestedCanvases: context.nestedCanvases.filter(nested => applyFilter(nested, 'nestedCanvas')),
+            htmlComponents: this.getAllHTMLComponentsData().filter(component => applyFilter(component, 'htmlComponent')),
+            selectedElements: context.selectedElements.filter(element => applyFilter(element, 'selectedElement')),
+            currentTool: this.currentTool,
+            editingComponentId: this.editingComponentId
+        };
+
+        console.log(`[EXPORT-STATE] Exported state with ${state.htmlComponents.length} HTML components`);
+        return state;
+    }
+
+    // Import canvas state including HTML components
+    importState(state) {
+        if (!state || !state.version) {
+            console.warn('[IMPORT-STATE] Invalid state data provided');
+            return false;
+        }
+
+        try {
+            // Clear current content first
+            this.clearAll();
+
+            const context = this.activeCanvasContext;
+
+            // Restore camera
+            if (state.camera) {
+                context.camera.x = state.camera.x || 0;
+                context.camera.y = state.camera.y || 0;
+                context.camera.zoom = state.camera.zoom || 1;
+            }
+
+            // Restore canvas dimensions
+            if (state.canvas) {
+                context.canvas.width = state.canvas.width || context.canvas.width;
+                context.canvas.height = state.canvas.height || context.canvas.height;
+            }
+
+            // Restore paths
+            if (state.paths) {
+                context.paths = [...state.paths];
+            }
+
+            // Restore shapes (excluding reactComponents - they'll be restored as HTML components)
+            if (state.shapes) {
+                context.shapes = state.shapes.filter(shape => shape.type !== 'reactComponent');
+            }
+
+            // Restore texts
+            if (state.texts) {
+                context.texts = [...state.texts];
+            }
+
+            // Restore nested canvases
+            if (state.nestedCanvases) {
+                context.nestedCanvases = [...state.nestedCanvases];
+            }
+
+            // Restore HTML components
+            if (state.htmlComponents) {
+                state.htmlComponents.forEach(componentData => {
+                    this.createHTMLComponentFromData(componentData);
+                });
+            }
+
+            // Restore selected elements (validate they still exist)
+            if (state.selectedElements) {
+                context.selectedElements = state.selectedElements.filter(element => {
+                    if (element.type === 'shape') {
+                        return element.index < context.shapes.length;
+                    } else if (element.type === 'text') {
+                        return element.index < context.texts.length;
+                    } else if (element.type === 'path') {
+                        return element.index < context.paths.length;
+                    }
+                    return false;
+                });
+            }
+
+            // Restore tool state
+            if (state.currentTool) {
+                this.setTool(state.currentTool);
+            }
+
+            // Restore editing component
+            if (state.editingComponentId) {
+                const shape = context.shapes.find(s => s.id === state.editingComponentId);
+                if (shape && shape.type === 'reactComponent') {
+                    this.enterComponentEditMode(shape);
+                }
+            }
+
+            // Force redraw
+            this.redrawCanvas();
+
+            console.log(`[IMPORT-STATE] Successfully imported state with ${state.htmlComponents?.length || 0} HTML components`);
+            return true;
+
+        } catch (error) {
+            console.error('[IMPORT-STATE] Failed to import state:', error);
+            return false;
+        }
+    }
     
     // Remove a React component shape
     removeReactComponent(shape) {
@@ -1129,6 +1365,61 @@ class CanvasMaker {
     // API method for external apps to clear everything (canvas + HTML)
     clear() {
         this.clearCanvas();
+    }
+
+    // Granular clear methods for different content types
+    clearShapes() {
+        const context = this.activeCanvasContext;
+        
+        // Clear only canvas shapes (excluding HTML components)
+        context.paths.length = 0;
+        context.shapes = context.shapes.filter(shape => shape.type === 'reactComponent');
+        context.texts.length = 0;
+        context.nestedCanvases.length = 0;
+        
+        // Clear shape-related selections
+        context.selectedElements = context.selectedElements.filter(element => 
+            element.type !== 'shape' && element.type !== 'text' && element.type !== 'path'
+        );
+        
+        // Hide selection boxes for shapes
+        this.hideSelectionBox();
+        
+        console.log('[CLEAR-SHAPES] Cleared canvas shapes, keeping HTML components');
+        this.redrawCanvas();
+    }
+
+    clearHTMLComponents() {
+        const context = this.activeCanvasContext;
+        
+        // Remove all HTML components
+        const htmlShapes = context.shapes.filter(s => s.type === 'reactComponent');
+        htmlShapes.forEach(shape => {
+            this.removeReactComponent(shape);
+        });
+        
+        // Clear HTML-related selections
+        context.selectedElements = context.selectedElements.filter(element => {
+            if (element.type === 'shape') {
+                const shape = context.shapes[element.index];
+                return shape && shape.type !== 'reactComponent';
+            }
+            return true;
+        });
+        
+        // Exit component edit mode if active
+        if (this.editingComponentId) {
+            this.exitComponentEditMode();
+        }
+        
+        console.log('[CLEAR-HTML] Cleared HTML components, keeping canvas shapes');
+        this.redrawCanvas();
+    }
+
+    clearAll() {
+        // Clear everything - equivalent to clear() but more explicit
+        this.clearCanvas();
+        console.log('[CLEAR-ALL] Cleared all content (shapes + HTML components)');
     }
     
     // API method to properly dispose of the canvas instance

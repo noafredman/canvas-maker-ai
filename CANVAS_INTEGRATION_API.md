@@ -2,9 +2,18 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.3)
+## Recent Updates (v1.4)
 
-### HTML Component Scrolling
+### Enhanced Persistence System
+- ✅ **Complete state export/import** - Full canvas state including HTML components, camera, and tool state
+- ✅ **Individual component data access** - Get/set data for specific HTML components
+- ✅ **Persistence filtering hooks** - Custom filters to control what gets saved/loaded
+- ✅ **Granular clear methods** - Separate methods for clearing shapes vs HTML components
+- ✅ **Component recreation** - Restore HTML components from serialized data
+
+### Previous Updates (v1.3)
+
+#### HTML Component Scrolling
 - ✅ **Scrollable HTML content** - Components with overflow content show scrollbars when in edit mode
 - ✅ **Double-click activation** - Scrolling is enabled automatically when entering edit mode
 - ✅ **External size configuration** - Outer apps can set custom scrollable container sizes
@@ -1808,6 +1817,150 @@ const shape = canvas.addReactComponentWithHTML(0, 0, 250, 150, largeFormHTML, {
 - Rich text content with variable length
 - Data tables or lists with many items
 - Complex UI components with nested scrollable areas
+
+### Enhanced Persistence and State Management
+
+Canvas Maker provides comprehensive state management for both canvas elements and HTML components:
+
+#### Complete State Export/Import
+
+```javascript
+// Export complete canvas state including HTML components
+const state = canvas.exportState();
+console.log('Exported state:', {
+    version: state.version,
+    timestamp: state.timestamp,
+    shapes: state.shapes.length,
+    htmlComponents: state.htmlComponents.length,
+    camera: state.camera,
+    currentTool: state.currentTool
+});
+
+// Import previously exported state
+const success = canvas.importState(state);
+console.log('Import success:', success);
+
+// State includes:
+// - All canvas shapes (rectangles, circles, paths, etc.)
+// - All HTML components with their content and properties
+// - Camera position and zoom level
+// - Current tool selection
+// - Active component edit mode
+// - Selection states
+```
+
+#### Individual Component Data Access
+
+```javascript
+// Get data for a specific HTML component
+const componentData = canvas.getHTMLComponentData('my-component-id');
+if (componentData) {
+    console.log('Component data:', {
+        id: componentData.id,
+        position: { x: componentData.x, y: componentData.y },
+        size: { width: componentData.width, height: componentData.height },
+        content: componentData.htmlContent,
+        hasOverflow: componentData.hasOverflow,
+        scrollableSize: componentData.scrollableSize
+    });
+}
+
+// Get all HTML components data for bulk operations
+const allComponents = canvas.getAllHTMLComponentsData();
+console.log(`Found ${allComponents.length} HTML components`);
+
+// Recreate component from saved data
+const restoredComponent = canvas.createHTMLComponentFromData(componentData);
+console.log('Component restored:', restoredComponent ? 'success' : 'failed');
+```
+
+#### Persistence Filtering Hooks
+
+```javascript
+// Set up custom persistence filter
+canvas.setPersistenceFilter((item, type) => {
+    // Filter out temporary or sensitive components
+    if (type === 'htmlComponent') {
+        // Don't persist temporary components
+        if (item.id && item.id.startsWith('temp-')) {
+            console.log('Filtering out temporary component:', item.id);
+            return false;
+        }
+        
+        // Don't persist components with sensitive data
+        if (item.customProperties && item.customProperties.containsSensitiveData) {
+            return false;
+        }
+    }
+    
+    // Filter out certain shape types
+    if (type === 'shape' && item.type === 'reactComponent') {
+        // Don't auto-save reactComponent shapes (save as htmlComponent instead)
+        return false;
+    }
+    
+    // Include everything else
+    return true;
+});
+
+// Export with filtering applied
+const filteredState = canvas.exportState();
+
+// Clear filter (pass null to remove)
+canvas.setPersistenceFilter(null);
+```
+
+#### Granular Clear Methods
+
+```javascript
+// Clear only canvas shapes (keep HTML components)
+canvas.clearShapes();
+console.log('Cleared rectangles, circles, paths, text - HTML components remain');
+
+// Clear only HTML components (keep canvas shapes)
+canvas.clearHTMLComponents();
+console.log('Cleared HTML components - canvas shapes remain');
+
+// Clear everything (equivalent to clear() but more explicit)
+canvas.clearAll();
+console.log('Cleared all content - both shapes and HTML components');
+
+// The original clear() method still works and calls clearAll()
+canvas.clear(); // Same as clearAll()
+```
+
+#### Understanding Auto-Created Shapes
+
+**Important:** When you add an HTML component using `addReactComponentWithHTML()`, Canvas Maker automatically creates a corresponding `reactComponent` shape in the shapes array. This is by design to:
+
+1. **Unified Selection System**: HTML components can be selected alongside canvas shapes
+2. **Consistent Positioning**: Both use the same coordinate system and camera transforms
+3. **Integrated Persistence**: Components are included in standard canvas operations
+
+```javascript
+// When you create an HTML component:
+const shape = canvas.addReactComponentWithHTML(0, 0, 200, 100, htmlContent, {
+    id: 'my-component'
+});
+
+// Canvas Maker automatically:
+// 1. Creates a reactComponent shape in the shapes array
+// 2. Creates corresponding HTML element in the DOM
+// 3. Links them via the same ID for synchronization
+
+// You can access both:
+const shapeData = canvas.getHTMLComponentData('my-component'); // HTML component data
+const shapeIndex = canvas.activeCanvasContext.shapes.findIndex(s => s.id === 'my-component'); // Shape index
+
+// The persistence filter can control this behavior:
+canvas.setPersistenceFilter((item, type) => {
+    // Don't persist auto-created reactComponent shapes if you only want HTML data
+    if (type === 'shape' && item.type === 'reactComponent') {
+        return false; // Will be saved as htmlComponent instead
+    }
+    return true;
+});
+```
 
 ### Best Practices for React Integration
 

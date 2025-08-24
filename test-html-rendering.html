@@ -141,6 +141,8 @@
             <button onclick="addExactCenterButton()">Add Button at Exact Canvas Center</button>
             <button onclick="addScrollableForm()">Add Scrollable Form (Large Content)</button>
             <button onclick="testScrollableFeatures()" style="background: #17a2b8;">🔄 Test Scrollable Features</button>
+            <button onclick="testPersistence()" style="background: #6f42c1;">💾 Test Persistence</button>
+            <button onclick="testGranularClear()" style="background: #fd7e14;">🧹 Test Granular Clear</button>
             <button onclick="clearComponents()">Clear All (Old Method)</button>
             <button onclick="testEnhancedClear()" style="background: #e74c3c;">🧪 Test Enhanced Clear()</button>
             <button onclick="testZoom()">Test Zoom</button>
@@ -152,7 +154,9 @@
                 • Double-click to enter edit mode (interact with buttons/forms)<br>
                 • In edit mode, components with overflow content will show scrollbars<br>
                 • Press ESC or click outside to exit edit mode<br>
-                • Use "Test Scrollable Features" to analyze overflow in components
+                • Use "Test Scrollable Features" to analyze overflow in components<br>
+                • Use "Test Persistence" to demo state export/import and filtering<br>
+                • Use "Test Granular Clear" to demo selective clearing methods
             </small>
         </div>
         
@@ -493,6 +497,180 @@
             });
             
             log('✅ Scrollable features test completed. Double-click components with overflow to test scrolling!');
+        }
+        
+        // Test persistence features (export/import state)
+        function testPersistence() {
+            log('💾 TESTING PERSISTENCE FEATURES');
+            
+            // Check if there's content to export
+            const shapes = canvasMaker.activeCanvasContext.shapes.length;
+            const htmlComponents = canvasMaker.getAllHTMLComponentsData().length;
+            
+            if (shapes === 0 && htmlComponents === 0) {
+                log('⚠️  No content to test persistence. Add some components first.');
+                return;
+            }
+            
+            log(`- Current content: ${shapes} shapes, ${htmlComponents} HTML components`);
+            
+            // Test individual component data access
+            log('- Testing individual component data access:');
+            canvasMaker.activeCanvasContext.shapes
+                .filter(s => s.type === 'reactComponent')
+                .slice(0, 2) // Test first 2 components
+                .forEach(shape => {
+                    const data = canvasMaker.getHTMLComponentData(shape.id);
+                    log(`  • ${shape.id}: ${data ? 'SUCCESS' : 'FAILED'} (size: ${data ? data.width + 'x' + data.height : 'N/A'})`);
+                });
+            
+            // Export state
+            log('- Exporting canvas state...');
+            const exportedState = canvasMaker.exportState();
+            log(`  • Exported ${exportedState.shapes.length} shapes, ${exportedState.htmlComponents.length} HTML components`);
+            log(`  • State version: ${exportedState.version}, timestamp: ${new Date(exportedState.timestamp).toLocaleTimeString()}`);
+            
+            // Test persistence filter
+            log('- Setting up persistence filter (exclude buttons):');
+            canvasMaker.setPersistenceFilter((item, type) => {
+                if (type === 'htmlComponent' && item.id && item.id.includes('button')) {
+                    log(`  • Filtering out: ${item.id}`);
+                    return false;
+                }
+                return true;
+            });
+            
+            const filteredState = canvasMaker.exportState();
+            log(`  • Filtered export: ${filteredState.htmlComponents.length} HTML components (${exportedState.htmlComponents.length - filteredState.htmlComponents.length} buttons filtered out)`);
+            
+            // Clear filter for import test
+            canvasMaker.setPersistenceFilter(null);
+            
+            // Store current camera position
+            const originalCamera = { ...canvasMaker.activeCanvasContext.camera };
+            
+            // Modify camera to test restoration
+            canvasMaker.activeCanvasContext.camera.x = 100;
+            canvasMaker.activeCanvasContext.camera.y = 50;
+            canvasMaker.activeCanvasContext.camera.zoom = 1.5;
+            canvasMaker.redrawCanvas();
+            
+            setTimeout(() => {
+                log('- Importing previous state (should restore original camera and content)...');
+                const success = canvasMaker.importState(exportedState);
+                log(`  • Import ${success ? 'succeeded' : 'failed'}`);
+                
+                if (success) {
+                    const restoredShapes = canvasMaker.activeCanvasContext.shapes.length;
+                    const restoredComponents = canvasMaker.getAllHTMLComponentsData().length;
+                    log(`  • Restored: ${restoredShapes} shapes, ${restoredComponents} HTML components`);
+                    
+                    const camera = canvasMaker.activeCanvasContext.camera;
+                    log(`  • Camera restored: (${camera.x}, ${camera.y}) zoom: ${camera.zoom}`);
+                }
+                
+                log('✅ Persistence test completed!');
+            }, 1000);
+        }
+        
+        // Test granular clear methods
+        function testGranularClear() {
+            log('🧹 TESTING GRANULAR CLEAR METHODS');
+            
+            // Ensure we have mixed content
+            if (canvasMaker.activeCanvasContext.shapes.length === 0) {
+                log('⚠️  Adding test content for granular clear demo...');
+                addButton();
+                addCard();
+                
+                // Add some canvas shapes
+                canvasMaker.activeCanvasContext.shapes.push({
+                    type: 'rectangle',
+                    x: 50,
+                    y: 50,
+                    width: 100,
+                    height: 60,
+                    strokeColor: '#333',
+                    fillColor: '#f0f0f0'
+                });
+                
+                canvasMaker.activeCanvasContext.shapes.push({
+                    type: 'circle',
+                    x: -50,
+                    y: -50,
+                    radius: 40,
+                    strokeColor: '#007bff',
+                    fillColor: 'transparent'
+                });
+                
+                canvasMaker.redrawCanvas();
+                
+                setTimeout(() => testGranularClearActual(), 500);
+                return;
+            }
+            
+            testGranularClearActual();
+        }
+        
+        function testGranularClearActual() {
+            const initialShapes = canvasMaker.activeCanvasContext.shapes.length;
+            const initialHtmlComponents = canvasMaker.getAllHTMLComponentsData().length;
+            const initialCanvasShapes = canvasMaker.activeCanvasContext.shapes.filter(s => s.type !== 'reactComponent').length;
+            
+            log(`- Initial content: ${initialShapes} total shapes (${initialHtmlComponents} HTML, ${initialCanvasShapes} canvas shapes)`);
+            
+            // Test 1: Clear only canvas shapes
+            log('- Test 1: clearShapes() - should keep HTML components');
+            canvasMaker.clearShapes();
+            
+            setTimeout(() => {
+                const afterShapes = canvasMaker.activeCanvasContext.shapes.length;
+                const afterHtmlComponents = canvasMaker.getAllHTMLComponentsData().length;
+                log(`  • After clearShapes(): ${afterShapes} shapes (${afterHtmlComponents} HTML components remain)`);
+                log(`  • ${afterHtmlComponents === initialHtmlComponents ? '✅ SUCCESS' : '❌ FAILED'} - HTML components preserved`);
+                
+                // Add canvas shapes back for next test
+                canvasMaker.activeCanvasContext.shapes.push({
+                    type: 'rectangle',
+                    x: 0,
+                    y: 100,
+                    width: 80,
+                    height: 40,
+                    strokeColor: '#28a745',
+                    fillColor: 'transparent'
+                });
+                canvasMaker.redrawCanvas();
+                
+                // Test 2: Clear only HTML components
+                setTimeout(() => {
+                    log('- Test 2: clearHTMLComponents() - should keep canvas shapes');
+                    canvasMaker.clearHTMLComponents();
+                    
+                    setTimeout(() => {
+                        const finalShapes = canvasMaker.activeCanvasContext.shapes.length;
+                        const finalHtmlComponents = canvasMaker.getAllHTMLComponentsData().length;
+                        const finalCanvasShapes = canvasMaker.activeCanvasContext.shapes.filter(s => s.type !== 'reactComponent').length;
+                        
+                        log(`  • After clearHTMLComponents(): ${finalShapes} shapes (${finalHtmlComponents} HTML, ${finalCanvasShapes} canvas)`);
+                        log(`  • ${finalHtmlComponents === 0 ? '✅ SUCCESS' : '❌ FAILED'} - HTML components cleared`);
+                        log(`  • ${finalCanvasShapes > 0 ? '✅ SUCCESS' : '❌ FAILED'} - Canvas shapes preserved`);
+                        
+                        // Test 3: Clear all
+                        setTimeout(() => {
+                            log('- Test 3: clearAll() - should clear everything');
+                            canvasMaker.clearAll();
+                            
+                            const allShapes = canvasMaker.activeCanvasContext.shapes.length;
+                            const allHtml = canvasMaker.getAllHTMLComponentsData().length;
+                            log(`  • After clearAll(): ${allShapes} shapes, ${allHtml} HTML components`);
+                            log(`  • ${allShapes === 0 && allHtml === 0 ? '✅ SUCCESS' : '❌ FAILED'} - Everything cleared`);
+                            
+                            componentCount = 0;
+                            log('✅ Granular clear methods test completed!');
+                        }, 500);
+                    }, 500);
+                }, 1000);
+            }, 500);
         }
         
         // Logging function
