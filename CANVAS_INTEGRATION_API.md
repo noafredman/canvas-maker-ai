@@ -16,6 +16,7 @@ This document provides a complete guide for integrating the Canvas Maker system 
 - ✅ **Enhanced dual-layer cleanup** - Complete removal from canvas layer, HTML layer, and registry
 - ✅ **Added clearAllReactComponents()** - Efficiently remove all HTML components at once
 - ✅ **Method accessibility verified** - All React component methods properly exported on instance
+- 🐛 **Fixed clearAllReactComponents() DOM cleanup** - Now properly removes visible DOM elements from page
 
 ### Previous Updates (v1.6)
 
@@ -1927,14 +1928,20 @@ canvas.removeReactComponent(shapeObject);        // ✅ Also works with shape ob
 // Position component in world coordinates
 canvas.positionReactComponent(shape, camera, canvas);
 
-// Clear all HTML components at once (NEW in v1.7)
+// Clear all HTML components at once (NEW in v1.7, FIXED DOM cleanup)
 const removedCount = canvas.clearAllReactComponents();
 console.log(`Removed ${removedCount} components`);
+
+// This method now performs complete cleanup:
+// 1. Removes visible DOM elements from page (.remove())
+// 2. Clears htmlComponents Map
+// 3. Removes reactComponent shapes from canvas
+// 4. Disconnects observers and cleans registry
 ```
 
 #### Enhanced Dual-Layer Cleanup
 ```javascript
-// removeReactComponent() now performs complete cleanup:
+// removeReactComponent() performs complete cleanup:
 // 1. Removes from shapes array (canvas layer)
 // 2. Removes DOM element from document 
 // 3. Cleans HTML rendering layer
@@ -1944,6 +1951,16 @@ console.log(`Removed ${removedCount} components`);
 
 const success = canvas.removeReactComponent('component-123');
 console.log('Cleanup successful:', success); // true/false
+
+// clearAllReactComponents() performs bulk cleanup (FIXED v1.7):
+// 1. Removes ALL visible DOM elements from page first
+// 2. Clears htmlComponents Map completely
+// 3. Removes all reactComponent shapes from canvas
+// 4. Disconnects all observers and cleans registry
+// 5. Triggers canvas redraw
+
+const count = canvas.clearAllReactComponents();
+console.log('Total components removed:', count);
 ```
 
 ### Enhanced Persistence and State Management

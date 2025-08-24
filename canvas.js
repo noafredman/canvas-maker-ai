@@ -1461,8 +1461,24 @@ class CanvasMaker {
         const shapes = this.activeCanvasContext.shapes;
         let removedCount = 0;
         
-        // Create a copy of the array to avoid modification during iteration
+        // FIRST: Remove DOM elements from htmlComponents Map before clearing internal state
+        console.log(`[CLEAR-ALL] Removing DOM elements from htmlComponents Map (${this.htmlComponents.size} components)`);
+        const htmlComponentEntries = Array.from(this.htmlComponents.entries());
+        
+        for (const [shapeId, domElement] of htmlComponentEntries) {
+            if (domElement && domElement.remove) {
+                console.log(`[CLEAR-ALL] Removing DOM element for component ${shapeId}`);
+                domElement.remove(); // Remove from DOM
+            }
+        }
+        
+        // Clear the htmlComponents Map
+        this.htmlComponents.clear();
+        console.log('[CLEAR-ALL] Cleared htmlComponents Map');
+        
+        // SECOND: Clean up reactComponent shapes from shapes array
         const reactShapes = shapes.filter(shape => shape.type === 'reactComponent');
+        console.log(`[CLEAR-ALL] Processing ${reactShapes.length} reactComponent shapes`);
         
         for (const shape of reactShapes) {
             // Clean up canvas renderer
@@ -1483,7 +1499,7 @@ class CanvasMaker {
                 }
             }
             
-            // Remove DOM element from document
+            // Remove DOM element from document (backup cleanup)
             if (shape.domElement && shape.domElement.parentElement) {
                 shape.domElement.parentElement.removeChild(shape.domElement);
             }

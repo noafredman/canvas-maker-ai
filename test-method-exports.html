@@ -114,9 +114,17 @@
                     canvas.addReactComponent(comp, 100 + i * 50, 200, 80, 40);
                 }
                 
-                // Test clearAllReactComponents
+                // Test clearAllReactComponents with DOM element verification
+                console.log('[TEST] Before clearAll - DOM elements:', document.querySelectorAll('[data-component-id]').length);
                 const clearedCount = canvas.clearAllReactComponents();
+                console.log('[TEST] After clearAll - DOM elements:', document.querySelectorAll('[data-component-id]').length);
+                
+                // Verify DOM elements were removed
+                const remainingElements = document.querySelectorAll('[data-component-id]').length;
+                const domClearedCorrectly = remainingElements === 0;
+                
                 results += `<div class="method-test success">✅ clearAllReactComponents: Cleared ${clearedCount} components</div>`;
+                results += `<div class="method-test ${domClearedCorrectly ? 'success' : 'error'}">${domClearedCorrectly ? '✅' : '❌'} DOM cleanup: ${remainingElements} elements remaining</div>`;
                 
             } catch (error) {
                 results += `<div class="method-test error">❌ Functional test error: ${error.message}</div>`;
