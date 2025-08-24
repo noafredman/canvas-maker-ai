@@ -1575,7 +1575,7 @@ class CanvasMaker {
         
         // Force complete redraw from current (empty) state
         console.log('[FORCE-CLEAR] Forcing complete redraw from empty state');
-        this.redraw();
+        this.redrawCanvas();
         
         console.log('[FORCE-CLEAR] Visual canvas clearing complete');
     }
