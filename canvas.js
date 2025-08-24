@@ -172,6 +172,32 @@ class CanvasMaker {
             onUnmount: [],
             onUpdate: []
         };
+
+        // Initialize resize constraints
+        this.resizeConstraints = {
+            // Default constraints for all shapes
+            minWidth: 20,
+            minHeight: 20,
+            maxWidth: 2000,
+            maxHeight: 2000,
+            // Specific constraints by shape type
+            reactComponent: {
+                minWidth: 50,
+                minHeight: 30,
+                maxWidth: 1500,
+                maxHeight: 1000
+            },
+            circle: {
+                minRadius: 5,
+                maxRadius: 500
+            },
+            text: {
+                minWidth: 30,
+                minHeight: 20,
+                maxWidth: 1000,
+                maxHeight: 800
+            }
+        };
         
         // Main canvas context structure
         this.mainCanvasContext = {
@@ -934,6 +960,194 @@ class CanvasMaker {
         }
         
         return shape.hasOverflow || false;
+    }
+
+    // Set resize constraints for specific shape types or globally
+    setResizeConstraints(type, constraints, options = {}) {
+        // Validate constraints and provide warnings
+        this._validateResizeConstraints(constraints, options);
+        
+        if (type === 'default' || type === 'global') {
+            // Set default constraints for all shapes
+            Object.assign(this.resizeConstraints, constraints);
+        } else if (this.resizeConstraints[type]) {
+            // Set constraints for specific shape type
+            Object.assign(this.resizeConstraints[type], constraints);
+        } else {
+            // Create new constraints for custom shape type
+            this.resizeConstraints[type] = constraints;
+        }
+        console.log(`[RESIZE-CONSTRAINTS] Updated constraints for ${type}:`, this.resizeConstraints[type] || this.resizeConstraints);
+    }
+
+    // External API: Set global resize constraints with validation and warnings
+    setGlobalResizeConstraints(constraints, options = {}) {
+        const { suppressWarnings = false } = options;
+        
+        if (!suppressWarnings) {
+            this._warnAboutConstraintChanges(constraints, 'global');
+        }
+        
+        return this.setResizeConstraints('global', constraints, { suppressWarnings });
+    }
+
+    // External API: Set constraints for HTML components specifically
+    setHTMLComponentConstraints(constraints, options = {}) {
+        const { suppressWarnings = false } = options;
+        
+        if (!suppressWarnings) {
+            this._warnAboutConstraintChanges(constraints, 'reactComponent');
+        }
+        
+        return this.setResizeConstraints('reactComponent', constraints, { suppressWarnings });
+    }
+
+    // External API: Remove all resize constraints (allow unlimited resizing)
+    removeResizeConstraints(type = 'reactComponent', options = {}) {
+        const { suppressWarnings = false } = options;
+        
+        if (!suppressWarnings) {
+            console.warn(`⚠️  [RESIZE-CONSTRAINTS] REMOVING RESIZE CONSTRAINTS FOR ${type.toUpperCase()}`);
+            console.warn('   This may lead to:');
+            console.warn('   • Component distortion and poor user experience');
+            console.warn('   • HTML content becoming unreadable when too small');
+            console.warn('   • Performance issues with very large components');
+            console.warn('   • UI layout problems and content overflow');
+            console.warn('   • Accessibility issues for users');
+            console.warn('   Consider setting reasonable min/max bounds instead.');
+        }
+        
+        if (type === 'global' || type === 'default') {
+            this.resizeConstraints.minWidth = 1;
+            this.resizeConstraints.minHeight = 1;
+            this.resizeConstraints.maxWidth = 10000;
+            this.resizeConstraints.maxHeight = 10000;
+        } else if (this.resizeConstraints[type]) {
+            this.resizeConstraints[type] = {
+                minWidth: 1,
+                minHeight: 1,
+                maxWidth: 10000,
+                maxHeight: 10000
+            };
+        }
+        
+        console.log(`[RESIZE-CONSTRAINTS] Removed constraints for ${type} - components can now resize without bounds`);
+        return true;
+    }
+
+    // Private method to validate constraints and show warnings
+    _validateResizeConstraints(constraints, options = {}) {
+        const { suppressWarnings = false } = options;
+        
+        if (!constraints || typeof constraints !== 'object') return;
+        
+        // Check for concerning values
+        const issues = [];
+        
+        if (constraints.minWidth !== undefined && constraints.minWidth < 10) {
+            issues.push(`minWidth (${constraints.minWidth}) is very small - content may become unreadable`);
+        }
+        
+        if (constraints.minHeight !== undefined && constraints.minHeight < 10) {
+            issues.push(`minHeight (${constraints.minHeight}) is very small - content may become unreadable`);
+        }
+        
+        if (constraints.maxWidth !== undefined && constraints.maxWidth > 2000) {
+            issues.push(`maxWidth (${constraints.maxWidth}) is very large - may cause performance issues`);
+        }
+        
+        if (constraints.maxHeight !== undefined && constraints.maxHeight > 2000) {
+            issues.push(`maxHeight (${constraints.maxHeight}) is very large - may cause performance issues`);
+        }
+        
+        if (constraints.minWidth !== undefined && constraints.maxWidth !== undefined && 
+            constraints.minWidth >= constraints.maxWidth) {
+            issues.push(`minWidth (${constraints.minWidth}) >= maxWidth (${constraints.maxWidth}) - invalid range`);
+        }
+        
+        if (constraints.minHeight !== undefined && constraints.maxHeight !== undefined && 
+            constraints.minHeight >= constraints.maxHeight) {
+            issues.push(`minHeight (${constraints.minHeight}) >= maxHeight (${constraints.maxHeight}) - invalid range`);
+        }
+        
+        // Show warnings if issues found and not suppressed
+        if (issues.length > 0 && !suppressWarnings) {
+            console.warn('⚠️  [RESIZE-CONSTRAINTS] Potential issues with constraint values:');
+            issues.forEach(issue => console.warn(`   • ${issue}`));
+        }
+    }
+
+    // Private method to warn about constraint changes
+    _warnAboutConstraintChanges(constraints, type) {
+        const hasMinChanges = constraints.minWidth !== undefined || constraints.minHeight !== undefined;
+        const hasMaxChanges = constraints.maxWidth !== undefined || constraints.maxHeight !== undefined;
+        
+        if (hasMinChanges || hasMaxChanges) {
+            console.info(`ℹ️  [RESIZE-CONSTRAINTS] Updating ${type} resize constraints:`);
+            
+            if (hasMinChanges) {
+                console.info('   • Changing minimum size limits');
+                if ((constraints.minWidth !== undefined && constraints.minWidth < 20) ||
+                    (constraints.minHeight !== undefined && constraints.minHeight < 20)) {
+                    console.warn('   ⚠️  Very small minimum sizes may cause content distortion');
+                }
+            }
+            
+            if (hasMaxChanges) {
+                console.info('   • Changing maximum size limits');
+                if ((constraints.maxWidth !== undefined && constraints.maxWidth > 1500) ||
+                    (constraints.maxHeight !== undefined && constraints.maxHeight > 1000)) {
+                    console.warn('   ⚠️  Very large maximum sizes may impact performance');
+                }
+            }
+            
+            console.info('   • Use { suppressWarnings: true } to hide these messages');
+        }
+    }
+
+    // Get current resize constraints for a shape type or specific shape
+    getResizeConstraints(type, shape = null) {
+        const specificConstraints = this.resizeConstraints[type] || {};
+        const defaultConstraints = {
+            minWidth: this.resizeConstraints.minWidth,
+            minHeight: this.resizeConstraints.minHeight,
+            maxWidth: this.resizeConstraints.maxWidth,
+            maxHeight: this.resizeConstraints.maxHeight
+        };
+        
+        // If a specific shape is provided and has individual constraints, use those
+        if (shape && shape.resizeConstraints) {
+            return { ...defaultConstraints, ...specificConstraints, ...shape.resizeConstraints };
+        }
+        
+        return { ...defaultConstraints, ...specificConstraints };
+    }
+
+    // Set resize constraints for a specific component
+    setComponentResizeConstraints(componentId, constraints) {
+        const shape = this.activeCanvasContext.shapes.find(s => s.id === componentId);
+        if (shape) {
+            shape.resizeConstraints = { ...shape.resizeConstraints, ...constraints };
+            console.log(`[RESIZE-CONSTRAINTS] Updated constraints for component ${componentId}:`, shape.resizeConstraints);
+            return true;
+        }
+        console.warn(`[RESIZE-CONSTRAINTS] Component ${componentId} not found`);
+        return false;
+    }
+
+    // External API: Get current resize constraints for inspection
+    getCurrentResizeConstraints(type = 'reactComponent') {
+        if (type === 'global' || type === 'default') {
+            return {
+                minWidth: this.resizeConstraints.minWidth,
+                minHeight: this.resizeConstraints.minHeight,
+                maxWidth: this.resizeConstraints.maxWidth,
+                maxHeight: this.resizeConstraints.maxHeight
+            };
+        }
+        
+        const constraints = this.getResizeConstraints(type);
+        return { ...constraints };
     }
 
     // Get HTML component data for persistence
@@ -6507,6 +6721,16 @@ class CanvasMaker {
             const shape = canvasContext.shapes[element.index];
             
             if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
+                // Get constraints for this shape type and individual shape
+                const constraints = this.getResizeConstraints(shape.type, shape);
+                
+                // Store original values to calculate constrained values
+                const originalX = shape.x;
+                const originalY = shape.y;
+                const originalWidth = shape.width;
+                const originalHeight = shape.height;
+                
+                // Apply resize transformation
                 switch (this.resizeHandle) {
                     case 'nw': // top-left
                         shape.x += deltaX;
@@ -6543,10 +6767,34 @@ class CanvasMaker {
                         shape.width += deltaX;
                         break;
                 }
+                
+                // Apply constraints to width and height
+                const constrainedWidth = Math.max(constraints.minWidth, Math.min(constraints.maxWidth, shape.width));
+                const constrainedHeight = Math.max(constraints.minHeight, Math.min(constraints.maxHeight, shape.height));
+                
+                // If width or height was constrained, adjust position to prevent drift
+                if (shape.width !== constrainedWidth) {
+                    if (this.resizeHandle.includes('w')) {
+                        // When resizing from left, maintain right edge position
+                        shape.x = originalX + originalWidth - constrainedWidth;
+                    }
+                    shape.width = constrainedWidth;
+                }
+                
+                if (shape.height !== constrainedHeight) {
+                    if (this.resizeHandle.includes('n')) {
+                        // When resizing from top, maintain bottom edge position
+                        shape.y = originalY + originalHeight - constrainedHeight;
+                    }
+                    shape.height = constrainedHeight;
+                }
+                
             } else if (shape.type === 'circle') {
+                const constraints = this.getResizeConstraints('circle');
                 const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
                 const direction = deltaX > 0 || deltaY > 0 ? 1 : -1;
-                shape.radius = Math.max(5, shape.radius + direction * distance * 0.1);
+                const newRadius = shape.radius + direction * distance * 0.1;
+                shape.radius = Math.max(constraints.minRadius || 5, Math.min(constraints.maxRadius || 500, newRadius));
             } else if (shape.type === 'line' || shape.type === 'arrow') {
                 if (this.resizeHandle === 'line-start') {
                     // Move the start point
@@ -6568,7 +6816,15 @@ class CanvasMaker {
             }
         } else if (element.type === 'text') {
             const text = canvasContext.texts[element.index];
+            const constraints = this.getResizeConstraints('text');
             
+            // Store original values to calculate constrained values
+            const originalX = text.x;
+            const originalY = text.y;
+            const originalWidth = text.width;
+            const originalHeight = text.height;
+            
+            // Apply resize transformation
             switch (this.resizeHandle) {
                 case 'nw': // top-left
                     text.x += deltaX;
@@ -6606,9 +6862,26 @@ class CanvasMaker {
                     break;
             }
             
-            // Ensure minimum text box size
-            text.width = Math.max(50, text.width);
-            text.height = Math.max(20, text.height);
+            // Apply constraints to width and height
+            const constrainedWidth = Math.max(constraints.minWidth, Math.min(constraints.maxWidth, text.width));
+            const constrainedHeight = Math.max(constraints.minHeight, Math.min(constraints.maxHeight, text.height));
+            
+            // If width or height was constrained, adjust position to prevent drift
+            if (text.width !== constrainedWidth) {
+                if (this.resizeHandle.includes('w')) {
+                    // When resizing from left, maintain right edge position
+                    text.x = originalX + originalWidth - constrainedWidth;
+                }
+                text.width = constrainedWidth;
+            }
+            
+            if (text.height !== constrainedHeight) {
+                if (this.resizeHandle.includes('n')) {
+                    // When resizing from top, maintain bottom edge position
+                    text.y = originalY + originalHeight - constrainedHeight;
+                }
+                text.height = constrainedHeight;
+            }
         } else if (element.type === 'nested-canvas') {
             const nestedCanvas = canvasContext.nestedCanvases[element.index];
             

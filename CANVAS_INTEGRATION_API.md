@@ -2,9 +2,18 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.4)
+## Recent Updates (v1.5)
 
-### Enhanced Persistence System
+### Resize Constraints System
+- ✅ **Configurable resize limits** - Prevent content distortion with min/max size bounds
+- ✅ **External API control** - Outer apps can modify constraints with validation warnings
+- ✅ **Individual component constraints** - Set custom limits per component
+- ✅ **Intelligent validation** - Automatic warnings for concerning constraint values
+- ✅ **Safe defaults** - Reasonable limits prevent UI issues while allowing flexibility
+
+### Previous Updates (v1.4)
+
+#### Enhanced Persistence System
 - ✅ **Complete state export/import** - Full canvas state including HTML components, camera, and tool state
 - ✅ **Individual component data access** - Get/set data for specific HTML components
 - ✅ **Persistence filtering hooks** - Custom filters to control what gets saved/loaded
@@ -1959,6 +1968,171 @@ canvas.setPersistenceFilter((item, type) => {
         return false; // Will be saved as htmlComponent instead
     }
     return true;
+});
+```
+
+### Resize Constraints and Content Protection
+
+Canvas Maker includes a comprehensive resize constraints system to prevent component distortion and ensure good user experience:
+
+#### Default Resize Constraints
+
+Canvas Maker ships with sensible default constraints:
+
+```javascript
+// Default constraints for all components
+const defaults = {
+    minWidth: 20,           // Prevent unreadable content
+    minHeight: 20,
+    maxWidth: 2000,         // Prevent performance issues  
+    maxHeight: 2000,
+    
+    // HTML components have stricter defaults
+    reactComponent: {
+        minWidth: 50,       // Ensure HTML content is readable
+        minHeight: 30,
+        maxWidth: 1500,     // Reasonable max sizes
+        maxHeight: 1000
+    },
+    
+    // Other shape types
+    circle: { minRadius: 5, maxRadius: 500 },
+    text: { minWidth: 30, minHeight: 20, maxWidth: 1000, maxHeight: 800 }
+};
+```
+
+#### External API: Configure Global Constraints
+
+```javascript
+// Set constraints for HTML components with validation
+canvas.setHTMLComponentConstraints({
+    minWidth: 100,
+    minHeight: 60,
+    maxWidth: 800,
+    maxHeight: 600
+});
+// Console: ℹ️ [RESIZE-CONSTRAINTS] Updating reactComponent resize constraints
+
+// Set global constraints affecting all shapes
+canvas.setGlobalResizeConstraints({
+    minWidth: 30,
+    maxWidth: 3000
+});
+
+// Get current constraints for inspection
+const current = canvas.getCurrentResizeConstraints('reactComponent');
+console.log('Current HTML constraints:', current);
+```
+
+#### External API: Remove Constraints (with warnings)
+
+```javascript
+// Remove constraints - shows comprehensive warnings
+canvas.removeResizeConstraints('reactComponent');
+// Console: ⚠️ [RESIZE-CONSTRAINTS] REMOVING RESIZE CONSTRAINTS FOR REACTCOMPONENT
+//          This may lead to:
+//          • Component distortion and poor user experience
+//          • HTML content becoming unreadable when too small
+//          • Performance issues with very large components
+//          • UI layout problems and content overflow
+//          • Accessibility issues for users
+
+// Suppress warnings if you know what you're doing
+canvas.removeResizeConstraints('reactComponent', { suppressWarnings: true });
+```
+
+#### Individual Component Constraints
+
+```javascript
+// Set constraints when creating components
+const component = canvas.addReactComponentWithHTML(0, 0, 200, 100, htmlContent, {
+    id: 'my-component',
+    resizeConstraints: {
+        minWidth: 150,      // Custom min size for this component
+        minHeight: 80,
+        maxWidth: 400,      // Custom max size
+        maxHeight: 300
+    }
+});
+
+// Update constraints for existing components
+canvas.setComponentResizeConstraints('my-component', {
+    minWidth: 120,
+    maxHeight: 250
+});
+
+// Individual constraints override global defaults
+const constraints = canvas.getResizeConstraints('reactComponent', component);
+// Returns: merged global + individual constraints
+```
+
+#### Intelligent Validation and Warnings
+
+Canvas Maker provides helpful warnings for problematic constraint values:
+
+```javascript
+// Setting concerning values triggers warnings
+canvas.setHTMLComponentConstraints({
+    minWidth: 5,        // ⚠️ Very small - content may become unreadable
+    minHeight: 3,       // ⚠️ Very small - content may become unreadable  
+    maxWidth: 3000,     // ⚠️ Very large - may cause performance issues
+    maxHeight: 2500     // ⚠️ Very large - may cause performance issues
+});
+
+// Invalid ranges show errors
+canvas.setHTMLComponentConstraints({
+    minWidth: 200,
+    maxWidth: 150       // ❌ minWidth >= maxWidth - invalid range
+});
+
+// Suppress all validation messages
+canvas.setHTMLComponentConstraints({
+    minWidth: 1,
+    maxWidth: 5000
+}, { suppressWarnings: true });
+```
+
+#### Best Practices for Resize Constraints
+
+**✅ Recommended:**
+- Keep minimum sizes above 30x20 for readable content
+- Set maximum sizes below 1500x1000 for good performance
+- Test constraints with real content to ensure usability
+- Use individual constraints for components with special needs
+
+**❌ Avoid:**
+- Removing constraints entirely unless absolutely necessary
+- Setting minimums below 10px (content becomes unreadable)
+- Setting maximums above 2000px (performance impact)
+- Creating invalid ranges where min >= max
+
+**🔧 Integration Example:**
+```javascript
+// Production-ready constraint setup
+const canvas = new CanvasMaker(container);
+
+// Set app-specific constraints
+canvas.setHTMLComponentConstraints({
+    minWidth: 80,       // Large enough for UI elements
+    minHeight: 50,      // Tall enough for buttons/text
+    maxWidth: 1200,     // Fits most screens
+    maxHeight: 800      // Reasonable max height
+});
+
+// For special components (e.g., forms, cards)
+canvas.setComponentResizeConstraints('user-profile-card', {
+    minWidth: 200,      // Profile cards need more space
+    minHeight: 150,
+    maxWidth: 400,      // But not too large
+    maxHeight: 500
+});
+
+// Monitor constraint violations in production
+canvas.on('constraintViolation', ({ componentId, attempted, applied }) => {
+    console.log(`Component ${componentId} resize constrained:`, {
+        attempted: attempted,
+        applied: applied
+    });
 });
 ```
 

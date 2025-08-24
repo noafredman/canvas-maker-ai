@@ -143,6 +143,8 @@
             <button onclick="testScrollableFeatures()" style="background: #17a2b8;">🔄 Test Scrollable Features</button>
             <button onclick="testPersistence()" style="background: #6f42c1;">💾 Test Persistence</button>
             <button onclick="testGranularClear()" style="background: #fd7e14;">🧹 Test Granular Clear</button>
+            <button onclick="testResizeLimits()" style="background: #20c997;">📏 Test Resize Limits</button>
+            <button onclick="testExternalConstraintAPI()" style="background: #6c757d;">⚙️ Test External Constraint API</button>
             <button onclick="clearComponents()">Clear All (Old Method)</button>
             <button onclick="testEnhancedClear()" style="background: #e74c3c;">🧪 Test Enhanced Clear()</button>
             <button onclick="testZoom()">Test Zoom</button>
@@ -156,7 +158,9 @@
                 • Press ESC or click outside to exit edit mode<br>
                 • Use "Test Scrollable Features" to analyze overflow in components<br>
                 • Use "Test Persistence" to demo state export/import and filtering<br>
-                • Use "Test Granular Clear" to demo selective clearing methods
+                • Use "Test Granular Clear" to demo selective clearing methods<br>
+                • Use "Test Resize Limits" to demo constrained resizing with min/max bounds<br>
+                • Use "Test External Constraint API" to see how outer apps can control constraints
             </small>
         </div>
         
@@ -671,6 +675,190 @@
                     }, 500);
                 }, 1000);
             }, 500);
+        }
+        
+        // Test resize limits and constraints
+        function testResizeLimits() {
+            log('📏 TESTING RESIZE LIMITS & CONSTRAINTS');
+            
+            // Clear existing components for clean test
+            canvasMaker.clearHTMLComponents();
+            
+            log('- Setting up test components with different constraint types...');
+            
+            // 1. Create a component with default constraints
+            const defaultComponent = addButton();
+            log(`  • Default component created: ${defaultComponent.id} (default constraints apply)`);
+            
+            // 2. Create a component with strict size limits (small range)
+            componentCount++;
+            const strictHTML = `<div style="padding: 10px; background: #ff6b6b; color: white; text-align: center; border-radius: 4px;">
+                <strong>Strict Limits</strong><br>
+                <small>Min: 80x40, Max: 150x80</small>
+            </div>`;
+            
+            const strictComponent = canvasMaker.addReactComponentWithHTML(-100, -50, 120, 60, strictHTML, {
+                id: 'strict-component-' + componentCount,
+                coordinateSystem: 'center',
+                resizeConstraints: {
+                    minWidth: 80,
+                    minHeight: 40,
+                    maxWidth: 150,
+                    maxHeight: 80
+                }
+            });
+            
+            log(`  • Strict component created: ${strictComponent.id} (80x40 to 150x80)`);
+            
+            // 3. Create a component with relaxed limits (large range)
+            componentCount++;
+            const relaxedHTML = `<div style="padding: 10px; background: #28a745; color: white; text-align: center; border-radius: 4px;">
+                <strong>Relaxed Limits</strong><br>
+                <small>Min: 100x60, Max: 400x300</small>
+            </div>`;
+            
+            const relaxedComponent = canvasMaker.addReactComponentWithHTML(100, -50, 200, 100, relaxedHTML, {
+                id: 'relaxed-component-' + componentCount,
+                coordinateSystem: 'center',
+                resizeConstraints: {
+                    minWidth: 100,
+                    minHeight: 60,
+                    maxWidth: 400,
+                    maxHeight: 300
+                }
+            });
+            
+            log(`  • Relaxed component created: ${relaxedComponent.id} (100x60 to 400x300)`);
+            
+            // 4. Set constraints on an existing component
+            canvasMaker.setComponentResizeConstraints(defaultComponent.id, {
+                minWidth: 60,
+                minHeight: 25,
+                maxWidth: 200,
+                maxHeight: 100
+            });
+            
+            log(`  • Updated constraints for ${defaultComponent.id} (60x25 to 200x100)`);
+            
+            // 5. Test global constraint changes
+            log('- Setting global constraints (affects all components without specific constraints)...');
+            canvasMaker.setResizeConstraints('reactComponent', {
+                minWidth: 75,
+                minHeight: 35,
+                maxWidth: 300,
+                maxHeight: 200
+            });
+            
+            // Show current constraints for each component
+            log('- Current constraint summary:');
+            [defaultComponent, strictComponent, relaxedComponent].forEach(comp => {
+                const constraints = canvasMaker.getResizeConstraints(comp.type, comp);
+                log(`  • ${comp.id}: ${constraints.minWidth}x${constraints.minHeight} to ${constraints.maxWidth}x${constraints.maxHeight}`);
+            });
+            
+            // Add visual feedback
+            setTimeout(() => {
+                log('- 🎯 TEST INSTRUCTIONS:');
+                log('  1. Try to resize each component beyond its limits');
+                log('  2. Red component (strict): Very narrow size range');
+                log('  3. Green component (relaxed): Wide size range');
+                log('  4. Blue component (modified): Custom constraints applied');
+                log('  5. Components should stop resizing at min/max limits');
+                log('  6. Position should adjust properly when hitting limits');
+                
+                log('✅ Resize limits test setup completed!');
+                log('💡 TIP: Select a component and try dragging the resize handles to test constraints');
+            }, 100);
+        }
+        
+        // Test external constraint API with warnings
+        function testExternalConstraintAPI() {
+            log('⚙️ TESTING EXTERNAL CONSTRAINT API');
+            
+            // Ensure we have at least one component
+            if (canvasMaker.getAllHTMLComponentsData().length === 0) {
+                log('- Adding a test component first...');
+                addButton();
+            }
+            
+            log('- Current global constraints:');
+            const currentGlobal = canvasMaker.getCurrentResizeConstraints('global');
+            log(`  • Global: ${currentGlobal.minWidth}x${currentGlobal.minHeight} to ${currentGlobal.maxWidth}x${currentGlobal.maxHeight}`);
+            
+            const currentHTML = canvasMaker.getCurrentResizeConstraints('reactComponent');
+            log(`  • HTML Components: ${currentHTML.minWidth}x${currentHTML.minHeight} to ${currentHTML.maxWidth}x${currentHTML.maxHeight}`);
+            
+            log('');
+            log('- Testing external API methods (check console for detailed warnings)...');
+            
+            // Test 1: Set reasonable constraints (should show info messages)
+            log('1️⃣ Setting reasonable HTML component constraints...');
+            canvasMaker.setHTMLComponentConstraints({
+                minWidth: 80,
+                minHeight: 50,
+                maxWidth: 500,
+                maxHeight: 400
+            });
+            
+            setTimeout(() => {
+                // Test 2: Set concerning constraints (should show warnings)
+                log('2️⃣ Setting concerning constraints (very small min, very large max)...');
+                canvasMaker.setHTMLComponentConstraints({
+                    minWidth: 5,    // Very small - will trigger warning
+                    minHeight: 3,   // Very small - will trigger warning
+                    maxWidth: 3000, // Very large - will trigger warning
+                    maxHeight: 2500 // Very large - will trigger warning
+                });
+                
+                setTimeout(() => {
+                    // Test 3: Set invalid constraints (min >= max)
+                    log('3️⃣ Setting invalid constraints (min >= max)...');
+                    canvasMaker.setHTMLComponentConstraints({
+                        minWidth: 200,
+                        maxWidth: 150,  // Less than min - will trigger error
+                        minHeight: 100,
+                        maxHeight: 80   // Less than min - will trigger error
+                    });
+                    
+                    setTimeout(() => {
+                        // Test 4: Remove all constraints (should show big warning)
+                        log('4️⃣ Removing ALL resize constraints (check console for warnings)...');
+                        canvasMaker.removeResizeConstraints('reactComponent');
+                        
+                        setTimeout(() => {
+                            // Test 5: Suppress warnings
+                            log('5️⃣ Setting constraints with warnings suppressed...');
+                            canvasMaker.setHTMLComponentConstraints({
+                                minWidth: 2,
+                                maxWidth: 4000
+                            }, { suppressWarnings: true });
+                            
+                            setTimeout(() => {
+                                // Test 6: Restore reasonable defaults
+                                log('6️⃣ Restoring reasonable defaults...');
+                                canvasMaker.setHTMLComponentConstraints({
+                                    minWidth: 50,
+                                    minHeight: 30,
+                                    maxWidth: 1500,
+                                    maxHeight: 1000
+                                });
+                                
+                                log('');
+                                log('✅ External constraint API test completed!');
+                                log('📋 Summary of what happened:');
+                                log('  • Reasonable constraints: Info messages in console');
+                                log('  • Concerning values: Warning messages in console');
+                                log('  • Invalid ranges: Error messages in console');
+                                log('  • Removing constraints: Big warning about distortion risks');
+                                log('  • Suppressed warnings: Silent operation');
+                                log('  • Final restoration: Back to safe defaults');
+                                log('');
+                                log('💡 TIP: Check the browser console to see all warning messages!');
+                            }, 1000);
+                        }, 1000);
+                    }, 1000);
+                }, 1000);
+            }, 1000);
         }
         
         // Logging function

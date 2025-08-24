@@ -223,3 +223,8 @@
 ::1 - - [24/Aug/2025 14:40:28] "GET /canvas.js HTTP/1.1" 200 -
 ::1 - - [24/Aug/2025 14:40:29] code 404, message File not found
 ::1 - - [24/Aug/2025 14:40:29] "GET /favicon.ico HTTP/1.1" 404 -
+::1 - - [24/Aug/2025 15:16:31] "GET /test-html-rendering.html HTTP/1.1" 200 -
+::1 - - [24/Aug/2025 15:16:32] "GET /styles.css HTTP/1.1" 200 -
+::1 - - [24/Aug/2025 15:16:32] "GET /canvas.js HTTP/1.1" 200 -
+::1 - - [24/Aug/2025 15:16:32] code 404, message File not found
+::1 - - [24/Aug/2025 15:16:32] "GET /favicon.ico HTTP/1.1" 404 -
