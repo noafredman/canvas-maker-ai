@@ -880,6 +880,62 @@ class CanvasMaker {
         });
     }
     
+    // Set scrollable container size for HTML component (allows overflow scrolling)
+    setComponentScrollableSize(shapeId, width = null, height = null) {
+        const shape = this.activeCanvasContext.shapes.find(s => s.id === shapeId);
+        if (!shape || shape.type !== 'reactComponent') {
+            console.warn(`[SCROLLABLE-SIZE] Shape ${shapeId} not found or not a reactComponent`);
+            return false;
+        }
+        
+        // Set the scrollable size configuration
+        shape.scrollableSize = { width, height };
+        
+        // Update the existing HTML element if it exists
+        const element = this.htmlComponents.get(shapeId);
+        if (element) {
+            const contentWrapper = element.querySelector('div');
+            if (contentWrapper) {
+                // Update the size immediately
+                contentWrapper.style.width = width ? `${width}px` : '100%';
+                contentWrapper.style.height = height ? `${height}px` : '100%';
+                
+                // Recheck overflow
+                if (contentWrapper._checkContentOverflow) {
+                    contentWrapper._checkContentOverflow();
+                }
+                
+                // Update pointer events if in edit mode
+                if (contentWrapper._updatePointerEvents) {
+                    contentWrapper._updatePointerEvents();
+                }
+            }
+        }
+        
+        console.log(`[SCROLLABLE-SIZE] Set scrollable size for ${shapeId}: ${width}x${height}`);
+        return true;
+    }
+
+    // Get overflow information for an HTML component
+    getComponentOverflowInfo(shapeId) {
+        const shape = this.activeCanvasContext.shapes.find(s => s.id === shapeId);
+        if (!shape || shape.type !== 'reactComponent') {
+            return null;
+        }
+        
+        return shape.overflowInfo || null;
+    }
+
+    // Check if an HTML component has overflow
+    hasComponentOverflow(shapeId) {
+        const shape = this.activeCanvasContext.shapes.find(s => s.id === shapeId);
+        if (!shape || shape.type !== 'reactComponent') {
+            return false;
+        }
+        
+        return shape.hasOverflow || false;
+    }
+    
     // Remove a React component shape
     removeReactComponent(shape) {
         // console.log('[REMOVE] removeReactComponent called for shape:', shape.id);
@@ -5175,9 +5231,37 @@ class CanvasMaker {
             width: 100%;
             height: 100%;
             pointer-events: none;
+            overflow: hidden;
         `;
         
-        // Function to update pointer events based on edit mode
+        // Function to check if content overflows container
+        const checkContentOverflow = () => {
+            // Small delay to ensure content is rendered
+            setTimeout(() => {
+                const containerRect = contentWrapper.getBoundingClientRect();
+                const hasHorizontalOverflow = contentWrapper.scrollWidth > contentWrapper.clientWidth;
+                const hasVerticalOverflow = contentWrapper.scrollHeight > contentWrapper.clientHeight;
+                
+                // Store overflow info on the shape for external apps to query
+                shape.hasOverflow = hasHorizontalOverflow || hasVerticalOverflow;
+                shape.overflowInfo = {
+                    horizontal: hasHorizontalOverflow,
+                    vertical: hasVerticalOverflow,
+                    scrollWidth: contentWrapper.scrollWidth,
+                    scrollHeight: contentWrapper.scrollHeight,
+                    clientWidth: contentWrapper.clientWidth,
+                    clientHeight: contentWrapper.clientHeight
+                };
+                
+                // Update scrollable size if configured by external app
+                if (shape.scrollableSize) {
+                    contentWrapper.style.width = shape.scrollableSize.width ? `${shape.scrollableSize.width}px` : '100%';
+                    contentWrapper.style.height = shape.scrollableSize.height ? `${shape.scrollableSize.height}px` : '100%';
+                }
+            }, 10);
+        };
+
+        // Function to update pointer events and scrolling based on edit mode
         let lastMode = null; // Track mode to avoid redundant updates
         const updatePointerEvents = () => {
             const isInEditMode = this.editingComponentId === shape.id;
@@ -5191,10 +5275,34 @@ class CanvasMaker {
                 // In edit mode - allow interaction with HTML content
                 contentWrapper.style.pointerEvents = 'auto';
                 element.style.opacity = '1';
-                // console.log(`[HTML-MODE] Component ${shape.id} set to EDIT mode - HTML interactive`);
+                
+                // Enable scrolling if content overflows
+                const hasHorizontalOverflow = contentWrapper.scrollWidth > contentWrapper.clientWidth;
+                const hasVerticalOverflow = contentWrapper.scrollHeight > contentWrapper.clientHeight;
+                
+                if (hasHorizontalOverflow || hasVerticalOverflow) {
+                    let overflowStyle = 'auto';
+                    if (hasHorizontalOverflow && !hasVerticalOverflow) {
+                        overflowStyle = 'auto hidden';
+                    } else if (!hasHorizontalOverflow && hasVerticalOverflow) {
+                        overflowStyle = 'hidden auto';
+                    }
+                    contentWrapper.style.overflow = overflowStyle;
+                    
+                    // Add visual indicator for scrollable content
+                    contentWrapper.style.border = '1px solid rgba(59, 130, 246, 0.3)';
+                    contentWrapper.style.borderRadius = '4px';
+                } else {
+                    contentWrapper.style.overflow = 'hidden';
+                    contentWrapper.style.border = 'none';
+                }
+                
+                // console.log(`[HTML-MODE] Component ${shape.id} set to EDIT mode - HTML interactive, scrolling: ${hasHorizontalOverflow || hasVerticalOverflow}`);
             } else {
                 // Not in edit mode - make transparent so clicks go to canvas
                 contentWrapper.style.pointerEvents = 'none';  
+                contentWrapper.style.overflow = 'hidden';
+                contentWrapper.style.border = 'none';
                 element.style.opacity = '0.95'; // Slightly transparent when not in edit mode
                 // console.log(`[HTML-MODE] Component ${shape.id} set to SELECTION mode - clicks pass through`);
             }
@@ -5203,8 +5311,9 @@ class CanvasMaker {
         // Set initial state
         updatePointerEvents();
         
-        // Store update function on element so we can call it later
+        // Store functions on element so we can call them later
         contentWrapper._updatePointerEvents = updatePointerEvents;
+        contentWrapper._checkContentOverflow = checkContentOverflow;
         
         // Set content based on shape properties
         if (shape.htmlContent) {
@@ -5254,6 +5363,10 @@ class CanvasMaker {
         element.appendChild(contentWrapper);
         
         this.htmlRenderingLayer.appendChild(element);
+        
+        // Check for content overflow after content is added to DOM
+        checkContentOverflow();
+        
         // console.log(`[HTML-RENDER] Created HTML element for component ${shape.id}`);
         return element;
     }
@@ -5585,30 +5698,69 @@ class CanvasMaker {
     }
     
     clearCanvas() {
-        // Clear the active canvas context
+        // Clear the active canvas context data
         const canvasContext = this.activeCanvasContext;
         canvasContext.paths.length = 0;
         canvasContext.shapes.length = 0;
         canvasContext.texts.length = 0;
         canvasContext.nestedCanvases.length = 0;
         canvasContext.selectedElements.length = 0;
+        canvasContext.previewSelectedElements.length = 0;
+        canvasContext.hoveredElement = null;
+        canvasContext.currentPath = [];
         
         // Clear nested canvas data
         this.nestedCanvasData.clear();
         
-        // Reset hover state
+        // Reset all interaction states
         this.hoveredElement = null;
+        this.hoveredResizeHandle = null;
+        this.isDrawing = false;
+        this.isSelecting = false;
+        this.isDragging = false;
+        this.isResizing = false;
+        this.resizeHandle = null;
+        this.editingComponentId = null;
         
-        // Hide selection box
+        // Clear preview/temporary drawing state
+        this.previewStartX = undefined;
+        this.previewStartY = undefined;
+        this.previewEndX = undefined;
+        this.previewEndY = undefined;
+        
+        // Hide all selection UI elements
         this.hideSelectionBox();
+        this.hideSelectionBox(this.mainCanvasContext); // Main canvas
+        if (this.nestedCanvasContext) {
+            this.hideSelectionBox(this.nestedCanvasContext); // Nested canvas
+        }
         
-        // Clear HTML rendering layer
+        // Clear HTML rendering layer completely
         this.clearHTMLRenderingLayer();
         
-        // Clear the canvas and redraw
+        // Force complete canvas clearing
         const ctx = canvasContext.ctx;
         const canvas = canvasContext.canvas;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Also clear main canvas if we're in nested context
+        if (canvasContext === this.nestedCanvasContext && this.mainCanvasContext) {
+            this.mainCanvasContext.ctx.clearRect(0, 0, this.mainCanvasContext.canvas.width, this.mainCanvasContext.canvas.height);
+        }
+        
+        // Clear any visual state CSS classes from canvas container
+        const canvasContainer = canvas.parentElement;
+        if (canvasContainer) {
+            // Remove all cursor and state classes
+            canvasContainer.className = canvasContainer.className.replace(
+                /\b(pen-cursor|rectangle-cursor|circle-cursor|text-cursor|select-cursor|nested-canvas-cursor|line-cursor|arrow-cursor|drawing|selecting|grabbing|resizing|hovering|can-grab|resize-handle-hover|resize-[a-z-]+)\b/g, ''
+            ).trim();
+        }
+        
+        // Update cursor state to default
+        this.updateCanvasCursor();
+        
+        // Force complete redraw
         this.redrawCanvas();
     }
     
@@ -5619,18 +5771,38 @@ class CanvasMaker {
                 this.htmlRenderingLayer.removeChild(this.htmlRenderingLayer.firstChild);
             }
             
-            // Clean up any component renderers
-            const canvasContext = this.activeCanvasContext;
-            canvasContext.shapes.forEach(shape => {
-                if (shape.type === 'reactComponent' && shape.canvasRenderer) {
-                    try {
-                        shape.canvasRenderer.unmount();
-                    } catch (error) {
-                        console.warn('Error unmounting component renderer:', error);
+            // Clean up any component renderers from all contexts
+            [this.mainCanvasContext, this.nestedCanvasContext].forEach(context => {
+                if (!context) return;
+                context.shapes.forEach(shape => {
+                    if (shape.type === 'reactComponent' && shape.canvasRenderer) {
+                        try {
+                            shape.canvasRenderer.unmount();
+                        } catch (error) {
+                            console.warn('Error unmounting component renderer:', error);
+                        }
+                        shape.canvasRenderer = null;
+                        shape.domElement = null;
                     }
-                    shape.canvasRenderer = null;
-                }
+                });
             });
+            
+            // Clear the HTML components map
+            if (this.htmlComponents) {
+                this.htmlComponents.clear();
+            }
+            
+            // Reset the HTML rendering layer styles to ensure clean state
+            this.htmlRenderingLayer.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 10;
+                overflow: hidden;
+            `;
         }
     }
     

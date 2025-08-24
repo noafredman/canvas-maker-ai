@@ -2,16 +2,25 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.2)
+## Recent Updates (v1.3)
 
-### Enhanced UI/UX
+### HTML Component Scrolling
+- ✅ **Scrollable HTML content** - Components with overflow content show scrollbars when in edit mode
+- ✅ **Double-click activation** - Scrolling is enabled automatically when entering edit mode
+- ✅ **External size configuration** - Outer apps can set custom scrollable container sizes
+- ✅ **Overflow detection** - API methods to check and analyze content overflow
+- ✅ **Enhanced clear() method** - Complete state cleanup including HTML components and selection boxes
+
+### Previous Updates (v1.2)
+
+#### Enhanced UI/UX
 - ✅ **Fixed invisible shapes bug** - All shapes now always have visible strokes
 - ✅ **Group drag support** - Multiple selected elements can be dragged as a group
 - ✅ **Nested canvas improvements** - Clean floating toolbar with drag support
 - ✅ **Grid system** - Infinite grid background for better visual reference
 - ✅ **Fixed toolbar icons** - Line and arrow tools now display correctly
 
-### Nested Canvas Features
+#### Nested Canvas Features
 - ✅ **Floating toolbar** - Draggable tool palette within nested canvas
 - ✅ **Complete toolset** - Pen, rectangle, circle, line, arrow, text, select, clear tools
 - ✅ **No PNG overlays** - Fixed browser extension interference issues
@@ -1710,13 +1719,21 @@ canvas.on('componentEditMode', ({ shapeId, isEditing }) => {
 The canvas system manages both canvas-drawn content and HTML DOM elements. To properly clear everything:
 
 ```javascript
-// ✅ Correct way - clears both canvas and HTML content
+// ✅ Correct way - clears everything visible
 canvas.clear();
+
+// What clear() does:
+// - Removes all shapes from canvas layer
+// - Clears all HTML elements from HTML rendering layer  
+// - Hides selection boxes and resize handles
+// - Resets all interaction states (drawing, dragging, selecting, etc.)
+// - Clears temporary visual elements and CSS classes
+// - Forces complete redraw of both layers
 
 // ❌ Incorrect way - only clears canvas, leaves HTML elements
 canvas.clearCanvas(); // Internal method, use clear() instead
 
-// ✅ Complete cleanup when removing canvas
+// ✅ Complete cleanup when removing canvas instance
 canvas.dispose(); // Clears content + removes event listeners + cleans up DOM
 ```
 
@@ -1727,6 +1744,70 @@ The system uses two separate rendering layers:
 2. **HTML layer**: For interactive React components and DOM elements
 
 Both layers are synchronized for positioning/transformations, but they exist as separate DOM elements. The `clear()` method ensures both layers are cleaned up together.
+
+### HTML Component Scrolling API
+
+Canvas Maker supports automatic scrolling for HTML components with content larger than their container:
+
+```javascript
+// Scrolling is automatically enabled when:
+// 1. Component content overflows its container dimensions
+// 2. User double-clicks the component to enter edit mode
+// 3. Scrollbars appear automatically for overflow content
+
+// Check if a component has overflow content
+const hasOverflow = canvas.hasComponentOverflow(shapeId);
+console.log('Has overflow:', hasOverflow); // true/false
+
+// Get detailed overflow information
+const overflowInfo = canvas.getComponentOverflowInfo(shapeId);
+if (overflowInfo) {
+    console.log('Content size:', overflowInfo.scrollWidth, 'x', overflowInfo.scrollHeight);
+    console.log('Container size:', overflowInfo.clientWidth, 'x', overflowInfo.clientHeight);
+    console.log('Horizontal overflow:', overflowInfo.horizontal);
+    console.log('Vertical overflow:', overflowInfo.vertical);
+}
+
+// Set custom scrollable container size (allows external app control)
+const success = canvas.setComponentScrollableSize(shapeId, 300, 200); // width, height
+console.log('Size update:', success ? 'succeeded' : 'failed');
+
+// Reset to auto size (null removes custom sizing)
+canvas.setComponentScrollableSize(shapeId, null, null);
+
+// Example: Create component with large content that will scroll
+const largeFormHTML = `
+    <div style="padding: 20px; background: white;">
+        <h3>Large Form</h3>
+        <p>This form has more content than can fit in the container...</p>
+        <!-- Multiple form fields that exceed container height -->
+        <input type="text" placeholder="Field 1" style="width: 100%; margin: 10px 0;">
+        <textarea rows="5" style="width: 100%; margin: 10px 0;"></textarea>
+        <select style="width: 100%; margin: 10px 0;">...</select>
+        <!-- More content... -->
+    </div>
+`;
+
+const shape = canvas.addReactComponentWithHTML(0, 0, 250, 150, largeFormHTML, {
+    id: 'scrollable-form',
+    coordinateSystem: 'center'
+});
+
+// The component will automatically show scrollbars when double-clicked for editing
+```
+
+**Scrolling Behavior:**
+- **Automatic detection**: Overflow is detected when content exceeds container dimensions
+- **Edit mode activation**: Double-click component to enable scrolling (along with HTML interaction)
+- **Visual indicators**: Scrollable components show subtle border in edit mode
+- **External control**: Outer applications can set custom scrollable container sizes
+- **Responsive**: Scrollbars appear only for the overflow direction (horizontal/vertical)
+
+**Use Cases:**
+- Large forms that don't fit in fixed containers
+- Rich text content with variable length
+- Data tables or lists with many items
+- Complex UI components with nested scrollable areas
 
 ### Best Practices for React Integration
 

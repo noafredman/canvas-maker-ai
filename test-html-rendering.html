@@ -139,7 +139,10 @@
             <button onclick="addForm()">Add Form Component</button>
             <button onclick="addCenterButton()">Add Button at World (0,0)</button>
             <button onclick="addExactCenterButton()">Add Button at Exact Canvas Center</button>
-            <button onclick="clearComponents()">Clear All</button>
+            <button onclick="addScrollableForm()">Add Scrollable Form (Large Content)</button>
+            <button onclick="testScrollableFeatures()" style="background: #17a2b8;">🔄 Test Scrollable Features</button>
+            <button onclick="clearComponents()">Clear All (Old Method)</button>
+            <button onclick="testEnhancedClear()" style="background: #e74c3c;">🧪 Test Enhanced Clear()</button>
             <button onclick="testZoom()">Test Zoom</button>
             <button onclick="testPan()">Test Pan</button>
             <br>
@@ -147,7 +150,9 @@
                 <strong>Instructions:</strong> 
                 • Single-click to select/drag components<br>
                 • Double-click to enter edit mode (interact with buttons/forms)<br>
-                • Press ESC or click outside to exit edit mode
+                • In edit mode, components with overflow content will show scrollbars<br>
+                • Press ESC or click outside to exit edit mode<br>
+                • Use "Test Scrollable Features" to analyze overflow in components
             </small>
         </div>
         
@@ -239,10 +244,10 @@
             const offsetY = componentCount === 1 ? 0 : (Math.random() - 0.5) * 200;
             
             const formHTML = `
-                <div style="padding: 10px; background: white; border-radius: 6px; height: 100%; box-sizing: border-box;">
-                    <h4 style="margin: 0 0 10px 0; color: #333;">Form ${componentCount}</h4>
-                    <input type="text" placeholder="Enter text" style="width: 100%; margin-bottom: 8px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
-                    <button style="width: 100%; padding: 6px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">Submit</button>
+                <div style="padding: 8px; background: white; border-radius: 6px; height: 100%; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; justify-content: center;">
+                    <h4 style="margin: 0 0 6px 0; color: #333; font-size: 14px; line-height: 1.2;">Form ${componentCount}</h4>
+                    <input type="text" placeholder="Enter text" style="width: 100%; margin-bottom: 6px; padding: 3px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; box-sizing: border-box;">
+                    <button style="width: 100%; padding: 4px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; box-sizing: border-box;">Submit</button>
                 </div>
             `;
             
@@ -294,7 +299,7 @@
             return shape;
         }
         
-        // Clear all components
+        // Clear all components (old method)
         function clearComponents() {
             // Get all reactComponent shapes
             const reactShapes = canvasMaker.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
@@ -305,7 +310,54 @@
             });
             
             componentCount = 0;
-            log('Cleared all components');
+            log('Cleared all components (old method)');
+        }
+        
+        // Test the enhanced clear() method
+        function testEnhancedClear() {
+            log('🧪 TESTING ENHANCED CLEAR() METHOD');
+            log('- Before clear: Checking state...');
+            
+            // Show current state
+            const shapes = canvasMaker.activeCanvasContext.shapes.length;
+            const htmlComponents = canvasMaker.htmlComponents ? canvasMaker.htmlComponents.size : 0;
+            const selectedElements = canvasMaker.activeCanvasContext.selectedElements.length;
+            
+            log(`  • Canvas shapes: ${shapes}`);
+            log(`  • HTML components: ${htmlComponents}`);
+            log(`  • Selected elements: ${selectedElements}`);
+            log(`  • Current tool: ${canvasMaker.currentTool || 'none'}`);
+            log(`  • Is dragging: ${canvasMaker.isDragging}`);
+            log(`  • Is editing component: ${canvasMaker.editingComponentId || 'none'}`);
+            
+            // Call the enhanced clear method
+            log('- Calling canvasMaker.clear()...');
+            canvasMaker.clear();
+            
+            // Check state after clear
+            setTimeout(() => {
+                const shapesAfter = canvasMaker.activeCanvasContext.shapes.length;
+                const htmlComponentsAfter = canvasMaker.htmlComponents ? canvasMaker.htmlComponents.size : 0;
+                const selectedElementsAfter = canvasMaker.activeCanvasContext.selectedElements.length;
+                
+                log('- After clear: Checking state...');
+                log(`  • Canvas shapes: ${shapesAfter} (should be 0)`);
+                log(`  • HTML components: ${htmlComponentsAfter} (should be 0)`);
+                log(`  • Selected elements: ${selectedElementsAfter} (should be 0)`);
+                log(`  • Current tool: ${canvasMaker.currentTool || 'none'}`);
+                log(`  • Is dragging: ${canvasMaker.isDragging}`);
+                log(`  • Is editing component: ${canvasMaker.editingComponentId || 'none'}`);
+                
+                // Verify success
+                const success = shapesAfter === 0 && htmlComponentsAfter === 0 && selectedElementsAfter === 0;
+                if (success) {
+                    log('✅ ENHANCED CLEAR() TEST PASSED - Everything cleared successfully!');
+                } else {
+                    log('❌ ENHANCED CLEAR() TEST FAILED - Some elements remain');
+                }
+                
+                componentCount = 0;
+            }, 100);
         }
         
         // Test zoom functionality
@@ -337,6 +389,110 @@
                 camera.y = originalY;
                 canvasMaker.redrawCanvas();
             }, 1000);
+        }
+        
+        // Add a form with content that overflows the container
+        function addScrollableForm() {
+            componentCount++;
+            const offsetX = componentCount === 1 ? 0 : (Math.random() - 0.5) * 300;
+            const offsetY = componentCount === 1 ? 0 : (Math.random() - 0.5) * 200;
+            
+            // Create large form content that will overflow
+            const formHTML = `
+                <div style="padding: 10px; background: white; border-radius: 6px; box-sizing: border-box; min-height: 100%;">
+                    <h3 style="margin: 0 0 10px 0; color: #333;">Large Form ${componentCount}</h3>
+                    <p style="margin-bottom: 10px; font-size: 12px;">This form has more content than can fit in the container. Double-click to enable scrolling.</p>
+                    
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Name:</label>
+                        <input type="text" placeholder="Enter your name" style="width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px;">
+                    </div>
+                    
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Email:</label>
+                        <input type="email" placeholder="Enter your email" style="width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px;">
+                    </div>
+                    
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Message:</label>
+                        <textarea placeholder="Enter your message here..." style="width: 100%; height: 80px; padding: 5px; border: 1px solid #ccc; border-radius: 3px; resize: none;"></textarea>
+                    </div>
+                    
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">
+                            <input type="checkbox" style="margin-right: 5px;"> I agree to the terms and conditions
+                        </label>
+                    </div>
+                    
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; font-weight: bold; margin-bottom: 5px;">Priority:</label>
+                        <select style="width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 3px;">
+                            <option>Low</option>
+                            <option>Medium</option>
+                            <option>High</option>
+                            <option>Urgent</option>
+                        </select>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button style="flex: 1; padding: 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">Submit</button>
+                        <button style="flex: 1; padding: 8px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer;">Cancel</button>
+                    </div>
+                    
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 3px; font-size: 11px; color: #666;">
+                        This is additional content to demonstrate scrolling functionality when the content exceeds the container height.
+                    </div>
+                </div>
+            `;
+            
+            const shape = canvasMaker.addReactComponentWithHTML(offsetX, offsetY, 250, 200, formHTML, {
+                id: 'scrollable-form-' + componentCount,
+                fill: '#f8f9fa',
+                coordinateSystem: 'center'
+            });
+            
+            log(`Added large scrollable form #${componentCount} - Double-click to enable scrolling`);
+            return shape;
+        }
+        
+        // Test scrollable features
+        function testScrollableFeatures() {
+            log('🔄 TESTING SCROLLABLE FEATURES');
+            
+            // Find all React components
+            const reactShapes = canvasMaker.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+            
+            if (reactShapes.length === 0) {
+                log('❌ No React components found. Add some components first.');
+                return;
+            }
+            
+            reactShapes.forEach((shape, index) => {
+                log(`- Component ${shape.id}:`);
+                
+                // Check overflow info
+                const overflowInfo = canvasMaker.getComponentOverflowInfo(shape.id);
+                const hasOverflow = canvasMaker.hasComponentOverflow(shape.id);
+                
+                log(`  • Has overflow: ${hasOverflow}`);
+                if (overflowInfo) {
+                    log(`  • Content size: ${overflowInfo.scrollWidth}x${overflowInfo.scrollHeight}`);
+                    log(`  • Container size: ${overflowInfo.clientWidth}x${overflowInfo.clientHeight}`);
+                    log(`  • Horizontal overflow: ${overflowInfo.horizontal}`);
+                    log(`  • Vertical overflow: ${overflowInfo.vertical}`);
+                    
+                    // Test setting scrollable size for components with overflow
+                    if (hasOverflow) {
+                        log(`  • Setting custom scrollable size for ${shape.id}`);
+                        const success = canvasMaker.setComponentScrollableSize(shape.id, 200, 150);
+                        log(`  • Size update ${success ? 'succeeded' : 'failed'}`);
+                    }
+                } else {
+                    log(`  • No overflow info available`);
+                }
+            });
+            
+            log('✅ Scrollable features test completed. Double-click components with overflow to test scrolling!');
         }
         
         // Logging function
