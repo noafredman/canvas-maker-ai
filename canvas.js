@@ -6269,15 +6269,27 @@ class CanvasMaker {
             this.hideSelectionBox(this.nestedCanvasContext); // Nested canvas
         }
         
-        // Force complete canvas clearing
+        // Force complete canvas clearing - clear ALL canvases to ensure visual cleanup
         const ctx = canvasContext.ctx;
         const canvas = canvasContext.canvas;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Also clear main canvas if we're in nested context
-        if (canvasContext === this.nestedCanvasContext && this.mainCanvasContext) {
+        // Always clear main canvas context too (in case shapes were drawn there)
+        if (this.mainCanvasContext && this.mainCanvasContext !== canvasContext) {
             this.mainCanvasContext.ctx.clearRect(0, 0, this.mainCanvasContext.canvas.width, this.mainCanvasContext.canvas.height);
         }
+        
+        // Also clear the root canvas element if it's different from contexts
+        if (this.canvas && this.canvas !== canvas && this.canvas !== this.mainCanvasContext?.canvas) {
+            const rootCtx = this.canvas.getContext('2d');
+            rootCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+        
+        console.log('[CLEAR-CANVAS] Cleared visual canvas layers:', {
+            activeCanvas: canvas.width + 'x' + canvas.height,
+            mainCanvas: this.mainCanvasContext ? this.mainCanvasContext.canvas.width + 'x' + this.mainCanvasContext.canvas.height : 'none',
+            rootCanvas: this.canvas ? this.canvas.width + 'x' + this.canvas.height : 'none'
+        });
         
         // Clear any visual state CSS classes from canvas container
         const canvasContainer = canvas.parentElement;
@@ -6291,7 +6303,31 @@ class CanvasMaker {
         // Update cursor state to default
         this.updateCanvasCursor();
         
-        // Force complete redraw
+        // Force multiple aggressive visual clears before redraw
+        console.log('[CLEAR-CANVAS] Forcing aggressive visual clearing...');
+        
+        // Clear all possible canvas contexts multiple times
+        const allCanvases = [
+            { name: 'active', ctx: canvasContext.ctx, canvas: canvasContext.canvas },
+            { name: 'main', ctx: this.mainCanvasContext?.ctx, canvas: this.mainCanvasContext?.canvas },
+            { name: 'root', ctx: this.canvas?.getContext('2d'), canvas: this.canvas },
+            { name: 'nested', ctx: this.nestedCanvasContext?.ctx, canvas: this.nestedCanvasContext?.canvas }
+        ].filter(c => c.ctx && c.canvas);
+        
+        // Clear each canvas 3 times to ensure visual artifacts are gone
+        for (let i = 0; i < 3; i++) {
+            allCanvases.forEach(({ name, ctx, canvas }) => {
+                try {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    if (i === 0) console.log(`[CLEAR-CANVAS] Cleared ${name} canvas: ${canvas.width}x${canvas.height}`);
+                } catch (error) {
+                    console.warn(`[CLEAR-CANVAS] Error clearing ${name} canvas:`, error);
+                }
+            });
+        }
+        
+        // Force complete redraw from clean state
+        console.log('[CLEAR-CANVAS] Starting redraw with cleared state...');
         this.redrawCanvas();
     }
     
