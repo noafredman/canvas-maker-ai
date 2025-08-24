@@ -1703,6 +1703,31 @@ canvas.on('componentEditMode', ({ shapeId, isEditing }) => {
 - **Toggle**: Double-click component to switch between modes
 - **Visual feedback**: Slight opacity change indicates current mode
 
+## Canvas and HTML Content Management
+
+### Clearing Canvas Content
+
+The canvas system manages both canvas-drawn content and HTML DOM elements. To properly clear everything:
+
+```javascript
+// ✅ Correct way - clears both canvas and HTML content
+canvas.clear();
+
+// ❌ Incorrect way - only clears canvas, leaves HTML elements
+canvas.clearCanvas(); // Internal method, use clear() instead
+
+// ✅ Complete cleanup when removing canvas
+canvas.dispose(); // Clears content + removes event listeners + cleans up DOM
+```
+
+**Why Canvas and HTML Don't Act as One Unit:**
+
+The system uses two separate rendering layers:
+1. **Canvas layer**: For drawn shapes (paths, rectangles, circles, etc.)
+2. **HTML layer**: For interactive React components and DOM elements
+
+Both layers are synchronized for positioning/transformations, but they exist as separate DOM elements. The `clear()` method ensures both layers are cleaned up together.
+
 ### Best Practices for React Integration
 
 1. **Use Container-Based Initialization**: Let Canvas Maker create the canvas element for better compatibility.

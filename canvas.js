@@ -1070,6 +1070,44 @@ class CanvasMaker {
         };
     }
     
+    // API method for external apps to clear everything (canvas + HTML)
+    clear() {
+        this.clearCanvas();
+    }
+    
+    // API method to properly dispose of the canvas instance
+    dispose() {
+        // Clear all content first
+        this.clear();
+        
+        // Remove event listeners
+        if (this.boundMouseDown) {
+            this.canvas.removeEventListener('mousedown', this.boundMouseDown);
+        }
+        if (this.boundMouseMove) {
+            document.removeEventListener('mousemove', this.boundMouseMove);
+        }
+        if (this.boundMouseUp) {
+            document.removeEventListener('mouseup', this.boundMouseUp);
+        }
+        if (this.boundClick) {
+            this.canvas.removeEventListener('click', this.boundClick);
+        }
+        
+        // Remove HTML rendering layer
+        if (this.htmlRenderingLayer && this.htmlRenderingLayer.parentElement) {
+            this.htmlRenderingLayer.parentElement.removeChild(this.htmlRenderingLayer);
+        }
+        
+        // Clear component callbacks
+        this.componentCallbacks = { onUpdate: [], onRemove: [] };
+        
+        // Reset instance
+        this.canvas = null;
+        this.ctx = null;
+        this.htmlRenderingLayer = null;
+    }
+    
     hideToolbar() {
         const toolbar = document.getElementById('floating-toolbar');
         if (toolbar) toolbar.style.display = 'none';
@@ -5564,11 +5602,36 @@ class CanvasMaker {
         // Hide selection box
         this.hideSelectionBox();
         
+        // Clear HTML rendering layer
+        this.clearHTMLRenderingLayer();
+        
         // Clear the canvas and redraw
         const ctx = canvasContext.ctx;
         const canvas = canvasContext.canvas;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         this.redrawCanvas();
+    }
+    
+    clearHTMLRenderingLayer() {
+        if (this.htmlRenderingLayer) {
+            // Remove all child elements from the HTML rendering layer
+            while (this.htmlRenderingLayer.firstChild) {
+                this.htmlRenderingLayer.removeChild(this.htmlRenderingLayer.firstChild);
+            }
+            
+            // Clean up any component renderers
+            const canvasContext = this.activeCanvasContext;
+            canvasContext.shapes.forEach(shape => {
+                if (shape.type === 'reactComponent' && shape.canvasRenderer) {
+                    try {
+                        shape.canvasRenderer.unmount();
+                    } catch (error) {
+                        console.warn('Error unmounting component renderer:', error);
+                    }
+                    shape.canvasRenderer = null;
+                }
+            });
+        }
     }
     
     async makeReal() {
