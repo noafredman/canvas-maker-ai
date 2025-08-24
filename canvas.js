@@ -1519,8 +1519,65 @@ class CanvasMaker {
         this.activeCanvasContext.shapes = shapes.filter(shape => shape.type !== 'reactComponent');
         
         console.log(`[CLEAR-ALL] Successfully removed ${removedCount} React components from both layers`);
-        this.redrawCanvas();
+        
+        // Force visual clearing to ensure canvas matches empty state
+        this.forceVisualClear();
+        
         return removedCount;
+    }
+    
+    // Force complete visual clearing of canvas to match empty state
+    forceVisualClear() {
+        console.log('[FORCE-CLEAR] Starting complete visual canvas clear');
+        
+        // Get all available canvas contexts for comprehensive clearing
+        const contexts = [
+            { name: 'active', ctx: this.activeCanvasContext?.ctx, canvas: this.activeCanvasContext?.canvas },
+            { name: 'main', ctx: this.mainCanvasContext?.ctx, canvas: this.mainCanvasContext?.canvas },
+            { name: 'nested', ctx: this.nestedCanvasContext?.ctx, canvas: this.nestedCanvasContext?.canvas },
+            { name: 'root', ctx: this.canvas?.getContext('2d'), canvas: this.canvas }
+        ].filter(c => c.ctx && c.canvas);
+        
+        console.log(`[FORCE-CLEAR] Clearing ${contexts.length} canvas contexts`);
+        
+        // Clear all canvas pixels multiple times to ensure complete clearing
+        for (let pass = 0; pass < 3; pass++) {
+            contexts.forEach(({ name, ctx, canvas }) => {
+                try {
+                    // Clear entire canvas area
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Reset canvas state
+                    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transforms
+                    ctx.globalAlpha = 1; // Reset alpha
+                    ctx.globalCompositeOperation = 'source-over'; // Reset composite
+                    
+                    if (pass === 0) {
+                        console.log(`[FORCE-CLEAR] Cleared ${name} canvas: ${canvas.width}x${canvas.height}`);
+                    }
+                } catch (error) {
+                    console.warn(`[FORCE-CLEAR] Error clearing ${name} canvas:`, error);
+                }
+            });
+        }
+        
+        // Clear any cached visual state
+        if (this.clearVisualCache && typeof this.clearVisualCache === 'function') {
+            this.clearVisualCache();
+            console.log('[FORCE-CLEAR] Cleared visual cache');
+        }
+        
+        // Reset camera transform on active canvas
+        if (this.activeCanvasContext?.ctx && this.activeCanvasContext?.camera) {
+            const { ctx, camera } = this.activeCanvasContext;
+            ctx.setTransform(camera.zoom, 0, 0, camera.zoom, -camera.x * camera.zoom, -camera.y * camera.zoom);
+        }
+        
+        // Force complete redraw from current (empty) state
+        console.log('[FORCE-CLEAR] Forcing complete redraw from empty state');
+        this.redraw();
+        
+        console.log('[FORCE-CLEAR] Visual canvas clearing complete');
     }
     
     // React Component Registration System
@@ -6669,9 +6726,9 @@ class CanvasMaker {
             });
         }
         
-        // Force complete redraw from clean state
+        // Force complete visual clear to ensure canvas matches empty state
         console.log('[CLEAR-CANVAS] Starting redraw with cleared state...');
-        this.redrawCanvas();
+        this.forceVisualClear();
     }
     
     clearHTMLRenderingLayer() {

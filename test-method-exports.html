@@ -79,7 +79,8 @@
                 'addReactComponent',
                 'removeReactComponent', 
                 'positionReactComponent',
-                'clearAllReactComponents'
+                'clearAllReactComponents',
+                'forceVisualClear'
             ];
             
             methods.forEach(methodName => {
@@ -125,6 +126,10 @@
                 
                 results += `<div class="method-test success">✅ clearAllReactComponents: Cleared ${clearedCount} components</div>`;
                 results += `<div class="method-test ${domClearedCorrectly ? 'success' : 'error'}">${domClearedCorrectly ? '✅' : '❌'} DOM cleanup: ${remainingElements} elements remaining</div>`;
+                
+                // Test standalone forceVisualClear method
+                canvas.forceVisualClear();
+                results += `<div class="method-test success">✅ forceVisualClear: Method executed successfully</div>`;
                 
             } catch (error) {
                 results += `<div class="method-test error">❌ Functional test error: ${error.message}</div>`;

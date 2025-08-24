@@ -17,6 +17,7 @@ This document provides a complete guide for integrating the Canvas Maker system 
 - ✅ **Added clearAllReactComponents()** - Efficiently remove all HTML components at once
 - ✅ **Method accessibility verified** - All React component methods properly exported on instance
 - 🐛 **Fixed clearAllReactComponents() DOM cleanup** - Now properly removes visible DOM elements from page
+- ✅ **Added forceVisualClear() method** - Clears cached visual state and forces complete canvas redraw
 
 ### Previous Updates (v1.6)
 
@@ -1937,6 +1938,16 @@ console.log(`Removed ${removedCount} components`);
 // 2. Clears htmlComponents Map
 // 3. Removes reactComponent shapes from canvas
 // 4. Disconnects observers and cleans registry
+// 5. Forces complete visual canvas clearing (NEW)
+
+// Force visual clearing to match empty state (NEW in v1.7)
+canvas.forceVisualClear();
+
+// This method ensures visual canvas matches internal state:
+// - Clears all canvas pixels with ctx.clearRect()
+// - Resets cached visual state and canvas properties
+// - Forces complete redraw from current (empty) state
+// - Handles multiple canvas contexts (active, main, nested, root)
 ```
 
 #### Enhanced Dual-Layer Cleanup
@@ -1952,15 +1963,24 @@ console.log(`Removed ${removedCount} components`);
 const success = canvas.removeReactComponent('component-123');
 console.log('Cleanup successful:', success); // true/false
 
-// clearAllReactComponents() performs bulk cleanup (FIXED v1.7):
+// clearAllReactComponents() performs bulk cleanup (ENHANCED v1.7):
 // 1. Removes ALL visible DOM elements from page first
 // 2. Clears htmlComponents Map completely
 // 3. Removes all reactComponent shapes from canvas
 // 4. Disconnects all observers and cleans registry
-// 5. Triggers canvas redraw
+// 5. Forces complete visual canvas clearing (NEW)
 
 const count = canvas.clearAllReactComponents();
 console.log('Total components removed:', count);
+
+// forceVisualClear() ensures visual consistency (NEW v1.7):
+// - Clears all canvas contexts (active, main, nested, root)
+// - Resets canvas state (transforms, alpha, composite operations)
+// - Clears cached visual state if available
+// - Reapplies camera transforms after clearing
+// - Forces complete redraw from current state
+
+canvas.forceVisualClear(); // Use when visual state doesn't match internal arrays
 ```
 
 ### Enhanced Persistence and State Management
