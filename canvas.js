@@ -906,6 +906,11 @@ class CanvasMaker {
         });
     }
     
+    // Alias for backward compatibility - addHTMLComponent
+    addHTMLComponent(x, y, width, height, content, options = {}) {
+        return this.addReactComponentWithHTML(x, y, width, height, content, options);
+    }
+    
     // Set scrollable container size for HTML component (allows overflow scrolling)
     setComponentScrollableSize(shapeId, width = null, height = null) {
         const shape = this.activeCanvasContext.shapes.find(s => s.id === shapeId);
@@ -1606,11 +1611,32 @@ class CanvasMaker {
     clearHTMLComponents() {
         const context = this.activeCanvasContext;
         
-        // Remove all HTML components
+        // First, clean up HTML elements and renderers for all reactComponent shapes
         const htmlShapes = context.shapes.filter(s => s.type === 'reactComponent');
         htmlShapes.forEach(shape => {
-            this.removeReactComponent(shape);
+            // Clean up canvas renderer
+            if (shape.canvasRenderer) {
+                // Stop observing DOM changes
+                if (shape.canvasRenderer.observer) {
+                    shape.canvasRenderer.observer.disconnect();
+                }
+                
+                // Unmount the component
+                if (shape.canvasRenderer.unmount) {
+                    shape.canvasRenderer.unmount();
+                }
+            }
+            
+            // Remove HTML element
+            const element = this.htmlComponents.get(shape.id);
+            if (element) {
+                element.remove();
+                this.htmlComponents.delete(shape.id);
+            }
         });
+        
+        // Then filter out all reactComponent shapes from the shapes array
+        context.shapes = context.shapes.filter(s => s.type !== 'reactComponent');
         
         // Clear HTML-related selections
         context.selectedElements = context.selectedElements.filter(element => {
@@ -6203,6 +6229,9 @@ class CanvasMaker {
     }
     
     clearCanvas() {
+        // Clear HTML rendering layer FIRST while shapes still exist for proper cleanup
+        this.clearHTMLRenderingLayer();
+        
         // Clear the active canvas context data
         const canvasContext = this.activeCanvasContext;
         canvasContext.paths.length = 0;
@@ -6239,9 +6268,6 @@ class CanvasMaker {
         if (this.nestedCanvasContext) {
             this.hideSelectionBox(this.nestedCanvasContext); // Nested canvas
         }
-        
-        // Clear HTML rendering layer completely
-        this.clearHTMLRenderingLayer();
         
         // Force complete canvas clearing
         const ctx = canvasContext.ctx;
@@ -7161,6 +7187,6 @@ if (typeof module !== 'undefined' && module.exports) {
 // Initialize the app when the DOM is loaded (only if running standalone)
 if (typeof document !== 'undefined' && typeof module === 'undefined') {
     document.addEventListener('DOMContentLoaded', () => {
-        new CanvasMaker();
+        window.canvasMaker = new CanvasMaker();
     });
 }

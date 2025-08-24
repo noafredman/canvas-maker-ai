@@ -2,9 +2,17 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.5)
+## Recent Updates (v1.6)
 
-### Resize Constraints System
+### Clear Method Bug Fixes
+- 🐛 **Fixed clear() reactComponent persistence bug** - `clear()` method now properly removes all reactComponent container shapes
+- 🐛 **Fixed clearHTMLComponents() shape filtering** - Method now correctly preserves regular canvas shapes while removing only HTML components
+- ✅ **Added addHTMLComponent() alias** - Backward compatibility method for external applications
+- ✅ **Enhanced clear method reliability** - All granular clear methods now handle reactComponent shapes correctly
+
+### Previous Updates (v1.5)
+
+#### Resize Constraints System
 - ✅ **Configurable resize limits** - Prevent content distortion with min/max size bounds
 - ✅ **External API control** - Outer apps can modify constraints with validation warnings
 - ✅ **Individual component constraints** - Set custom limits per component
@@ -989,6 +997,10 @@ const shape3 = canvas.addReactComponentWithHTML(0, -100, 300, 150, htmlContent, 
 const centerShape = canvas.addReactComponentAtCenter(300, 150, htmlContent);
 const screenShape = canvas.addReactComponentAtScreenPos(50, 50, 300, 150, htmlContent);
 
+// Backward compatibility alias (v1.6+)
+const legacyShape = canvas.addHTMLComponent(100, 200, 300, 150, htmlContent);
+// Same as addReactComponentWithHTML() - provided for external applications
+
 // Converting between coordinate systems manually
 const worldPos = { x: 100, y: 200 };
 const screenPos = canvas.worldToCanvas(worldPos.x, worldPos.y);
@@ -1926,16 +1938,18 @@ canvas.setPersistenceFilter(null);
 canvas.clearShapes();
 console.log('Cleared rectangles, circles, paths, text - HTML components remain');
 
-// Clear only HTML components (keep canvas shapes)
+// Clear only HTML components (keep canvas shapes) - Fixed in v1.6
 canvas.clearHTMLComponents();
 console.log('Cleared HTML components - canvas shapes remain');
+// Bug fix: Now correctly preserves regular canvas shapes like circles, rectangles
 
 // Clear everything (equivalent to clear() but more explicit)
 canvas.clearAll();
 console.log('Cleared all content - both shapes and HTML components');
 
-// The original clear() method still works and calls clearAll()
+// The original clear() method still works and calls clearAll() - Fixed in v1.6
 canvas.clear(); // Same as clearAll()
+// Bug fix: Now properly removes reactComponent container shapes in React integrations
 ```
 
 #### Understanding Auto-Created Shapes
