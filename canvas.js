@@ -1,7 +1,13 @@
+// Clear any old test data from localStorage
+if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('canvasMakerData');
+    localStorage.removeItem('nestedCanvasData');
+}
+
 class CanvasMaker {
     constructor(containerOrCanvas = null, options = {}) {
         const instanceId = Math.random().toString(36).substr(2, 9);
-        console.log(`[CONSTRUCTOR-${instanceId}] Creating new CanvasMaker instance`);
+        // console.log(`[CONSTRUCTOR-${instanceId}] Creating new CanvasMaker instance`);
         
         // Parse constructor arguments
         this.instanceId = instanceId;
@@ -66,6 +72,7 @@ class CanvasMaker {
         this._selectedElements = [];
         this._previewSelectedElements = []; // Elements that would be selected during drag
         this._hoveredElement = null;
+        this.hoveredResizeHandle = null;
         this.dragOffset = { x: 0, y: 0 };
         this.clipboard = [];
         
@@ -118,6 +125,8 @@ class CanvasMaker {
                 { id: 'pen-tool', tool: 'pen', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z', title: 'Pen Tool' },
                 { id: 'rectangle-tool', tool: 'rectangle', icon: 'M3 3v18h18V3H3zm16 16H5V5h14v14z', title: 'Rectangle Tool' },
                 { id: 'circle-tool', tool: 'circle', icon: 'M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z', title: 'Circle Tool' },
+                { id: 'line-tool', tool: 'line', icon: 'M2 11h20v2H2v-2z', title: 'Line Tool', transform: 'rotate(45 12 12)' },
+                { id: 'arrow-tool', tool: 'arrow', icon: 'M4 11h12v2H4v-2zm12-2l4 3-4 3v-2H4v-2h12v-2z', title: 'Arrow Tool' },
                 { id: 'text-tool', tool: 'text', icon: 'M5 4v3h5.5v12h3V7H19V4z', title: 'Text Tool' },
                 { id: 'select-tool', tool: 'select', icon: 'M2 2v6h2V4h4V2H2zm0 16v-6h2v4h4v2H2zm20 0h-6v2h4v-4h2v6zm0-16V2h-6v2h4v4h2V6z', title: 'Select Tool', active: true },
                 { id: 'nested-canvas-tool', tool: 'nested-canvas', icon: 'M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v8H8V8zm2 2v4h4v-4h-4z', title: 'Nested Canvas Tool' }
@@ -251,7 +260,7 @@ class CanvasMaker {
                     canvasParent.appendChild(this.htmlRenderingLayer);
                 }
                 
-                console.log('[HTML-RENDER] Created HTML rendering layer');
+                // console.log('[HTML-RENDER] Created HTML rendering layer');
             }
         }
     }
@@ -428,9 +437,35 @@ class CanvasMaker {
         canvas.width = width;
         canvas.height = height;
         
-        // Set CSS size to match
+        // Set CSS size to match (with !important to override CSS rules)
         canvas.style.width = width + 'px';
         canvas.style.height = height + 'px';
+        canvas.style.setProperty('width', width + 'px', 'important');
+        canvas.style.setProperty('height', height + 'px', 'important');
+        
+        // For nested canvas, use fixed positioning relative to viewport as last resort
+        if (canvas.id === 'nested-canvas') {
+            // Clear all camera CSS variables that might interfere
+            canvas.style.removeProperty('--camera-x');
+            canvas.style.removeProperty('--camera-y'); 
+            canvas.style.removeProperty('--camera-zoom');
+            canvas.style.removeProperty('--camera-transform');
+            
+            // Keep canvas in its container instead of moving to body to avoid browser extension interference
+            canvas.style.position = 'relative';
+            canvas.style.top = '0';
+            canvas.style.left = '0';
+            canvas.style.transform = 'none';
+            canvas.style.zIndex = '1';
+            
+            // Set dimensions normally
+            canvas.setAttribute('width', width);
+            canvas.setAttribute('height', height);
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+            
+            console.log(`[NESTED-CANVAS] Canvas positioned normally within container`);
+        }
         
         // With CSS transforms: camera coordinates represent the world position at screen center
         // Start with world origin (0,0) at screen center
@@ -454,20 +489,20 @@ class CanvasMaker {
     }
     
     setupEventListeners() {
-        console.log(`[SETUP-${this.instanceId}] Setting up event listeners on canvas:`, !!this.canvas);
-        console.log(`[SETUP-${this.instanceId}] handleMouseDown method exists:`, typeof this.handleMouseDown);
+        // console.log(`[SETUP-${this.instanceId}] Setting up event listeners on canvas:`, !!this.canvas);
+        // console.log(`[SETUP-${this.instanceId}] handleMouseDown method exists:`, typeof this.handleMouseDown);
         
         // Remove existing listeners to prevent duplicates
         if (this.boundMouseDown) {
             this.canvas.removeEventListener('mousedown', this.boundMouseDown);
-            console.log(`[SETUP-${this.instanceId}] Removed existing mousedown listener`);
+            // console.log(`[SETUP-${this.instanceId}] Removed existing mousedown listener`);
         }
         
         this.boundMouseDown = (e) => {
-            console.log(`[WRAPPER-${this.instanceId}] mousedown event received!`);
+            // console.log(`[WRAPPER-${this.instanceId}] mousedown event received!`);
             return this.handleMouseDown(e);
         };
-        console.log(`[SETUP-${this.instanceId}] handleMouseDown wrapped:`, typeof this.boundMouseDown);
+        // console.log(`[SETUP-${this.instanceId}] handleMouseDown wrapped:`, typeof this.boundMouseDown);
         this.canvas.addEventListener('mousedown', this.boundMouseDown);
         
         // Remove and re-add other event listeners to prevent duplicates
@@ -487,8 +522,8 @@ class CanvasMaker {
             this.canvas.removeEventListener('click', this.boundClick);
         }
         this.boundClick = (e) => {
-            console.log(`[EVENT] Click event received on canvas at`, e.clientX, e.clientY);
-            console.log(`[EVENT] Event target:`, e.target);
+            // console.log(`[EVENT] Click event received on canvas at`, e.clientX, e.clientY);
+            // console.log(`[EVENT] Event target:`, e.target);
             return this.handleClick(e);
         };
         this.canvas.addEventListener('click', this.boundClick);
@@ -499,7 +534,7 @@ class CanvasMaker {
             canvasContainer.addEventListener('click', (e) => {
                 // If click is on the container itself (not a child element), forward to canvas
                 if (e.target === canvasContainer) {
-                    console.log('[CONTAINER-CLICK] Forwarding click from container to canvas');
+                    // console.log('[CONTAINER-CLICK] Forwarding click from container to canvas');
                     // Create a new click event and dispatch it to the canvas
                     const forwardedEvent = new MouseEvent('click', {
                         bubbles: e.bubbles,
@@ -517,7 +552,7 @@ class CanvasMaker {
         
         // Add debug click listener to document to see what's getting clicked
         document.addEventListener('click', (e) => {
-            console.log(`[DOC-CLICK] Document click on:`, e.target.tagName, e.target.className);
+            // console.log(`[DOC-CLICK] Document click on:`, e.target.tagName, e.target.className);
         });
         
         window.addEventListener('resize', () => {
@@ -777,26 +812,26 @@ class CanvasMaker {
             // Get viewport center in world coordinates
             const canvasCenterX = canvas.width / 2;
             const canvasCenterY = canvas.height / 2;
-            console.log(`[COORD-DEBUG] Canvas center pixels: ${canvasCenterX}, ${canvasCenterY}`);
+            // console.log(`[COORD-DEBUG] Canvas center pixels: ${canvasCenterX}, ${canvasCenterY}`);
             
             const viewportCenterWorld = this.canvasToWorld(canvasCenterX, canvasCenterY);
-            console.log(`[COORD-DEBUG] canvasToWorld(${canvasCenterX}, ${canvasCenterY}) = (${viewportCenterWorld.x}, ${viewportCenterWorld.y})`);
+            // console.log(`[COORD-DEBUG] canvasToWorld(${canvasCenterX}, ${canvasCenterY}) = (${viewportCenterWorld.x}, ${viewportCenterWorld.y})`);
             
-            console.log(`[COORD-DEBUG] Canvas size: ${canvas.width}x${canvas.height}`);
-            console.log(`[COORD-DEBUG] Canvas center: ${canvas.width/2}, ${canvas.height/2}`);
-            console.log(`[COORD-DEBUG] Viewport center world: ${viewportCenterWorld.x}, ${viewportCenterWorld.y}`);
-            console.log(`[COORD-DEBUG] Camera: x=${camera.x}, y=${camera.y}, zoom=${camera.zoom}`);
+            // console.log(`[COORD-DEBUG] Canvas size: ${canvas.width}x${canvas.height}`);
+            // console.log(`[COORD-DEBUG] Canvas center: ${canvas.width/2}, ${canvas.height/2}`);
+            // console.log(`[COORD-DEBUG] Viewport center world: ${viewportCenterWorld.x}, ${viewportCenterWorld.y}`);
+            // console.log(`[COORD-DEBUG] Camera: x=${camera.x}, y=${camera.y}, zoom=${camera.zoom}`);
             
             // Apply offset and center the component  
-            console.log(`[COORD-DEBUG] Input offset: x=${x}, y=${y}`);
-            console.log(`[COORD-DEBUG] Viewport center world: ${viewportCenterWorld.x}, ${viewportCenterWorld.y}`);
+            // console.log(`[COORD-DEBUG] Input offset: x=${x}, y=${y}`);
+            // console.log(`[COORD-DEBUG] Viewport center world: ${viewportCenterWorld.x}, ${viewportCenterWorld.y}`);
             
             finalX = viewportCenterWorld.x + x;
             finalY = viewportCenterWorld.y + y;
             
-            console.log(`[COORD-DEBUG] Calculation: ${viewportCenterWorld.x} + ${x} = ${finalX}`);
-            console.log(`[COORD-DEBUG] Calculation: ${viewportCenterWorld.y} + ${y} = ${finalY}`);
-            console.log(`[COORD-DEBUG] Final position: ${finalX}, ${finalY}`);
+            // console.log(`[COORD-DEBUG] Calculation: ${viewportCenterWorld.x} + ${x} = ${finalX}`);
+            // console.log(`[COORD-DEBUG] Calculation: ${viewportCenterWorld.y} + ${y} = ${finalY}`);
+            // console.log(`[COORD-DEBUG] Final position: ${finalX}, ${finalY}`);
         }
         // Default: use coordinates as-is (world coordinates)
         // Input: (x,y) in world coordinate units
@@ -847,13 +882,13 @@ class CanvasMaker {
     
     // Remove a React component shape
     removeReactComponent(shape) {
-        console.log('[REMOVE] removeReactComponent called for shape:', shape.id);
+        // console.log('[REMOVE] removeReactComponent called for shape:', shape.id);
         console.trace('Remove stack trace');
         const shapes = this.activeCanvasContext.shapes;
         const index = shapes.indexOf(shape);
         if (index > -1) {
             shapes.splice(index, 1);
-            console.log('[REMOVE] Shape removed from shapes array');
+            // console.log('[REMOVE] Shape removed from shapes array');
             
             // Clean up canvas renderer
             if (shape.canvasRenderer) {
@@ -1125,7 +1160,7 @@ class CanvasMaker {
                 button.title = tool.title;
                 
                 button.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="${tool.icon}"/>
+                    <path d="${tool.icon}"${tool.transform ? ` transform="${tool.transform}"` : ''}/>
                 </svg>`;
                 
                 // Add event listener
@@ -1211,8 +1246,18 @@ class CanvasMaker {
         }
         if (this.isResizing) {
             container.classList.add('resizing');
+            // Also add the specific resize handle type during active resizing
+            if (this.resizeHandle) {
+                container.classList.add(`resize-${this.resizeHandle}`);
+            }
         }
-        if (this.hoveredElement) {
+        
+        // Check for resize handle hover first
+        if (this.hoveredResizeHandle) {
+            container.classList.add('resize-handle-hover');
+            // Add specific resize cursor based on handle type
+            container.classList.add(`resize-${this.hoveredResizeHandle}`);
+        } else if (this.hoveredElement) {
             container.classList.add('hovering');
             // Show can-grab cursor when hovering over any draggable element
             if (!this.isDragging && !this.isResizing) {
@@ -1220,7 +1265,7 @@ class CanvasMaker {
             }
         }
         
-        console.log('updateCanvasCursor final - currentTool:', this.currentTool, 'final classes:', container.className, 'isDragging:', this.isDragging);
+        // console.log('updateCanvasCursor final - currentTool:', this.currentTool, 'final classes:', container.className, 'isDragging:', this.isDragging);
     }
     
     // Unified getters that work with active context
@@ -1247,12 +1292,12 @@ class CanvasMaker {
         return this.canvasToWorld(canvasX, canvasY);
     }
     
-    canvasToWorld(canvasX, canvasY) {
+    canvasToWorld(canvasX, canvasY, canvasContext = this.activeCanvasContext) {
         // Convert screen coordinates to world coordinates with Canvas2D transforms
-        const camera = this.activeCanvasContext.camera;
-        const canvas = this.activeCanvasContext.canvas;
+        const camera = canvasContext.camera;
+        const canvas = canvasContext.canvas;
         
-        console.log(`[CANVAS-TO-WORLD] Input: (${canvasX}, ${canvasY}) Camera: x=${camera.x}, y=${camera.y}, zoom=${camera.zoom}`);
+        // console.log(`[CANVAS-TO-WORLD] Input: (${canvasX}, ${canvasY}) Camera: x=${camera.x}, y=${camera.y}, zoom=${camera.zoom}`);
         
         // Inverse transform: account for centering, then zoom, then camera offset
         const centerX = canvas.width / 2;
@@ -1261,25 +1306,25 @@ class CanvasMaker {
         // Step 1: Remove canvas centering
         const centeredX = canvasX - centerX;
         const centeredY = canvasY - centerY;
-        console.log(`[CANVAS-TO-WORLD] After centering: (${centeredX}, ${centeredY})`);
+        // console.log(`[CANVAS-TO-WORLD] After centering: (${centeredX}, ${centeredY})`);
         
         // Step 2: Remove zoom scaling
         const unzoomedX = centeredX / camera.zoom;
         const unzoomedY = centeredY / camera.zoom;
-        console.log(`[CANVAS-TO-WORLD] After unzoom: (${unzoomedX.toFixed(1)}, ${unzoomedY.toFixed(1)})`);
+        // console.log(`[CANVAS-TO-WORLD] After unzoom: (${unzoomedX.toFixed(1)}, ${unzoomedY.toFixed(1)})`);
         
         // Step 3: Remove camera translation (inverse of canvas transform)
         const worldX = unzoomedX - camera.x;
         const worldY = unzoomedY - camera.y;
-        console.log(`[CANVAS-TO-WORLD] Final world: (${worldX.toFixed(1)}, ${worldY.toFixed(1)})`);
+        // console.log(`[CANVAS-TO-WORLD] Final world: (${worldX.toFixed(1)}, ${worldY.toFixed(1)})`);
         
         return { x: worldX, y: worldY };
     }
     
-    worldToCanvas(worldX, worldY) {
+    worldToCanvas(worldX, worldY, canvasContext = this.activeCanvasContext) {
         // Convert world coordinates to screen coordinates with Canvas2D transforms
-        const camera = this.activeCanvasContext.camera;
-        const canvas = this.activeCanvasContext.canvas;
+        const camera = canvasContext.camera;
+        const canvas = canvasContext.canvas;
         
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
@@ -1366,6 +1411,7 @@ class CanvasMaker {
         // Don't apply CSS transform to canvas - we'll handle transforms in drawing code
         const { camera, canvas } = canvasContext;
         
+        
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
         const translateX = centerX + (camera.x * camera.zoom);
@@ -1444,7 +1490,7 @@ class CanvasMaker {
     }
     
     handleMouseDown(e) {
-        console.log(`[HANDLEmousedown] START - Event received`, e);
+        // console.log(`[HANDLEmousedown] START - Event received`, e);
         const pos = this.getMousePos(e);
         this.startX = pos.x;
         this.startY = pos.y;
@@ -1456,14 +1502,14 @@ class CanvasMaker {
             active: this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent').length,
             isMain: this.activeCanvasContext === this.mainCanvasContext
         };
-        console.log(`[HANDLEmousedown] React components: ${reactShapes.length}`, reactShapes);
-        console.log(`[HANDLEMOUSEDOWN] All contexts:`, allContextShapes);
-        console.log(`[HANDLEMOUSEDOWN] Component details:`, reactShapes.map(s => ({ 
-            id: s.id, 
-            hasRenderer: !!s.canvasRenderer,
-            hasElement: !!s.domElement,
-            inDOM: !!(s.domElement && s.domElement.parentElement)
-        })));
+        // console.log(`[HANDLEmousedown] React components: ${reactShapes.length}`, reactShapes);
+        // console.log(`[HANDLEMOUSEDOWN] All contexts:`, allContextShapes);
+        // console.log(`[HANDLEMOUSEDOWN] Component details:`, reactShapes.map(s => ({ 
+        //     id: s.id, 
+        //     hasRenderer: !!s.canvasRenderer,
+        //     hasElement: !!s.domElement,
+        //     inDOM: !!(s.domElement && s.domElement.parentElement)
+        // })));
         
         // Check for panning (middle mouse button)
         if (e.button === 1) {
@@ -1480,7 +1526,7 @@ class CanvasMaker {
         if (!this.currentTool) {
             // First try to detect element at click position
             const clickedElement = this.getElementAtPoint(pos.x, pos.y);
-            console.log('Pan mode click - hoveredElement:', this.hoveredElement, 'clickedElement:', clickedElement);
+            // console.log('Pan mode click - hoveredElement:', this.hoveredElement, 'clickedElement:', clickedElement);
             
             // Use hoveredElement if available, otherwise use clickedElement
             const targetElement = this.hoveredElement || clickedElement;
@@ -1501,13 +1547,12 @@ class CanvasMaker {
                 });
                 
                 if (isAlreadySelected) {
-                    // Start dragging the selected elements
+                    // Start dragging the selected elements (all of them)
                     this.isDragging = true;
                     this.dragOffset.x = pos.x;
                     this.dragOffset.y = pos.y;
                 } else {
-                    // Select the clicked element and start dragging
-                    console.log('Selecting and starting drag for:', targetElement);
+                    // Select the clicked element and start dragging (single element)
                     this.selectedElements = [targetElement];
                     this.isDragging = true;
                     this.dragOffset.x = pos.x;
@@ -1524,6 +1569,22 @@ class CanvasMaker {
                 this.resizeHandle = resizeHandle;
                 this.dragOffset.x = pos.x;
                 this.dragOffset.y = pos.y;
+                this.dragStartX = pos.x;
+                this.dragStartY = pos.y;
+                
+                // Store original shape state for line-middle dragging
+                if (this.activeCanvasContext.selectedElements.length === 1 && this.activeCanvasContext.selectedElements[0].type === 'shape') {
+                    const shape = this.activeCanvasContext.shapes[this.activeCanvasContext.selectedElements[0].index];
+                    if ((shape.type === 'line' || shape.type === 'arrow') && resizeHandle === 'line-middle') {
+                        this.originalShapeState = {
+                            x1: shape.x1,
+                            y1: shape.y1,
+                            x2: shape.x2,
+                            y2: shape.y2
+                        };
+                    }
+                }
+                
                 this.updateCanvasCursor();
                 return;
             }
@@ -1532,7 +1593,7 @@ class CanvasMaker {
             const fallbackElement = this.getElementAtPoint(pos.x, pos.y);
             if (fallbackElement) {
                 // Select and start dragging the clicked element
-                console.log('Clicked on element (not hovered):', fallbackElement);
+                // console.log('Clicked on element (not hovered):', fallbackElement);
                 this.selectedElements = [fallbackElement];
                 this.isDragging = true;
                 this.dragOffset.x = pos.x;
@@ -1600,6 +1661,22 @@ class CanvasMaker {
                 this.resizeHandle = resizeHandle;
                 this.dragOffset.x = pos.x;
                 this.dragOffset.y = pos.y;
+                this.dragStartX = pos.x;
+                this.dragStartY = pos.y;
+                
+                // Store original shape state for line-middle dragging
+                if (this.activeCanvasContext.selectedElements.length === 1 && this.activeCanvasContext.selectedElements[0].type === 'shape') {
+                    const shape = this.activeCanvasContext.shapes[this.activeCanvasContext.selectedElements[0].index];
+                    if ((shape.type === 'line' || shape.type === 'arrow') && resizeHandle === 'line-middle') {
+                        this.originalShapeState = {
+                            x1: shape.x1,
+                            y1: shape.y1,
+                            x2: shape.x2,
+                            y2: shape.y2
+                        };
+                    }
+                }
+                return; // Important: return here to prevent drag mode from starting
             }
             // Check if clicking on any element (hovered or selected)
             else {
@@ -1629,7 +1706,7 @@ class CanvasMaker {
                     this.redrawCanvas();
                 }
             }
-        } else if (this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas' || this.currentTool === 'text') {
+        } else if (this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas' || this.currentTool === 'text' || this.currentTool === 'line' || this.currentTool === 'arrow') {
             // Initialize drawing state for shape tools
             this.isDrawing = true;
         }
@@ -1703,7 +1780,7 @@ class CanvasMaker {
                 return;
             } else if (this.isResizing && this.resizeHandle) {
                 // Handle resizing elements
-                this.performResize(pos, this.resizeHandle, this.activeCanvasContext);
+                this.performResizeForContext(pos.x, pos.y, this.activeCanvasContext);
                 this.redrawCanvas();
                 return;
             } else if (this.isSelecting) {
@@ -1719,9 +1796,12 @@ class CanvasMaker {
             }
         }
         
-        if (!this.isDrawing && !this.isDragging && !this.isResizing && !this.isSelecting) {
-            // Handle hover detection when not drawing, dragging, resizing, or selecting
+        // Always handle hover detection for select tool when not in active operations
+        if (this.currentTool === 'select' && !this.isDrawing && !this.isDragging && !this.isResizing && !this.isSelecting) {
             this.handleHover(pos);
+        }
+        
+        if (!this.isDrawing && !this.isDragging && !this.isResizing && !this.isSelecting) {
             return;
         }
         
@@ -1741,7 +1821,7 @@ class CanvasMaker {
             this.redrawCanvas();
         } else if (this.isResizing) {
             // Resizing selected element
-            this.performResize(pos.x, pos.y);
+            this.performResizeForContext(pos.x, pos.y, this.activeCanvasContext);
             this.redrawCanvas();
         } else if (this.isDragging) {
             // Dragging selected elements
@@ -1751,8 +1831,16 @@ class CanvasMaker {
             this.selectedElements.forEach(element => {
                 if (element.type === 'shape') {
                     const shape = this.shapes[element.index];
-                    shape.x += deltaX;
-                    shape.y += deltaY;
+                    if (shape.type === 'line' || shape.type === 'arrow') {
+                        // For lines and arrows, move both endpoints
+                        shape.x1 += deltaX;
+                        shape.y1 += deltaY;
+                        shape.x2 += deltaX;
+                        shape.y2 += deltaY;
+                    } else {
+                        shape.x += deltaX;
+                        shape.y += deltaY;
+                    }
                 } else if (element.type === 'text') {
                     const text = this.texts[element.index];
                     text.x += deltaX;
@@ -1773,7 +1861,7 @@ class CanvasMaker {
             this.dragOffset.x = pos.x;
             this.dragOffset.y = pos.y;
             this.redrawCanvas();
-        } else if (this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas') {
+        } else if (this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas' || this.currentTool === 'line' || this.currentTool === 'arrow') {
             // Store preview coordinates for redrawCanvas to use
             this.previewStartX = this.startX;
             this.previewStartY = this.startY;
@@ -1787,7 +1875,7 @@ class CanvasMaker {
     }
     
     handleMouseUp(e) {
-        console.log('[MOUSEUP] handleMouseUp called - currentTool:', this.currentTool, 'isDragging:', this.isDragging, 'isDrawing:', this.isDrawing);
+        console.log('[MOUSEUP] handleMouseUp called - currentTool:', this.currentTool, 'isDragging:', this.isDragging, 'isDrawing:', this.isDrawing, 'isSelecting:', this.isSelecting);
         
         // Don't prevent default to allow click events
         // e.preventDefault(); // Removed this if present
@@ -1814,17 +1902,27 @@ class CanvasMaker {
                 this.redrawCanvas();
                 return;
             } else if (this.isDragging) {
-                console.log('Mouse up - stopping drag');
+                // console.log('Mouse up - stopping drag');
                 this.isDragging = false;
                 this.updateCanvasCursor();
                 this.redrawCanvas();
                 return;
             } else if (this.isSelecting) {
+                console.log('[MOUSEUP] Ending selection, calling selectElementsInArea, currentTool:', this.currentTool);
                 this.isSelecting = false;
                 this.hideSelectionBox();
                 // Clear preview selection before finalizing the actual selection
                 this.activeCanvasContext.previewSelectedElements = [];
+                console.log('[MOUSEUP] About to call selectElementsInArea with:', {
+                    startX: this.startX, 
+                    startY: this.startY, 
+                    endX: pos.x, 
+                    endY: pos.y
+                });
                 this.selectElementsInArea(this.startX, this.startY, pos.x, pos.y);
+                console.log('[MOUSEUP] After selectElementsInArea, selectedElements:', this.activeCanvasContext.selectedElements.length);
+                this.justFinishedSelection = true; // Flag to prevent click handler from clearing selection
+        console.log('[MOUSEUP-SELECT] About to return from first select section');
                 this.updateCanvasCursor();
                 this.redrawCanvas();
                 return;
@@ -1844,20 +1942,22 @@ class CanvasMaker {
         // Handle select tool separately as it doesn't use isDrawing
         if (this.currentTool === 'select') {
             if (this.isResizing) {
-                console.log('[RESIZE-END] Ending resize, selected elements:', this.selectedElements.length);
+                // console.log('[RESIZE-END] Ending resize, selected elements:', this.selectedElements.length);
                 this.isResizing = false;
                 this.resizeHandle = null;
                 this.justFinishedResize = true; // Flag to prevent immediate click deselection
                 this.updateCanvasCursor();
                 // Keep component selected and redraw to show resize handles
-                console.log('[RESIZE-END] About to redraw with selected elements:', this.selectedElements.length);
+                // console.log('[RESIZE-END] About to redraw with selected elements:', this.selectedElements.length);
                 this.redrawCanvas();
-                console.log('[RESIZE-END] Redraw completed, selected elements:', this.selectedElements.length);
+                // console.log('[RESIZE-END] Redraw completed, selected elements:', this.selectedElements.length);
             } else if (this.isDragging) {
-                console.log('Select tool - stopping drag');
+                // console.log('Select tool - stopping drag');
                 this.isDragging = false;
                 // Keep selection active after drag - don't clear
                 this.updateCanvasCursor();
+                this.redrawCanvas();
+                return;
             } else if (this.isSelecting) {
                 this.isSelecting = false;
                 this.hideSelectionBox();
@@ -1880,15 +1980,17 @@ class CanvasMaker {
                 }
                 
                 this.selectElementsInArea(this.startX, this.startY, pos.x, pos.y);
+                this.justFinishedSelection = true; // Flag to prevent click handler from clearing selection
                 this.redrawCanvas();
             }
             
             this.updateCanvasCursor();
+            console.log('[MOUSEUP-SELECT] About to return from second select section, selectedElements:', this.activeCanvasContext.selectedElements.length);
             return;
         }
         
         // Handle dragging with drawing tools (before the isDrawing check)
-        if (this.isDragging && (this.currentTool === 'pen' || this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas' || this.currentTool === 'text')) {
+        if (this.isDragging && (this.currentTool === 'pen' || this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas' || this.currentTool === 'text' || this.currentTool === 'line' || this.currentTool === 'arrow')) {
             this.isDragging = false;
             this.updateCanvasCursor();
             return;
@@ -1965,6 +2067,59 @@ class CanvasMaker {
             
             this.updateCanvasCursor();
             this.redrawCanvas();
+        } else if (this.currentTool === 'line') {
+            this.shapes.push({
+                type: 'line',
+                x1: this.startX,
+                y1: this.startY,
+                x2: pos.x,
+                y2: pos.y,
+                strokeColor: '#333333',
+                lineWidth: 2
+            });
+            // Clear preview coordinates
+            this.previewStartX = undefined;
+            this.previewStartY = undefined;
+            this.previewEndX = undefined;
+            this.previewEndY = undefined;
+            
+            // Auto-switch to select mode after drawing
+            this.currentTool = 'select';
+            this.selectedElements = [];
+            
+            // Update toolbar to show select tool as active
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('select-tool').classList.add('active');
+            
+            this.updateCanvasCursor();
+            this.redrawCanvas();
+        } else if (this.currentTool === 'arrow') {
+            this.shapes.push({
+                type: 'arrow',
+                x1: this.startX,
+                y1: this.startY,
+                x2: pos.x,
+                y2: pos.y,
+                strokeColor: '#333333',
+                lineWidth: 2,
+                arrowSize: 10
+            });
+            // Clear preview coordinates
+            this.previewStartX = undefined;
+            this.previewStartY = undefined;
+            this.previewEndX = undefined;
+            this.previewEndY = undefined;
+            
+            // Auto-switch to select mode after drawing
+            this.currentTool = 'select';
+            this.selectedElements = [];
+            
+            // Update toolbar to show select tool as active
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('select-tool').classList.add('active');
+            
+            this.updateCanvasCursor();
+            this.redrawCanvas();
         } else if (this.currentTool === 'nested-canvas') {
             const width = pos.x - this.startX;
             const height = pos.y - this.startY;
@@ -2013,22 +2168,29 @@ class CanvasMaker {
     handleClick(e) {
         const pos = this.getMousePos(e);
         
-        console.log(`[CLICK] handleClick called at (${pos.x}, ${pos.y}) - editMode: ${this.editingComponentId || 'none'}`);
+        // console.log(`[CLICK] handleClick called at (${pos.x}, ${pos.y}) - editMode: ${this.editingComponentId || 'none'}`);
         
         // Prevent click handling immediately after resize to avoid deselection
         if (this.justFinishedResize) {
-            console.log(`[CLICK] Ignoring click after resize completion`);
+            // console.log(`[CLICK] Ignoring click after resize completion`);
             this.justFinishedResize = false;
             return;
         }
         
+        // Prevent click handling immediately after drag selection to avoid deselection
+        if (this.justFinishedSelection) {
+            console.log('[CLICK] Ignoring click after drag selection completion');
+            this.justFinishedSelection = false;
+            return;
+        }
+        
         // Check if clicking on a React component first (for any tool)
-        console.log(`[CLICK] Checking React component click at (${pos.x}, ${pos.y})`);
+        // console.log(`[CLICK] Checking React component click at (${pos.x}, ${pos.y})`);
         if (this.handleReactComponentClick(pos)) {
-            console.log(`[CLICK] React component handled the click`);
+            // console.log(`[CLICK] React component handled the click`);
             return; // Event was handled by React component
         }
-        console.log(`[CLICK] No React component handled the click`);
+        // console.log(`[CLICK] No React component handled the click`);
         
         if (this.currentTool === 'text') {
             // Create a new text box
@@ -2064,16 +2226,16 @@ class CanvasMaker {
             // Handle selection for select tool or no tool selected
             const clickedElement = this.getElementAtPoint(pos.x, pos.y);
             
-            console.log(`[CLICK] getElementAtPoint returned:`, clickedElement);
+            // console.log(`[CLICK] Current tool: ${this.currentTool}, getElementAtPoint returned:`, clickedElement);
             
             if (clickedElement) {
                 // Select the clicked element
                 this.selectedElements = [clickedElement];
-                console.log(`[CLICK] Selected element:`, clickedElement);
+                // console.log(`[CLICK] Selected element:`, clickedElement);
             } else {
                 // If clicking on empty space, deselect all
                 this.selectedElements = [];
-                console.log(`[CLICK] Deselected all - no element at click position`);
+                // console.log(`[CLICK] Deselected all - no element at click position`);
             }
             
             this.redrawCanvas();
@@ -2083,14 +2245,14 @@ class CanvasMaker {
     // Handle clicks on canvas-rendered React components
     handleReactComponentClick(worldPos) {
         // pos is already in world coordinates from getMousePos()
-        console.log(`[REACT-CLICK] Testing click at world (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
+        // console.log(`[REACT-CLICK] Testing click at world (${worldPos.x.toFixed(1)}, ${worldPos.y.toFixed(1)})`);
         
         // Check all React components in shapes array
         const reactShapes = this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
-        console.log(`[REACT-CLICK] Found ${reactShapes.length} React components to test`);
+        // console.log(`[REACT-CLICK] Found ${reactShapes.length} React components to test`);
         
         for (const shape of reactShapes) {
-            console.log(`[REACT-CLICK] Testing shape ${shape.id} at (${shape.x.toFixed(1)}, ${shape.y.toFixed(1)}) size ${shape.width}x${shape.height}`);
+            // console.log(`[REACT-CLICK] Testing shape ${shape.id} at (${shape.x.toFixed(1)}, ${shape.y.toFixed(1)}) size ${shape.width}x${shape.height}`);
             
             // Test if click is within component bounds
             const isInBounds = worldPos.x >= shape.x && 
@@ -2098,20 +2260,20 @@ class CanvasMaker {
                               worldPos.y >= shape.y && 
                               worldPos.y <= shape.y + shape.height;
             
-            console.log(`[REACT-CLICK] Click in bounds: ${isInBounds}`);
+            // console.log(`[REACT-CLICK] Click in bounds: ${isInBounds}`);
             
             if (isInBounds) {
-                console.log(`[REACT-CLICK] Component ${shape.id} clicked! Selecting...`);
+                // console.log(`[REACT-CLICK] Component ${shape.id} clicked! Selecting...`);
                 
                 // Select the component
                 this.activeCanvasContext.selectedElements = [{ type: 'shape', index: this.activeCanvasContext.shapes.indexOf(shape) }];
                 
                 // Check if we're in edit mode for this component
                 if (this.editingComponentId === shape.id) {
-                    console.log(`[REACT-CLICK] Component ${shape.id} is in edit mode - allowing HTML interaction`);
+                    // console.log(`[REACT-CLICK] Component ${shape.id} is in edit mode - allowing HTML interaction`);
                     return false; // Allow HTML element to handle the click
                 } else {
-                    console.log(`[REACT-CLICK] Component ${shape.id} selected for dragging/manipulation`);
+                    // console.log(`[REACT-CLICK] Component ${shape.id} selected for dragging/manipulation`);
                     // Trigger re-render to show selection
                     this.redrawCanvas();
                     return true; // We handled the click for selection
@@ -2119,7 +2281,7 @@ class CanvasMaker {
             }
         }
         
-        console.log(`[REACT-CLICK] No React component at click position`);
+        // console.log(`[REACT-CLICK] No React component at click position`);
         return false; // No component handled the event
     }
     
@@ -2191,7 +2353,10 @@ class CanvasMaker {
     
     removeTextInput() {
         if (this.currentTextInput) {
-            this.currentTextInput.remove();
+            // Safety check: only remove if element is still connected to DOM
+            if (this.currentTextInput.isConnected) {
+                this.currentTextInput.remove();
+            }
             this.currentTextInput = null;
             this.currentTextIndex = -1;
         }
@@ -2499,23 +2664,7 @@ class CanvasMaker {
         const pos = this.getMousePos(e);
         
         // First check for React components
-        const worldPos = this.canvasToWorld(pos.x, pos.y);
-        const reactShapes = this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
-        
-        for (const shape of reactShapes) {
-            const isInBounds = worldPos.x >= shape.x && 
-                              worldPos.x <= shape.x + shape.width &&
-                              worldPos.y >= shape.y && 
-                              worldPos.y <= shape.y + shape.height;
-            
-            if (isInBounds) {
-                console.log(`[DOUBLE-CLICK] Entering edit mode for React component ${shape.id}`);
-                this.enterComponentEditMode(shape);
-                return;
-            }
-        }
-        
-        // Check for other element types
+        // Check what element was actually clicked (respects layering)
         const clickedElement = this.getElementAtPoint(pos.x, pos.y);
         
         // Check if user double-clicked on a text box
@@ -2541,11 +2690,18 @@ class CanvasMaker {
             if (shape.type === 'reactComponent') {
                 this.enterComponentEditMode(shape);
             }
+            // For other shape types (rectangle, circle, line, arrow), do nothing
         }
     }
     
     openNestedCanvas(index) {
         if (index >= 0 && index < this.nestedCanvases.length) {
+            // Check if nested canvas elements exist
+            if (!this.nestedCanvasOverlay || !this.nestedCanvas || !this.nestedCtx) {
+                console.warn('Nested canvas elements not found in HTML. Cannot open nested canvas.');
+                return;
+            }
+            
             const nestedCanvasShape = this.nestedCanvases[index];
             this.currentNestedCanvasId = nestedCanvasShape.id;
             this.isNestedCanvasOpen = true;
@@ -2600,36 +2756,64 @@ class CanvasMaker {
         this.updateZoomIndicator();
         this.updateRecenterButton();
         
+        // Setup nested toolbar dragging
+        this.setupNestedToolbarDrag();
+        
         // Add show animation
         requestAnimationFrame(() => {
             this.nestedCanvasOverlay.classList.add('show');
             
             // Setup canvas dimensions after the transition
             setTimeout(() => {
-                this.setupNestedCanvasDimensions(this.nestedCanvases.find(nc => nc.id === this.currentNestedCanvasId));
+                this.setupNestedCanvasDimensions(this.nestedCanvases.find(nc => nc.id === this.currentNestedCanvasId), 0);
             }, 350); // Wait for CSS transition to complete (300ms + buffer)
         });
     }
     
-    setupNestedCanvasDimensions(nestedCanvasShape) {
+    setupNestedCanvasDimensions(nestedCanvasShape, retryCount = 0) {
+        const maxRetries = 20; // Prevent infinite loops
+        
         // Use a consistent approach for all nested canvases
         setTimeout(() => {
             const container = this.nestedCanvas.parentElement;
             const containerRect = container.getBoundingClientRect();
+            const overlayRect = this.nestedCanvasOverlay.getBoundingClientRect();
             
-            // Ensure we have valid dimensions
-            if (containerRect.width <= 0 || containerRect.height <= 0) {
-                console.warn('Invalid container dimensions, retrying...');
-                setTimeout(() => this.setupNestedCanvasDimensions(nestedCanvasShape), 100);
+            // Debug logging (only on first few attempts to avoid spam)
+            if (retryCount < 3) {
+                console.log(`[NESTED-CANVAS] Attempt ${retryCount + 1}: container dimensions = ${containerRect.width}x${containerRect.height}`);
+                console.log(`[NESTED-CANVAS] Overlay dimensions:`, overlayRect.width, 'x', overlayRect.height);
+            } else if (retryCount === 3) {
+                console.log(`[NESTED-CANVAS] Suppressing further debug logs to avoid spam. Still retrying...`);
+            }
+            
+            // Try using overlay dimensions as fallback if container has no dimensions
+            let canvasWidth, canvasHeight;
+            if (containerRect.width > 0 && containerRect.height > 0) {
+                canvasWidth = Math.round(containerRect.width);
+                canvasHeight = Math.round(containerRect.height);
+                console.log(`[NESTED-CANVAS] Using container dimensions: ${canvasWidth}x${canvasHeight}`);
+            } else if (overlayRect.width > 0 && overlayRect.height > 0) {
+                // Use a reasonable portion of the overlay for the canvas
+                canvasWidth = Math.round(overlayRect.width - 100); // Account for margins/padding
+                canvasHeight = Math.round(overlayRect.height - 100);
+                console.log(`[NESTED-CANVAS] Using overlay-based dimensions: ${canvasWidth}x${canvasHeight}`);
+            } else {
+                if (retryCount >= maxRetries) {
+                    console.error(`[NESTED-CANVAS] Failed to get any valid dimensions after ${maxRetries} retries. Aborting.`);
+                    return;
+                }
+                console.warn(`[NESTED-CANVAS] No valid dimensions found, retry ${retryCount + 1}/${maxRetries}`);
+                setTimeout(() => this.setupNestedCanvasDimensions(nestedCanvasShape, retryCount + 1), 100);
                 return;
             }
             
-            // Use fixed dimensions to ensure consistency across all nested canvases
-            const canvasWidth = Math.round(containerRect.width);
-            const canvasHeight = Math.round(containerRect.height);
+            console.log(`[NESTED-CANVAS] Canvas current size: ${this.nestedCanvas.width}x${this.nestedCanvas.height}`);
+            console.log(`[NESTED-CANVAS] Setting canvas size to: ${canvasWidth}x${canvasHeight}`);
             
             // Only resize if dimensions have actually changed to avoid coordinate issues
             if (this.nestedCanvas.width !== canvasWidth || this.nestedCanvas.height !== canvasHeight) {
+                console.log(`[NESTED-CANVAS] Resizing canvas from ${this.nestedCanvas.width}x${this.nestedCanvas.height} to ${canvasWidth}x${canvasHeight}`);
                 // Resizing nested canvas
                 
                 // Check if this is a new canvas (camera at default position)
@@ -2639,23 +2823,108 @@ class CanvasMaker {
                                    this.nestedCanvasContext.camera.y === 0 && 
                                    this.nestedCanvasContext.camera.zoom === 1;
                 
+                console.log(`[NESTED-CANVAS] isNewCanvas: ${isNewCanvas}, camera:`, this.nestedCanvasContext?.camera);
+                
                 if (isNewCanvas) {
+                    console.log(`[NESTED-CANVAS] Using setupCanvasContext for new canvas`);  
                     // Use unified setup for new nested canvases
                     this.setupCanvasContext(this.nestedCanvasContext, canvasWidth, canvasHeight);
                 } else {
+                    console.log(`[NESTED-CANVAS] Using manual resize for existing canvas`);
                     // Just resize existing nested canvases without affecting camera
                     this.nestedCanvas.width = canvasWidth;
                     this.nestedCanvas.height = canvasHeight;
-                    this.nestedCanvas.style.width = canvasWidth + 'px';
-                    this.nestedCanvas.style.height = canvasHeight + 'px';
+                    this.nestedCanvas.style.setProperty('width', canvasWidth + 'px', 'important');
+                    this.nestedCanvas.style.setProperty('height', canvasHeight + 'px', 'important');
                     this.nestedCtx.lineCap = 'round';
                     this.nestedCtx.lineJoin = 'round';
                 }
+                
+                console.log(`[NESTED-CANVAS] Set canvas style dimensions to: ${this.nestedCanvas.style.width} x ${this.nestedCanvas.style.height}`);
             }
             
             // Redraw the canvas with the new dimensions
+            console.log(`[NESTED-CANVAS] About to redraw canvas with context:`, this.nestedCanvasContext);
             this.redrawCanvas(this.nestedCanvasContext);
+            console.log(`[NESTED-CANVAS] Setup complete! Canvas should now be visible.`);
+            
+            // Force layout recalculation and then check
+            setTimeout(() => {
+                const canvasRect = this.nestedCanvas.getBoundingClientRect();
+                const canvasStyles = window.getComputedStyle(this.nestedCanvas);
+                console.log(`[NESTED-CANVAS] Canvas final rect (after layout):`, canvasRect);
+                console.log(`[NESTED-CANVAS] Canvas visibility: ${canvasStyles.visibility}, display: ${canvasStyles.display}, opacity: ${canvasStyles.opacity}`);
+                console.log(`[NESTED-CANVAS] Canvas z-index: ${canvasStyles.zIndex}, position: ${canvasStyles.position}`);
+                console.log(`[NESTED-CANVAS] Canvas computed width: ${canvasStyles.width}, height: ${canvasStyles.height}`);
+                console.log(`[NESTED-CANVAS] Canvas inline style width: ${this.nestedCanvas.style.width}, height: ${this.nestedCanvas.style.height}`);
+            }, 10);
+            
+            // Force layout reflow by accessing offsetWidth
+            const actualWidth = this.nestedCanvas.offsetWidth;
+            const actualHeight = this.nestedCanvas.offsetHeight;
+            console.log(`[NESTED-CANVAS] Canvas offset dimensions: ${actualWidth}x${actualHeight}`);
+            
+            // Try to debug what's preventing the canvas from showing
+            console.log(`[NESTED-CANVAS] Canvas element:`, this.nestedCanvas);
+            console.log(`[NESTED-CANVAS] Canvas parent:`, this.nestedCanvas.parentElement);
+            console.log(`[NESTED-CANVAS] Canvas parent computed style:`, window.getComputedStyle(this.nestedCanvas.parentElement));
+            
+            
+            
         }, 50);
+    }
+    
+    setupNestedToolbarDrag() {
+        const toolbar = document.getElementById('nested-floating-toolbar');
+        const dragHandle = document.getElementById('nested-toolbar-drag-handle');
+        
+        if (!toolbar || !dragHandle) return;
+        
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+        
+        dragHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDragging = true;
+            
+            const rect = toolbar.getBoundingClientRect();
+            const containerRect = toolbar.parentElement.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+            
+            toolbar.style.transition = 'none';
+            document.body.style.userSelect = 'none';
+            
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        });
+        
+        const handleMouseMove = (e) => {
+            if (!isDragging) return;
+            
+            const containerRect = toolbar.parentElement.getBoundingClientRect();
+            const x = e.clientX - containerRect.left - dragOffset.x;
+            const y = e.clientY - containerRect.top - dragOffset.y;
+            
+            // Constrain to container
+            const maxX = containerRect.width - toolbar.offsetWidth;
+            const maxY = containerRect.height - toolbar.offsetHeight;
+            
+            const constrainedX = Math.max(0, Math.min(maxX, x));
+            const constrainedY = Math.max(0, Math.min(maxY, y));
+            
+            toolbar.style.left = constrainedX + 'px';
+            toolbar.style.top = constrainedY + 'px';
+        };
+        
+        const handleMouseUp = () => {
+            isDragging = false;
+            toolbar.style.transition = 'all 0.2s ease';
+            document.body.style.userSelect = '';
+            
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
     }
     
     closeNestedCanvas() {
@@ -3005,8 +3274,16 @@ class CanvasMaker {
             this.nestedCanvasContext.selectedElements.forEach(element => {
                 if (element.type === 'shape') {
                     const shape = this.nestedCanvasContext.shapes[element.index];
-                    shape.x += deltaX;
-                    shape.y += deltaY;
+                    if (shape.type === 'line' || shape.type === 'arrow') {
+                        // For lines and arrows, move both endpoints
+                        shape.x1 += deltaX;
+                        shape.y1 += deltaY;
+                        shape.x2 += deltaX;
+                        shape.y2 += deltaY;
+                    } else {
+                        shape.x += deltaX;
+                        shape.y += deltaY;
+                    }
                 } else if (element.type === 'text') {
                     const text = this.nestedCanvasContext.texts[element.index];
                     text.x += deltaX;
@@ -3281,6 +3558,40 @@ class CanvasMaker {
                 if (distance <= shape.radius) {
                     return { type: 'shape', index: i };
                 }
+            } else if (shape.type === 'line' || shape.type === 'arrow') {
+                // Check if point is near the line (with tolerance for easier clicking)
+                const tolerance = 5; // 5px tolerance for line clicking
+                const lineLength = Math.sqrt(
+                    Math.pow(shape.x2 - shape.x1, 2) + Math.pow(shape.y2 - shape.y1, 2)
+                );
+                if (lineLength === 0) continue; // Degenerate line
+                
+                // Distance from point to line
+                const A = x - shape.x1;
+                const B = y - shape.y1;
+                const C = shape.x2 - shape.x1;
+                const D = shape.y2 - shape.y1;
+                
+                const dot = A * C + B * D;
+                const len_sq = C * C + D * D;
+                const param = dot / len_sq;
+                
+                let xx, yy;
+                if (param < 0) {
+                    xx = shape.x1;
+                    yy = shape.y1;
+                } else if (param > 1) {
+                    xx = shape.x2;
+                    yy = shape.y2;
+                } else {
+                    xx = shape.x1 + param * C;
+                    yy = shape.y1 + param * D;
+                }
+                
+                const distance = Math.sqrt((x - xx) * (x - xx) + (y - yy) * (y - yy));
+                if (distance <= tolerance) {
+                    return { type: 'shape', index: i };
+                }
             } else if (shape.type === 'reactComponent') {
                 // Handle custom React component shapes
                 const hit = x >= shape.x && x <= shape.x + shape.width &&
@@ -3489,6 +3800,35 @@ class CanvasMaker {
             canvasContext.ctx.beginPath();
             canvasContext.ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
             canvasContext.ctx.stroke();
+        } else if (this.currentTool === 'line') {
+            canvasContext.ctx.beginPath();
+            canvasContext.ctx.moveTo(startX, startY);
+            canvasContext.ctx.lineTo(endX, endY);
+            canvasContext.ctx.stroke();
+        } else if (this.currentTool === 'arrow') {
+            // Draw the main line
+            canvasContext.ctx.beginPath();
+            canvasContext.ctx.moveTo(startX, startY);
+            canvasContext.ctx.lineTo(endX, endY);
+            canvasContext.ctx.stroke();
+            
+            // Draw arrowhead
+            const arrowSize = 10;
+            const angle = Math.atan2(endY - startY, endX - startX);
+            
+            // Draw arrowhead lines
+            canvasContext.ctx.beginPath();
+            canvasContext.ctx.moveTo(endX, endY);
+            canvasContext.ctx.lineTo(
+                endX - arrowSize * Math.cos(angle - Math.PI / 6),
+                endY - arrowSize * Math.sin(angle - Math.PI / 6)
+            );
+            canvasContext.ctx.moveTo(endX, endY);
+            canvasContext.ctx.lineTo(
+                endX - arrowSize * Math.cos(angle + Math.PI / 6),
+                endY - arrowSize * Math.sin(angle + Math.PI / 6)
+            );
+            canvasContext.ctx.stroke();
         } else if (this.currentTool === 'nested-canvas') {
             const width = endX - startX;
             const height = endY - startY;
@@ -3525,21 +3865,36 @@ class CanvasMaker {
         this.ctx.strokeStyle = '#333';
     }
     
-    showSelectionBox(worldX, worldY, worldWidth, worldHeight) {
-        // Use the appropriate selection box based on active canvas
-        const isNestedCanvas = this.activeCanvasContext === this.nestedCanvasContext;
+    updateSelectionBox(startCanvasX, startCanvasY, currentCanvasX, currentCanvasY, canvasContext = this.activeCanvasContext) {
+        // Convert canvas coordinates to world coordinates for proper selection box positioning
+        const startWorld = this.canvasToWorld(startCanvasX, startCanvasY, canvasContext);
+        const currentWorld = this.canvasToWorld(currentCanvasX, currentCanvasY, canvasContext);
+        
+        // Calculate selection box dimensions in world coordinates
+        const worldX = Math.min(startWorld.x, currentWorld.x);
+        const worldY = Math.min(startWorld.y, currentWorld.y);
+        const worldWidth = Math.abs(currentWorld.x - startWorld.x);
+        const worldHeight = Math.abs(currentWorld.y - startWorld.y);
+        
+        // Show the selection box using world coordinates and context
+        this.showSelectionBox(worldX, worldY, worldWidth, worldHeight, canvasContext);
+    }
+    
+    showSelectionBox(worldX, worldY, worldWidth, worldHeight, canvasContext = this.activeCanvasContext) {
+        // Use the appropriate selection box based on canvas context
+        const isNestedCanvas = canvasContext === this.nestedCanvasContext;
         const selectionBox = isNestedCanvas ? 
             document.getElementById('nested-selection-box') : 
             this.selectionBox;
             
         if (!selectionBox) return;
         
-        // Convert world coordinates to screen coordinates for the selection box
-        const topLeft = this.worldToCanvas(worldX, worldY);
-        const bottomRight = this.worldToCanvas(worldX + worldWidth, worldY + worldHeight);
+        // Convert world coordinates to screen coordinates for the selection box using provided context
+        const topLeft = this.worldToCanvas(worldX, worldY, canvasContext);
+        const bottomRight = this.worldToCanvas(worldX + worldWidth, worldY + worldHeight, canvasContext);
         
         // Get canvas position for absolute positioning
-        const canvas = this.activeCanvasContext.canvas;
+        const canvas = canvasContext.canvas;
         const canvasRect = canvas.getBoundingClientRect();
         
         const screenLeft = Math.min(topLeft.x, bottomRight.x);
@@ -3570,9 +3925,9 @@ class CanvasMaker {
         selectionBox.style.zIndex = '1000';
     }
     
-    hideSelectionBox() {
-        // Hide the appropriate selection box based on active canvas
-        const isNestedCanvas = this.activeCanvasContext === this.nestedCanvasContext;
+    hideSelectionBox(canvasContext = this.activeCanvasContext) {
+        // Hide the appropriate selection box based on canvas context
+        const isNestedCanvas = canvasContext === this.nestedCanvasContext;
         const selectionBox = isNestedCanvas ? 
             document.getElementById('nested-selection-box') : 
             this.selectionBox;
@@ -3583,6 +3938,12 @@ class CanvasMaker {
     }
     
     handleHover(pos) {
+        // Check for resize handles first if elements are selected
+        let newHoveredResizeHandle = null;
+        if (this.selectedElements.length > 0) {
+            newHoveredResizeHandle = this.getResizeHandleForContext(pos.x, pos.y, this.activeCanvasContext);
+        }
+        
         const hoveredElement = this.getElementAtPoint(pos.x, pos.y);
         
         // Compare elements properly - check if they're the same type and index
@@ -3592,9 +3953,18 @@ class CanvasMaker {
             return a.type === b.type && a.index === b.index;
         };
         
-        if (!isSameElement(hoveredElement, this.hoveredElement)) {
-            console.log('Hover changed from', this.hoveredElement, 'to', hoveredElement);
-            this.hoveredElement = hoveredElement;
+        // Check if either element hover or resize handle hover changed
+        if (!isSameElement(hoveredElement, this.hoveredElement) || newHoveredResizeHandle !== this.hoveredResizeHandle) {
+            // console.log('[HOVER] Hover changed from', this.hoveredElement, 'to', hoveredElement, 'resize handle:', newHoveredResizeHandle);
+            
+            // If hovering over a resize handle, clear element hover to prevent grab cursor
+            if (newHoveredResizeHandle) {
+                this.hoveredElement = null;
+            } else {
+                this.hoveredElement = hoveredElement;
+            }
+            
+            this.hoveredResizeHandle = newHoveredResizeHandle;
             this.redrawCanvas();
             this.updateCanvasCursor();
         }
@@ -3627,11 +3997,38 @@ class CanvasMaker {
                 if (distance <= shape.radius) {
                     return { type: 'shape', index: i };
                 }
-            } else if (shape.type === 'reactComponent') {
-                // Handle custom React component shapes
-                const hit = x >= shape.x && x <= shape.x + shape.width &&
-                           y >= shape.y && y <= shape.y + shape.height;
-                if (hit) {
+            } else if (shape.type === 'line' || shape.type === 'arrow') {
+                // Check if point is near the line (with tolerance for easier clicking)
+                const tolerance = 5; // 5px tolerance for line clicking
+                const lineLength = Math.sqrt(
+                    Math.pow(shape.x2 - shape.x1, 2) + Math.pow(shape.y2 - shape.y1, 2)
+                );
+                if (lineLength === 0) continue; // Degenerate line
+                
+                // Distance from point to line
+                const A = x - shape.x1;
+                const B = y - shape.y1;
+                const C = shape.x2 - shape.x1;
+                const D = shape.y2 - shape.y1;
+                
+                const dot = A * C + B * D;
+                const len_sq = C * C + D * D;
+                const param = dot / len_sq;
+                
+                let xx, yy;
+                if (param < 0) {
+                    xx = shape.x1;
+                    yy = shape.y1;
+                } else if (param > 1) {
+                    xx = shape.x2;
+                    yy = shape.y2;
+                } else {
+                    xx = shape.x1 + param * C;
+                    yy = shape.y1 + param * D;
+                }
+                
+                const distance = Math.sqrt((x - xx) * (x - xx) + (y - yy) * (y - yy));
+                if (distance <= tolerance) {
                     return { type: 'shape', index: i };
                 }
             }
@@ -3739,6 +4136,16 @@ class CanvasMaker {
                     );
                     inSelection = distance <= shape.radius;
                 }
+            } else if (shape.type === 'line' || shape.type === 'arrow') {
+                // Check if line/arrow is within selection area or intersects with it
+                const lineMinX = Math.min(shape.x1, shape.x2);
+                const lineMaxX = Math.max(shape.x1, shape.x2);
+                const lineMinY = Math.min(shape.y1, shape.y2);
+                const lineMaxY = Math.max(shape.y1, shape.y2);
+                
+                // Check if line bounding box intersects with selection rectangle
+                inSelection = !(lineMaxX < minX || lineMinX > maxX || 
+                               lineMaxY < minY || lineMinY > maxY);
             } else if (shape.type === 'reactComponent') {
                 // Handle React component shapes like rectangles
                 const rectRight = shape.x + shape.width;
@@ -3777,8 +4184,32 @@ class CanvasMaker {
     }
 
     selectElementsInArea(x1, y1, x2, y2) {
-        const previewElements = this.getElementsInArea(x1, y1, x2, y2);
-        this.selectedElements = previewElements;
+        // Coordinates are already in world coordinates from getMousePos()
+        const startWorld = {x: x1, y: y1};
+        const endWorld = {x: x2, y: y2};
+        
+        console.log('[SELECT-AREA] Input coords (already world):', {x1, y1, x2, y2});
+        console.log('[SELECT-AREA] World coords:', startWorld, endWorld);
+        console.log('[SELECT-AREA] Camera state:', {
+            x: this.activeCanvasContext.camera.x,
+            y: this.activeCanvasContext.camera.y,
+            zoom: this.activeCanvasContext.camera.zoom
+        });
+        console.log('[SELECT-AREA] Canvas size:', {
+            width: this.activeCanvasContext.canvas.width,
+            height: this.activeCanvasContext.canvas.height,
+            centerX: this.activeCanvasContext.canvas.width / 2,
+            centerY: this.activeCanvasContext.canvas.height / 2
+        });
+        this.activeCanvasContext.shapes.forEach((s, i) => {
+            console.log(`[SELECT-AREA] Shape ${i}: type=${s.type}, x=${s.x}, y=${s.y}, w=${s.width}, h=${s.height}, id=${s.id}`);
+        });
+        
+        const previewElements = this.getElementsInArea(startWorld.x, startWorld.y, endWorld.x, endWorld.y, this.activeCanvasContext);
+        console.log('[SELECT-AREA] Found elements:', previewElements.length, previewElements);
+        
+        this.activeCanvasContext.selectedElements = previewElements;
+        console.log('[SELECT-AREA] Set selectedElements to:', this.activeCanvasContext.selectedElements.length);
         
         this.updateCanvasCursor();
         this.redrawCanvas();
@@ -3872,8 +4303,8 @@ class CanvasMaker {
         }
         
         // Draw shapes
-        console.log(`[DRAW] Drawing ${shapes.length} shapes total`);
-        console.log(`[DRAW] React components to draw:`, shapes.filter(s => s.type === 'reactComponent').map(s => s.id));
+        // console.log(`[DRAW] Drawing ${shapes.length} shapes total`);
+        // console.log(`[DRAW] React components to draw:`, shapes.filter(s => s.type === 'reactComponent').map(s => s.id));
         shapes.forEach((shape, index) => {
             const isHovered = hoveredElement && 
                              hoveredElement.type === 'shape' && 
@@ -3893,6 +4324,7 @@ class CanvasMaker {
                     ctx.arc(shape.x, shape.y, shape.radius, 0, 2 * Math.PI);
                     ctx.fill();
                 }
+                // Lines and arrows don't have fill, only stroke
             }
             
             // Render React component content using HTML rendering
@@ -3900,10 +4332,10 @@ class CanvasMaker {
                 this.renderReactComponentHTML(shape, camera);
             }
             
-            // Draw stroke/outline for shapes
-            const hasStroke = shape.strokeColor || isSelected || isHovered || isPreviewSelected;
+            // Draw stroke/outline for shapes (always draw stroke for visibility)
+            const shouldDrawStroke = true; // Always draw stroke so shapes are visible
             
-            if (hasStroke) {
+            if (shouldDrawStroke) {
                 // Priority: Selected (red) > Hovered (blue) > Preview Selected (orange) > Shape's strokeColor > Default (gray)
                 ctx.strokeStyle = isSelected ? '#ef4444' : 
                                  (isHovered ? '#3b82f6' : 
@@ -3916,6 +4348,33 @@ class CanvasMaker {
                     ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
                 } else if (shape.type === 'circle') {
                     ctx.arc(shape.x, shape.y, shape.radius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                } else if (shape.type === 'line') {
+                    ctx.moveTo(shape.x1, shape.y1);
+                    ctx.lineTo(shape.x2, shape.y2);
+                    ctx.stroke();
+                } else if (shape.type === 'arrow') {
+                    // Draw the main line
+                    ctx.moveTo(shape.x1, shape.y1);
+                    ctx.lineTo(shape.x2, shape.y2);
+                    ctx.stroke();
+                    
+                    // Draw arrowhead
+                    const arrowSize = shape.arrowSize || 10;
+                    const angle = Math.atan2(shape.y2 - shape.y1, shape.x2 - shape.x1);
+                    
+                    // Draw arrowhead lines
+                    ctx.beginPath();
+                    ctx.moveTo(shape.x2, shape.y2);
+                    ctx.lineTo(
+                        shape.x2 - arrowSize * Math.cos(angle - Math.PI / 6),
+                        shape.y2 - arrowSize * Math.sin(angle - Math.PI / 6)
+                    );
+                    ctx.moveTo(shape.x2, shape.y2);
+                    ctx.lineTo(
+                        shape.x2 - arrowSize * Math.cos(angle + Math.PI / 6),
+                        shape.y2 - arrowSize * Math.sin(angle + Math.PI / 6)
+                    );
                     ctx.stroke();
                 }
             }
@@ -3974,8 +4433,8 @@ class CanvasMaker {
             }
         });
         
-        // Draw preview shape if currently drawing rectangle, circle, or nested-canvas
-        if ((this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas') && 
+        // Draw preview shape if currently drawing rectangle, circle, nested-canvas, line, or arrow
+        if ((this.currentTool === 'rectangle' || this.currentTool === 'circle' || this.currentTool === 'nested-canvas' || this.currentTool === 'line' || this.currentTool === 'arrow') && 
             this.isDrawing && this.previewStartX !== undefined) {
             this.drawPreviewShape(canvasContext, this.previewStartX, this.previewStartY, this.previewEndX, this.previewEndY);
         }
@@ -4037,11 +4496,14 @@ class CanvasMaker {
     
     drawGrid(canvasContext) {
         const { canvas, ctx, camera } = canvasContext;
+        
         const gridSize = 50; // Grid size in world units
         const screenGridSize = gridSize * camera.zoom;
         
         // Only draw if grid is visible (not too small)
-        if (screenGridSize < 4) return;
+        if (screenGridSize < 4) {
+            return;
+        }
         
         // Calculate opacity based on grid size
         const opacity = Math.min(0.15, Math.max(0.03, screenGridSize / 200));
@@ -4123,9 +4585,9 @@ class CanvasMaker {
     }
     
     drawResizeHandles(canvasContext) {
-        console.log('[DRAW-HANDLES] Drawing resize handles, selected elements:', canvasContext.selectedElements.length);
+        // console.log('[DRAW-HANDLES] Drawing resize handles, selected elements:', canvasContext.selectedElements.length);
         if (canvasContext.selectedElements.length !== 1) {
-            console.log('[DRAW-HANDLES] Not drawing handles - wrong selection count:', canvasContext.selectedElements.length);
+            // console.log('[DRAW-HANDLES] Not drawing handles - wrong selection count:', canvasContext.selectedElements.length);
             return; // Only show handles for single selection
         }
         
@@ -4148,6 +4610,32 @@ class CanvasMaker {
                     width: shape.radius * 2,
                     height: shape.radius * 2
                 };
+            } else if (shape.type === 'line' || shape.type === 'arrow') {
+                // For lines and arrows, draw endpoint handles and middle drag handle
+                const handleSize = 8;
+                const middleHandleSize = 6;
+                
+                canvasContext.ctx.fillStyle = '#3b82f6'; // Blue
+                canvasContext.ctx.strokeStyle = '#ffffff'; // White border
+                canvasContext.ctx.lineWidth = 2;
+                
+                // Draw start point handle (square)
+                canvasContext.ctx.fillRect(shape.x1 - handleSize/2, shape.y1 - handleSize/2, handleSize, handleSize);
+                canvasContext.ctx.strokeRect(shape.x1 - handleSize/2, shape.y1 - handleSize/2, handleSize, handleSize);
+                
+                // Draw end point handle (square)
+                canvasContext.ctx.fillRect(shape.x2 - handleSize/2, shape.y2 - handleSize/2, handleSize, handleSize);
+                canvasContext.ctx.strokeRect(shape.x2 - handleSize/2, shape.y2 - handleSize/2, handleSize, handleSize);
+                
+                // Draw middle drag handle (circle) - for dragging the entire line
+                const midX = (shape.x1 + shape.x2) / 2;
+                const midY = (shape.y1 + shape.y2) / 2;
+                canvasContext.ctx.beginPath();
+                canvasContext.ctx.arc(midX, midY, middleHandleSize/2, 0, 2 * Math.PI);
+                canvasContext.ctx.fill();
+                canvasContext.ctx.stroke();
+                
+                return; // Early return since we handled line/arrow drawing
             } else if (shape.type === 'reactComponent') {
                 bounds = {
                     x: shape.x,
@@ -4175,7 +4663,7 @@ class CanvasMaker {
         }
         
         if (bounds) {
-            console.log('[DRAW-HANDLES] Drawing handles for bounds:', bounds);
+            // console.log('[DRAW-HANDLES] Drawing handles for bounds:', bounds);
             // Draw handles in world space (with camera transformations applied)
             canvasContext.ctx.fillStyle = '#3b82f6'; // Blue
             canvasContext.ctx.strokeStyle = '#ffffff'; // White border
@@ -4247,7 +4735,7 @@ class CanvasMaker {
         
         // Work in world coordinates (much simpler and more reliable)
         const handleSize = 8; // Handle size in world coordinates - canvas transform handles scaling
-        const tolerance = 6; // 6px radius around resize handles for precise interaction
+        const tolerance = 10; // 10px radius around resize handles for better touch/click area
         
         // Create handles in world coordinates matching the drawing function
         const handles = [
@@ -4377,14 +4865,14 @@ class CanvasMaker {
     updateReactComponentHTML(shape) {
         const htmlElement = this.htmlComponents.get(shape.id);
         if (htmlElement) {
-            console.log(`[RESIZE-HTML] Updating HTML size to ${shape.width}x${shape.height} for component ${shape.id}`);
-            console.log(`[RESIZE-HTML] Current element size:`, htmlElement.style.width, htmlElement.style.height);
+            // console.log(`[RESIZE-HTML] Updating HTML size to ${shape.width}x${shape.height} for component ${shape.id}`);
+            // console.log(`[RESIZE-HTML] Current element size:`, htmlElement.style.width, htmlElement.style.height);
             
             // Use the current active canvas context's camera for transform
             this.updateHTMLElementTransform(htmlElement, shape, this.activeCanvasContext.camera);
             
-            console.log(`[RESIZE-HTML] Updated element size:`, htmlElement.style.width, htmlElement.style.height);
-            console.log(`[RESIZE-HTML] Element computed size:`, getComputedStyle(htmlElement).width, getComputedStyle(htmlElement).height);
+            // console.log(`[RESIZE-HTML] Updated element size:`, htmlElement.style.width, htmlElement.style.height);
+            // console.log(`[RESIZE-HTML] Element computed size:`, getComputedStyle(htmlElement).width, getComputedStyle(htmlElement).height);
         }
     }
     
@@ -4511,7 +4999,7 @@ class CanvasMaker {
     
     // Render React component directly to canvas
     renderComponentToCanvas(ctx, shape, camera) {
-        console.log(`[RENDER] Rendering React component ${shape.id} at (${shape.x}, ${shape.y}) with zoom ${camera.zoom}`);
+        // console.log(`[RENDER] Rendering React component ${shape.id} at (${shape.x}, ${shape.y}) with zoom ${camera.zoom}`);
         
         const renderer = shape.canvasRenderer;
         const component = renderer.element;
@@ -4531,7 +5019,7 @@ class CanvasMaker {
         try {
             // Draw the component with zoom-aware rendering
             this.drawComponentToCanvas(ctx, component, shape.x, shape.y, shape.width, shape.height, camera.zoom);
-            console.log(`[RENDER] Successfully rendered component ${shape.id}`);
+            // console.log(`[RENDER] Successfully rendered component ${shape.id}`);
             
         } catch (error) {
             console.warn('Failed to render component to canvas:', error);
@@ -4545,7 +5033,7 @@ class CanvasMaker {
     
     // Draw component to canvas using DOM-to-canvas rendering
     drawComponentToCanvas(ctx, element, x, y, width, height, zoom = 1) {
-        console.log(`[DRAW-COMPONENT] Rendering with zoom: ${zoom}, font will be: 16px (canvas transform handles scaling)`);
+        // console.log(`[DRAW-COMPONENT] Rendering with zoom: ${zoom}, font will be: 16px (canvas transform handles scaling)`);
         try {
             // For mock components, we'll use a simplified rendering approach
             if (element.className.includes('mock-react-component')) {
@@ -4567,7 +5055,7 @@ class CanvasMaker {
                 ctx.font = `bold ${titleFontSize}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                console.log(`[DRAW-COMPONENT] Title font: ${ctx.font}`);
+                // console.log(`[DRAW-COMPONENT] Title font: ${ctx.font}`);
                 
                 // Extract title and description
                 const title = element.querySelector('h3')?.textContent || '';
@@ -4579,7 +5067,7 @@ class CanvasMaker {
                 if (description) {
                     const descFontSize = 14;
                     ctx.font = `${descFontSize}px Arial`;
-                    console.log(`[DRAW-COMPONENT] Description font: ${ctx.font}`);
+                    // console.log(`[DRAW-COMPONENT] Description font: ${ctx.font}`);
                     ctx.fillText(description, x + width/2, y + height/2 + 10);
                 }
             } else if (element.className.includes('mock-button-component')) {
@@ -4700,12 +5188,35 @@ class CanvasMaker {
             } else {
                 contentWrapper.innerHTML = shape.domElement.innerHTML || shape.domElement.textContent || 'DOM Element';
             }
+        } else {
+            // Fallback content if no HTML content is provided
+            contentWrapper.innerHTML = `
+                <div style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    height: 100%;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    font-family: system-ui, sans-serif;
+                    font-size: 14px;
+                    border-radius: 6px;
+                    text-align: center;
+                    padding: 8px;
+                ">
+                    <div>
+                        <div style="font-weight: bold; margin-bottom: 4px;">HTML Component</div>
+                        <div style="font-size: 12px; opacity: 0.8;">Double-click to edit</div>
+                    </div>
+                </div>
+            `;
         }
         
         element.appendChild(contentWrapper);
         
         this.htmlRenderingLayer.appendChild(element);
-        console.log(`[HTML-RENDER] Created HTML element for component ${shape.id}`);
+        // console.log(`[HTML-RENDER] Created HTML element for component ${shape.id}`);
         return element;
     }
     
@@ -4728,7 +5239,7 @@ class CanvasMaker {
         const translateX = centerX + shape.x * camera.zoom + camera.x * camera.zoom;
         const translateY = centerY + shape.y * camera.zoom + camera.y * camera.zoom;
         
-        console.log(`[HTML-POS] Shape ${shape.id}: world(${shape.x}, ${shape.y}) -> screen(${translateX}, ${translateY})`);
+        // console.log(`[HTML-POS] Shape ${shape.id}: world(${shape.x}, ${shape.y}) -> screen(${translateX}, ${translateY})`);
         
         element.style.left = '0px';
         element.style.top = '0px';
@@ -4753,7 +5264,7 @@ class CanvasMaker {
             if (!activeShapeIds.has(shapeId)) {
                 element.remove();
                 this.htmlComponents.delete(shapeId);
-                console.log(`[HTML-RENDER] Cleaned up HTML element for removed component ${shapeId}`);
+                // console.log(`[HTML-RENDER] Cleaned up HTML element for removed component ${shapeId}`);
             }
         }
     }
@@ -4773,7 +5284,7 @@ class CanvasMaker {
     
     // Enter edit mode for a React component
     enterComponentEditMode(shape) {
-        console.log(`[HTML-RENDER] Entering edit mode for component ${shape.id}`);
+        // console.log(`[HTML-RENDER] Entering edit mode for component ${shape.id}`);
         
         // Exit any existing edit mode
         if (this.editingComponentId) {
@@ -4802,61 +5313,61 @@ class CanvasMaker {
         
         // Listen for clicks outside to exit edit mode
         setTimeout(() => {
-            console.log(`[EDIT-MODE] Adding outside click listener`);
+            // console.log(`[EDIT-MODE] Adding outside click listener`);
             document.addEventListener('mousedown', this.handleEditModeOutsideClick);
         }, 100);
         
         // Listen for ESC key
-        console.log(`[EDIT-MODE] Adding ESC key listener`);
+        // console.log(`[EDIT-MODE] Adding ESC key listener`);
         document.addEventListener('keydown', this.handleEditModeEscape);
     }
     
     // Exit edit mode for the current component
     exitComponentEditMode() {
         if (!this.editingComponentId) {
-            console.log(`[EDIT-EXIT] exitComponentEditMode called but no component in edit mode`);
+            // console.log(`[EDIT-EXIT] exitComponentEditMode called but no component in edit mode`);
             return;
         }
         
         const componentId = this.editingComponentId;
-        console.log(`[EDIT-EXIT] Starting exit process for component ${componentId}`);
+        // console.log(`[EDIT-EXIT] Starting exit process for component ${componentId}`);
         
         const element = this.htmlComponents.get(this.editingComponentId);
-        console.log(`[EDIT-EXIT] Found element:`, element ? 'YES' : 'NO');
+        // console.log(`[EDIT-EXIT] Found element:`, element ? 'YES' : 'NO');
         
         // Clear editing state FIRST
         this.editingComponentId = null;
-        console.log(`[EDIT-EXIT] Cleared editingComponentId`);
+        // console.log(`[EDIT-EXIT] Cleared editingComponentId`);
         
         if (element) {
             // Now update pointer events (will use the cleared editingComponentId)
             const contentWrapper = element.querySelector('div');
-            console.log(`[EDIT-EXIT] Found contentWrapper:`, contentWrapper ? 'YES' : 'NO');
+            // console.log(`[EDIT-EXIT] Found contentWrapper:`, contentWrapper ? 'YES' : 'NO');
             
             if (contentWrapper && contentWrapper._updatePointerEvents) {
-                console.log(`[EDIT-EXIT] Calling _updatePointerEvents`);
+                // console.log(`[EDIT-EXIT] Calling _updatePointerEvents`);
                 contentWrapper._updatePointerEvents();
             }
             
             element.classList.remove('editing');
-            console.log(`[EDIT-EXIT] Removed editing class`);
+            // console.log(`[EDIT-EXIT] Removed editing class`);
             
             // Remove visual indicator
             element.style.outline = 'none';
-            console.log(`[EDIT-EXIT] Removed outline`);
+            // console.log(`[EDIT-EXIT] Removed outline`);
         }
         
         // Remove event listeners
-        console.log(`[EDIT-EXIT] Removing event listeners`);
+        // console.log(`[EDIT-EXIT] Removing event listeners`);
         document.removeEventListener('mousedown', this.handleEditModeOutsideClick);
         document.removeEventListener('keydown', this.handleEditModeEscape);
         
         // Brief delay to ensure event listeners are fully removed before next interaction
         setTimeout(() => {
-            console.log(`[EDIT-EXIT] Event listeners removal confirmed`);
+            // console.log(`[EDIT-EXIT] Event listeners removal confirmed`);
         }, 10);
         
-        console.log(`[EDIT-EXIT] Exit process completed for component ${componentId}`);
+        // console.log(`[EDIT-EXIT] Exit process completed for component ${componentId}`);
         
         // Force immediate update of all HTML components to ensure consistent state
         this.htmlComponents.forEach((element, id) => {
@@ -4869,13 +5380,13 @@ class CanvasMaker {
         // Force a canvas redraw to ensure visual state is consistent
         this.redrawCanvas();
         
-        console.log(`[EDIT-EXIT] Forced state update and redraw`);
+        // console.log(`[EDIT-EXIT] Forced state update and redraw`);
     }
     
     // Handle clicks outside during edit mode
     handleEditModeOutsideClick = (e) => {
-        console.log(`[EDIT-EXIT] Outside click detected, editing: ${this.editingComponentId}`);
-        console.log(`[EDIT-EXIT] Click target:`, e.target.tagName, e.target.className);
+        // console.log(`[EDIT-EXIT] Outside click detected, editing: ${this.editingComponentId}`);
+        // console.log(`[EDIT-EXIT] Click target:`, e.target.tagName, e.target.className);
         
         if (!this.editingComponentId) return;
         
@@ -4885,17 +5396,17 @@ class CanvasMaker {
             const isCanvasClick = e.target.tagName === 'CANVAS';
             const isCanvasContainer = e.target.classList.contains('canvas-container');
             
-            console.log(`[EDIT-EXIT] Click outside component: ${isOutside}`);
-            console.log(`[EDIT-EXIT] Canvas click: ${isCanvasClick}, Container click: ${isCanvasContainer}`);
-            console.log(`[EDIT-EXIT] Is resizing: ${this.isResizing}`);
+            // console.log(`[EDIT-EXIT] Click outside component: ${isOutside}`);
+            // console.log(`[EDIT-EXIT] Canvas click: ${isCanvasClick}, Container click: ${isCanvasContainer}`);
+            // console.log(`[EDIT-EXIT] Is resizing: ${this.isResizing}`);
             
             // Exit edit mode if clicking outside the component
             // BUT stay in edit mode if currently resizing (to allow resize operations)
             if (isOutside) {
                 if (this.isResizing) {
-                    console.log(`[EDIT-EXIT] Currently resizing - staying in edit mode`);
+                    // console.log(`[EDIT-EXIT] Currently resizing - staying in edit mode`);
                 } else {
-                    console.log(`[EDIT-EXIT] Exiting edit mode due to outside click`);
+                    // console.log(`[EDIT-EXIT] Exiting edit mode due to outside click`);
                     this.exitComponentEditMode();
                 }
             }
@@ -4904,14 +5415,14 @@ class CanvasMaker {
     
     // Handle ESC key during edit mode
     handleEditModeEscape = (e) => {
-        console.log(`[EDIT-EXIT] Key pressed: ${e.key}, editing: ${this.editingComponentId}`);
+        // console.log(`[EDIT-EXIT] Key pressed: ${e.key}, editing: ${this.editingComponentId}`);
         if (e.key === 'Escape') {
-            console.log(`[EDIT-EXIT] ESC key detected!`);
+            // console.log(`[EDIT-EXIT] ESC key detected!`);
             if (this.editingComponentId) {
-                console.log(`[EDIT-EXIT] Exiting edit mode due to ESC key for component: ${this.editingComponentId}`);
+                // console.log(`[EDIT-EXIT] Exiting edit mode due to ESC key for component: ${this.editingComponentId}`);
                 this.exitComponentEditMode();
             } else {
-                console.log(`[EDIT-EXIT] ESC pressed but no component in edit mode`);
+                // console.log(`[EDIT-EXIT] ESC pressed but no component in edit mode`);
             }
         }
     }
@@ -5317,48 +5828,16 @@ class CanvasMaker {
     
     
     selectElementsInAreaForContext(x1, y1, x2, y2, canvasContext) {
-        const minX = Math.min(x1, x2);
-        const maxX = Math.max(x1, x2);
-        const minY = Math.min(y1, y2);
-        const maxY = Math.max(y1, y2);
+        // Convert canvas coordinates to world coordinates for proper selection
+        const startWorld = this.canvasToWorld(x1, y1, canvasContext);
+        const endWorld = this.canvasToWorld(x2, y2, canvasContext);
         
-        canvasContext.selectedElements = [];
+        const previewElements = this.getElementsInArea(startWorld.x, startWorld.y, endWorld.x, endWorld.y, canvasContext);
+        canvasContext.selectedElements = previewElements;
         
-        // Check paths
-        canvasContext.paths.forEach((path, index) => {
-            const pathBounds = this.getPathBounds(path);
-            if (pathBounds.x >= minX && pathBounds.x + pathBounds.width <= maxX &&
-                pathBounds.y >= minY && pathBounds.y + pathBounds.height <= maxY) {
-                canvasContext.selectedElements.push({ type: 'path', index });
-            }
-        });
-        
-        // Check shapes
-        canvasContext.shapes.forEach((shape, index) => {
-            if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
-                if (shape.x >= minX && shape.x + shape.width <= maxX &&
-                    shape.y >= minY && shape.y + shape.height <= maxY) {
-                    canvasContext.selectedElements.push({ type: 'shape', index });
-                }
-            } else if (shape.type === 'circle') {
-                if (shape.x - shape.radius >= minX && shape.x + shape.radius <= maxX &&
-                    shape.y - shape.radius >= minY && shape.y + shape.radius <= maxY) {
-                    canvasContext.selectedElements.push({ type: 'shape', index });
-                }
-            } else if (shape.type === 'reactComponent') {
-                if (shape.x >= minX && shape.x + shape.width <= maxX &&
-                    shape.y >= minY && shape.y + shape.height <= maxY) {
-                    canvasContext.selectedElements.push({ type: 'shape', index });
-                }
-            }
-        });
-        
-        // Check texts
-        canvasContext.texts.forEach((text, index) => {
-            if (text.x >= minX && text.x <= maxX && text.y >= minY && text.y <= maxY) {
-                canvasContext.selectedElements.push({ type: 'text', index });
-            }
-        });
+        this.updateCanvasCursor();
+        this.redrawCanvas(canvasContext);
+        this.notifySelectionChange();
     }
     
     getResizeHandleForContext(worldX, worldY, canvasContext) {
@@ -5383,6 +5862,33 @@ class CanvasMaker {
                     width: shape.radius * 2,
                     height: shape.radius * 2
                 };
+            } else if (shape.type === 'line' || shape.type === 'arrow') {
+                // For lines and arrows, allow endpoint resizing and middle dragging
+                const handleSize = 8;
+                const middleHandleSize = 6;
+                const tolerance = 10; // 10px radius for better touch/click area
+                
+                // Check if clicking near start point
+                const distToStart = Math.sqrt((worldX - shape.x1) * (worldX - shape.x1) + (worldY - shape.y1) * (worldY - shape.y1));
+                if (distToStart <= tolerance) {
+                    return 'line-start';
+                }
+                
+                // Check if clicking near end point  
+                const distToEnd = Math.sqrt((worldX - shape.x2) * (worldX - shape.x2) + (worldY - shape.y2) * (worldY - shape.y2));
+                if (distToEnd <= tolerance) {
+                    return 'line-end';
+                }
+                
+                // Check if clicking near middle point (for dragging entire line)
+                const midX = (shape.x1 + shape.x2) / 2;
+                const midY = (shape.y1 + shape.y2) / 2;
+                const distToMid = Math.sqrt((worldX - midX) * (worldX - midX) + (worldY - midY) * (worldY - midY));
+                if (distToMid <= tolerance) {
+                    return 'line-middle';
+                }
+                
+                return null; // No handle in other areas
             } else if (shape.type === 'reactComponent') {
                 bounds = {
                     x: shape.x,
@@ -5413,7 +5919,7 @@ class CanvasMaker {
         
         // Work in world coordinates (much simpler and more reliable)
         const handleSize = 8; // Handle size in world coordinates - canvas transform handles scaling
-        const tolerance = 6; // 6px radius around resize handles for precise interaction
+        const tolerance = 10; // 10px radius around resize handles for better touch/click area
         
         // Create handles in world coordinates matching the drawing function
         const handles = [
@@ -5476,55 +5982,101 @@ class CanvasMaker {
             
             if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
                 switch (this.resizeHandle) {
-                    case 'top-left':
+                    case 'nw': // top-left
                         shape.x += deltaX;
                         shape.y += deltaY;
                         shape.width -= deltaX;
                         shape.height -= deltaY;
                         break;
-                    case 'top-right':
+                    case 'ne': // top-right
                         shape.y += deltaY;
                         shape.width += deltaX;
                         shape.height -= deltaY;
                         break;
-                    case 'bottom-left':
+                    case 'sw': // bottom-left
                         shape.x += deltaX;
                         shape.width -= deltaX;
                         shape.height += deltaY;
                         break;
-                    case 'bottom-right':
+                    case 'se': // bottom-right
                         shape.width += deltaX;
                         shape.height += deltaY;
+                        break;
+                    case 'n': // top
+                        shape.y += deltaY;
+                        shape.height -= deltaY;
+                        break;
+                    case 's': // bottom
+                        shape.height += deltaY;
+                        break;
+                    case 'w': // left
+                        shape.x += deltaX;
+                        shape.width -= deltaX;
+                        break;
+                    case 'e': // right
+                        shape.width += deltaX;
                         break;
                 }
             } else if (shape.type === 'circle') {
                 const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
                 const direction = deltaX > 0 || deltaY > 0 ? 1 : -1;
                 shape.radius = Math.max(5, shape.radius + direction * distance * 0.1);
+            } else if (shape.type === 'line' || shape.type === 'arrow') {
+                if (this.resizeHandle === 'line-start') {
+                    // Move the start point
+                    shape.x1 = currentX;
+                    shape.y1 = currentY;
+                } else if (this.resizeHandle === 'line-end') {
+                    // Move the end point
+                    shape.x2 = currentX;
+                    shape.y2 = currentY;
+                } else if (this.resizeHandle === 'line-middle') {
+                    // Move the entire line (drag both endpoints together)
+                    const deltaX = currentX - this.dragStartX;
+                    const deltaY = currentY - this.dragStartY;
+                    shape.x1 = this.originalShapeState.x1 + deltaX;
+                    shape.y1 = this.originalShapeState.y1 + deltaY;
+                    shape.x2 = this.originalShapeState.x2 + deltaX;
+                    shape.y2 = this.originalShapeState.y2 + deltaY;
+                }
             }
         } else if (element.type === 'text') {
             const text = canvasContext.texts[element.index];
             
             switch (this.resizeHandle) {
-                case 'top-left':
+                case 'nw': // top-left
                     text.x += deltaX;
                     text.y += deltaY;
                     text.width -= deltaX;
                     text.height -= deltaY;
                     break;
-                case 'top-right':
+                case 'ne': // top-right
                     text.y += deltaY;
                     text.width += deltaX;
                     text.height -= deltaY;
                     break;
-                case 'bottom-left':
+                case 'sw': // bottom-left
                     text.x += deltaX;
                     text.width -= deltaX;
                     text.height += deltaY;
                     break;
-                case 'bottom-right':
+                case 'se': // bottom-right
                     text.width += deltaX;
                     text.height += deltaY;
+                    break;
+                case 'n': // top
+                    text.y += deltaY;
+                    text.height -= deltaY;
+                    break;
+                case 's': // bottom
+                    text.height += deltaY;
+                    break;
+                case 'w': // left
+                    text.x += deltaX;
+                    text.width -= deltaX;
+                    break;
+                case 'e': // right
+                    text.width += deltaX;
                     break;
             }
             
@@ -5535,25 +6087,39 @@ class CanvasMaker {
             const nestedCanvas = canvasContext.nestedCanvases[element.index];
             
             switch (this.resizeHandle) {
-                case 'top-left':
+                case 'nw': // top-left
                     nestedCanvas.x += deltaX;
                     nestedCanvas.y += deltaY;
                     nestedCanvas.width -= deltaX;
                     nestedCanvas.height -= deltaY;
                     break;
-                case 'top-right':
+                case 'ne': // top-right
                     nestedCanvas.y += deltaY;
                     nestedCanvas.width += deltaX;
                     nestedCanvas.height -= deltaY;
                     break;
-                case 'bottom-left':
+                case 'sw': // bottom-left
                     nestedCanvas.x += deltaX;
                     nestedCanvas.width -= deltaX;
                     nestedCanvas.height += deltaY;
                     break;
-                case 'bottom-right':
+                case 'se': // bottom-right
                     nestedCanvas.width += deltaX;
                     nestedCanvas.height += deltaY;
+                    break;
+                case 'n': // top
+                    nestedCanvas.y += deltaY;
+                    nestedCanvas.height -= deltaY;
+                    break;
+                case 's': // bottom
+                    nestedCanvas.height += deltaY;
+                    break;
+                case 'w': // left
+                    nestedCanvas.x += deltaX;
+                    nestedCanvas.width -= deltaX;
+                    break;
+                case 'e': // right
+                    nestedCanvas.width += deltaX;
                     break;
             }
             
@@ -5573,46 +6139,46 @@ class CanvasMaker {
     
     // Testing helper functions for camera constraints and CSS transforms
     testCameraConstraints() {
-        console.log('Testing camera constraints with CSS transforms...');
+        // console.log('Testing camera constraints with CSS transforms...');
         
         // Test 1: Set basic bounds
-        console.log('Test 1: Setting bounds to (-1000, -1000, 2000, 2000) with contain behavior');
+        // console.log('Test 1: Setting bounds to (-1000, -1000, 2000, 2000) with contain behavior');
         this.setCameraConstraints({
             bounds: { x: -1000, y: -1000, width: 2000, height: 2000 },
             behavior: 'contain'
         });
         
-        console.log('Current camera:', this.camera);
-        console.log('Try panning to see constraints in action!');
-        console.log('Use testCameraConstraints2() for inside behavior test');
-        console.log('Use clearCameraConstraints() to remove constraints');
+        // console.log('Current camera:', this.camera);
+        // console.log('Try panning to see constraints in action!');
+        // console.log('Use testCameraConstraints2() for inside behavior test');
+        // console.log('Use clearCameraConstraints() to remove constraints');
     }
     
     testCameraConstraints2() {
-        console.log('Test 2: Setting bounds with inside behavior');
+        // console.log('Test 2: Setting bounds with inside behavior');
         this.setCameraConstraints({
             bounds: { x: -500, y: -500, width: 1000, height: 1000 },
             behavior: 'inside'
         });
         
-        console.log('Current camera:', this.camera);
-        console.log('Camera center must stay within bounds');
+        // console.log('Current camera:', this.camera);
+        // console.log('Camera center must stay within bounds');
     }
     
     testCSSTransforms() {
-        console.log('Testing coordinate system...');
-        console.log('Camera coordinates:', this.camera);
-        console.log('Canvas size:', this.canvas.width, 'x', this.canvas.height);
+        // console.log('Testing coordinate system...');
+        // console.log('Camera coordinates:', this.camera);
+        // console.log('Canvas size:', this.canvas.width, 'x', this.canvas.height);
         
         // Test coordinate conversion
         const screenCenter = { x: this.canvas.width / 2, y: this.canvas.height / 2 };
         const worldCenter = this.canvasToWorld(screenCenter.x, screenCenter.y);
-        console.log('Screen center to world:', screenCenter, '->', worldCenter);
+        // console.log('Screen center to world:', screenCenter, '->', worldCenter);
         
         const backToScreen = this.worldToCanvas(worldCenter.x, worldCenter.y);
-        console.log('World back to screen:', worldCenter, '->', backToScreen);
+        // console.log('World back to screen:', worldCenter, '->', backToScreen);
         
-        console.log('Canvas transform applied via Canvas2D transforms');
+        // console.log('Canvas transform applied via Canvas2D transforms');
     }
     
     testCoordinates() {
@@ -5625,8 +6191,8 @@ class CanvasMaker {
             fillColor: 'rgba(255,0,0,0.2)'
         });
         
-        console.log('Added red test rectangle at world origin (-50,-50,100,100)');
-        console.log('It should appear centered on screen');
+        // console.log('Added red test rectangle at world origin (-50,-50,100,100)');
+        // console.log('It should appear centered on screen');
         this.redrawCanvas();
     }
     
@@ -5794,9 +6360,8 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 // Initialize the app when the DOM is loaded (only if running standalone)
-// DISABLED: This was causing duplicate instances in test environment
-// if (typeof document !== 'undefined' && typeof module === 'undefined') {
-//     document.addEventListener('DOMContentLoaded', () => {
-//         new CanvasMaker();
-//     });
-// }
+if (typeof document !== 'undefined' && typeof module === 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => {
+        new CanvasMaker();
+    });
+}

@@ -404,9 +404,20 @@ h1 {
     cursor: crosshair;
 }
 
-.canvas-container.select-cursor.resizing #canvas {
-    cursor: nw-resize;
-}
+/* Removed generic resizing cursor - using specific resize handle cursors instead */
+
+/* Resize handle hover cursors */
+.canvas-container.resize-nw #canvas { cursor: nw-resize; }
+.canvas-container.resize-ne #canvas { cursor: ne-resize; }
+.canvas-container.resize-sw #canvas { cursor: sw-resize; }
+.canvas-container.resize-se #canvas { cursor: se-resize; }
+.canvas-container.resize-n #canvas { cursor: n-resize; }
+.canvas-container.resize-s #canvas { cursor: s-resize; }
+.canvas-container.resize-w #canvas { cursor: w-resize; }
+.canvas-container.resize-e #canvas { cursor: e-resize; }
+.canvas-container.resize-line-start #canvas { cursor: move; }
+.canvas-container.resize-line-end #canvas { cursor: move; }
+.canvas-container.resize-line-middle #canvas { cursor: move; }
 
 /* Nested Canvas Overlay */
 .nested-canvas-overlay {
@@ -444,12 +455,15 @@ h1 {
 }
 
 .nested-canvas-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid #e1e5e9;
+    background: #f8f9fa;
+}
+
+.nested-canvas-title-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
-    border-bottom: 1px solid #e1e5e9;
-    background: #f8f9fa;
 }
 
 .nested-toolbar {
@@ -471,6 +485,14 @@ h1 {
     background: white;
 }
 
+/* Nested Floating Toolbar */
+.nested-floating-toolbar {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+}
+
 #nested-canvas {
     display: block;
     width: 100%;
@@ -478,6 +500,14 @@ h1 {
     background: white;
     cursor: crosshair;
     touch-action: none;
+}
+
+/* When nested canvas is moved to document.body for fixed positioning, override flex sizing */
+body > #nested-canvas {
+    width: auto !important;
+    height: auto !important;
+    position: fixed !important;
+    z-index: 3000 !important;
 }
 
 /* Nested canvas cursor styles for different tools */
@@ -527,4 +557,47 @@ h1 {
 
 .nested-canvas-content.select-cursor.resizing #nested-canvas {
     cursor: nw-resize;
+}
+
+/* HTML Component Rendering */
+.html-rendering-layer {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: none !important;
+    z-index: 10 !important;
+    overflow: hidden !important;
+    transform-origin: top left !important;
+}
+
+.react-component-html {
+    position: absolute !important;
+    box-sizing: border-box !important;
+    transform-origin: top left !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    transition: outline 0.15s ease, opacity 0.1s ease !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    border-radius: 4px !important;
+    padding: 8px !important;
+}
+
+.react-component-html.editing {
+    pointer-events: auto !important;
+    outline: 2px solid #3b82f6 !important;
+    outline-offset: 2px !important;
+}
+
+/* Debug mode - make HTML layer visible with colored background */
+.html-rendering-layer.debug {
+    background: rgba(255, 0, 0, 0.1) !important;
+    border: 2px dashed red !important;
+}
+
+.react-component-html.debug {
+    background: rgba(0, 255, 0, 0.3) !important;
+    border: 2px solid green !important;
 }

@@ -2,6 +2,21 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
+## Recent Updates (v1.2)
+
+### Enhanced UI/UX
+- ✅ **Fixed invisible shapes bug** - All shapes now always have visible strokes
+- ✅ **Group drag support** - Multiple selected elements can be dragged as a group
+- ✅ **Nested canvas improvements** - Clean floating toolbar with drag support
+- ✅ **Grid system** - Infinite grid background for better visual reference
+- ✅ **Fixed toolbar icons** - Line and arrow tools now display correctly
+
+### Nested Canvas Features
+- ✅ **Floating toolbar** - Draggable tool palette within nested canvas
+- ✅ **Complete toolset** - Pen, rectangle, circle, line, arrow, text, select, clear tools
+- ✅ **No PNG overlays** - Fixed browser extension interference issues
+- ✅ **Grid-free nested canvas** - Clean workspace without grid distractions
+
 ## Architecture Overview
 
 The canvas system is built around a `CanvasMaker` class that manages:
@@ -13,12 +28,36 @@ The canvas system is built around a `CanvasMaker` class that manages:
 ## Quick Start Integration
 
 ### 1. Basic Setup
-```javascript
-// Access the global canvas instance
-const canvas = window.canvasMaker;
 
-// Or create a new instance
-const canvas = new CanvasMaker();
+#### CSS Import
+Copy `styles.css` to your project and import it:
+```html
+<link rel="stylesheet" href="./CanvasMaker.css">
+```
+Or in a bundler:
+```javascript
+import './CanvasMaker.css';
+```
+
+#### Canvas Initialization
+```javascript
+// Create container element
+const container = document.getElementById('canvas-container');
+
+// Create canvas instance with TLDraw-style options
+const canvas = new CanvasMaker(container, {
+    createToolbar: true,           // Enable floating toolbar
+    toolbarPosition: 'top-left',   // 'top-left', 'top-right', 'bottom-left', 'bottom-right'
+    width: container.clientWidth,
+    height: container.clientHeight,
+    showGrid: true                 // Optional: show grid background
+});
+
+// Set TLDraw-style virtual bounds (prevents infinite canvas)
+canvas.setCameraConstraints({
+    bounds: { x: -1000, y: -1000, width: 2000, height: 2000 },
+    behavior: 'contain'  // 'contain', 'inside', or 'free'
+});
 ```
 
 ### 2. Adding Components
@@ -900,14 +939,32 @@ const integration = canvas.integrateExternalComponent({
 
 ### Coordinate System Reference
 
+Canvas Maker supports three coordinate systems for component placement:
+
 ```javascript
-// Converting between coordinate systems
+// 1. World coordinates (default) - absolute position on infinite canvas
+const shape1 = canvas.addReactComponentWithHTML(100, 200, 300, 150, htmlContent);
+// Places component at world position (100, 200) - doesn't change when user pans/zooms
+
+// 2. Screen/canvas coordinates - position relative to visible canvas area  
+const shape2 = canvas.addReactComponentWithHTML(50, 50, 300, 150, htmlContent, {
+    coordinateSystem: 'screen'
+});
+// Places component 50px from top-left corner of visible canvas
+
+// 3. Center coordinates - position relative to viewport center
+const shape3 = canvas.addReactComponentWithHTML(0, -100, 300, 150, htmlContent, {
+    coordinateSystem: 'center' 
+});
+// Places component 100px above the center of current viewport
+
+// Helper methods for easier placement
+const centerShape = canvas.addReactComponentAtCenter(300, 150, htmlContent);
+const screenShape = canvas.addReactComponentAtScreenPos(50, 50, 300, 150, htmlContent);
+
+// Converting between coordinate systems manually
 const worldPos = { x: 100, y: 200 };
-
-// World to screen (for positioning DOM elements)
 const screenPos = canvas.worldToCanvas(worldPos.x, worldPos.y);
-
-// Screen to world (for mouse interactions)
 const mouseWorld = canvas.canvasToWorld(mouseX, mouseY);
 
 // Access current camera state
@@ -1619,6 +1676,33 @@ const CompleteCanvasIntegration = () => {
 export default CompleteCanvasIntegration;
 ```
 
+### React Component Edit Mode
+
+Canvas Maker supports interactive edit mode for React components:
+
+```javascript
+// Double-click any React component to enter edit mode
+// This makes the HTML content interactive while showing selection handles
+
+// Programmatically enter/exit edit mode
+canvas.enterComponentEditMode(shape);  // Enable HTML interaction
+canvas.exitComponentEditMode(shape);   // Return to selection/drag mode
+
+// Check if component is in edit mode
+const isEditing = canvas.editingComponentId === shape.id;
+
+// Listen for edit mode changes
+canvas.on('componentEditMode', ({ shapeId, isEditing }) => {
+    console.log(`Component ${shapeId} edit mode: ${isEditing}`);
+});
+```
+
+**Edit Mode Behavior:**
+- **Selection mode**: Component shows resize handles, can be dragged/resized
+- **Edit mode**: HTML content becomes interactive, can click buttons/forms inside
+- **Toggle**: Double-click component to switch between modes
+- **Visual feedback**: Slight opacity change indicates current mode
+
 ### Best Practices for React Integration
 
 1. **Use Container-Based Initialization**: Let Canvas Maker create the canvas element for better compatibility.
@@ -1634,6 +1718,8 @@ export default CompleteCanvasIntegration;
 6. **Clean Up Properly**: Always unregister components and remove event listeners in useEffect cleanup.
 
 7. **Use Throttled Events**: For high-frequency updates, rely on the built-in throttling in `duringPan` and `duringZoom` events.
+
+8. **Handle Edit Mode**: Design components to work in both selection and edit modes for better UX.
 
 ### DOM Element Synchronization
 
