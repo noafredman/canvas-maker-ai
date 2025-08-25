@@ -15,6 +15,7 @@ class CanvasMaker {
             createCanvas: true,
             createToolbar: true,
             toolbarPosition: 'top-left',
+            initialToolbarPosition: null, // { x: number, y: number } for specific coordinates
             width: 1200,
             height: 800,
             ...options
@@ -362,17 +363,40 @@ class CanvasMaker {
             // Set up absolute positioning for drag compatibility
             toolbar.style.position = 'absolute';
             
-            // Position based on options (convert to absolute coordinates)
-            const positions = {
-                'top-left': { x: 20, y: 20 },
-                'top-right': { x: window.innerWidth - 200, y: 20 }, // Estimate toolbar width
-                'bottom-left': { x: 20, y: window.innerHeight - 100 }, // Estimate toolbar height
-                'bottom-right': { x: window.innerWidth - 200, y: window.innerHeight - 100 }
-            };
-            const pos = positions[this.options.toolbarPosition] || positions['top-left'];
+            // Use initialToolbarPosition if provided, otherwise fall back to toolbarPosition
+            let finalPosition;
             
-            toolbar.style.left = pos.x + 'px';
-            toolbar.style.top = pos.y + 'px';
+            if (this.options.initialToolbarPosition && 
+                typeof this.options.initialToolbarPosition.x === 'number' && 
+                typeof this.options.initialToolbarPosition.y === 'number') {
+                // Use exact coordinates provided
+                finalPosition = {
+                    x: this.options.initialToolbarPosition.x,
+                    y: this.options.initialToolbarPosition.y
+                };
+                console.log(`[TOOLBAR] Using initialToolbarPosition: ${finalPosition.x}, ${finalPosition.y}`);
+            } else {
+                // Fall back to named positions
+                const positions = {
+                    'top-left': { x: 20, y: 20 },
+                    'top-right': { x: window.innerWidth - 200, y: 20 }, // Estimate toolbar width
+                    'bottom-left': { x: 20, y: window.innerHeight - 100 }, // Estimate toolbar height
+                    'bottom-right': { x: window.innerWidth - 200, y: window.innerHeight - 100 }
+                };
+                finalPosition = positions[this.options.toolbarPosition] || positions['top-left'];
+                console.log(`[TOOLBAR] Using toolbarPosition '${this.options.toolbarPosition}': ${finalPosition.x}, ${finalPosition.y}`);
+            }
+            
+            // Constrain to viewport to prevent off-screen placement
+            const constrainedX = Math.max(0, Math.min(window.innerWidth - 50, finalPosition.x));
+            const constrainedY = Math.max(0, Math.min(window.innerHeight - 50, finalPosition.y));
+            
+            toolbar.style.left = constrainedX + 'px';
+            toolbar.style.top = constrainedY + 'px';
+            
+            // If no initial position was provided, mark toolbar as positioned
+            // (prevents hiding behavior in setToolbarPosition)
+            this._toolbarPositioned = !!this.options.initialToolbarPosition;
             
             toolbar.innerHTML = `
                 <div class="toolbar-drag-handle" id="toolbar-drag-handle">
@@ -701,12 +725,13 @@ class CanvasMaker {
         let isDragging = false;
         let dragOffset = { x: 0, y: 0 };
         
-        // Store initial position from toolbar's actual position
-        const rect = toolbar.getBoundingClientRect();
+        // Store initial position from toolbar's actual style values
         this.toolbarPosition = { 
-            x: parseInt(toolbar.style.left) || rect.left, 
-            y: parseInt(toolbar.style.top) || rect.top 
+            x: parseInt(toolbar.style.left) || 20, 
+            y: parseInt(toolbar.style.top) || 20
         };
+        
+        console.log(`[TOOLBAR] Initial drag position stored: ${this.toolbarPosition.x}, ${this.toolbarPosition.y}`);
         
         dragHandle.addEventListener('mousedown', (e) => {
             e.preventDefault();

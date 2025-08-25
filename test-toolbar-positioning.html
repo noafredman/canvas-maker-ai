@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CanvasMaker Toolbar Positioning Test</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .controls h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .test-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .test-btn {
+            padding: 8px 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .test-btn:hover {
+            background: #2563eb;
+        }
+        
+        .position-input {
+            display: inline-flex;
+            gap: 5px;
+            align-items: center;
+            margin: 5px;
+        }
+        
+        .position-input input {
+            width: 60px;
+            padding: 4px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h3>🎯 CanvasMaker Toolbar Positioning Test</h3>
+        <p>Test the new <code>initialToolbarPosition</code> constructor option and positioning API.</p>
+        
+        <div class="test-buttons">
+            <button class="test-btn" onclick="testDefault()">Default Position</button>
+            <button class="test-btn" onclick="testCenter()">Center Position</button>
+            <button class="test-btn" onclick="testBottomRight()">Bottom-Right</button>
+            <button class="test-btn" onclick="testCustom()">Custom (300, 150)</button>
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <strong>Manual Position:</strong>
+            <div class="position-input">
+                <label>X:</label>
+                <input type="number" id="manual-x" value="100" min="0">
+            </div>
+            <div class="position-input">
+                <label>Y:</label>
+                <input type="number" id="manual-y" value="100" min="0">
+            </div>
+            <button class="test-btn" onclick="testManual()">Set Manual Position</button>
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <button class="test-btn" onclick="getCurrentPosition()" style="background: #059669;">Get Current Position</button>
+            <span id="current-position" style="margin-left: 10px; font-family: monospace;"></span>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script src="canvas.js"></script>
+    <script>
+        let currentCanvas = null;
+        
+        function createCanvas(options = {}) {
+            // Clear previous instance
+            if (currentCanvas) {
+                const container = document.getElementById('canvas-container');
+                container.innerHTML = '';
+            }
+            
+            // Create new instance with options
+            currentCanvas = new CanvasMaker('#canvas-container', {
+                createCanvas: true,
+                createToolbar: true,
+                ...options
+            });
+            
+            console.log('🎨 Created CanvasMaker with options:', options);
+            
+            // Show current position after creation
+            setTimeout(() => {
+                getCurrentPosition();
+            }, 100);
+        }
+        
+        function testDefault() {
+            console.log('🧪 Testing default position (top-left)');
+            createCanvas({
+                toolbarPosition: 'top-left'
+            });
+        }
+        
+        function testCenter() {
+            console.log('🧪 Testing center position');
+            createCanvas({
+                initialToolbarPosition: { 
+                    x: window.innerWidth / 2 - 100, 
+                    y: window.innerHeight / 2 - 50 
+                }
+            });
+        }
+        
+        function testBottomRight() {
+            console.log('🧪 Testing bottom-right position');
+            createCanvas({
+                initialToolbarPosition: { 
+                    x: window.innerWidth - 220, 
+                    y: window.innerHeight - 120 
+                }
+            });
+        }
+        
+        function testCustom() {
+            console.log('🧪 Testing custom position (300, 150)');
+            createCanvas({
+                initialToolbarPosition: { x: 300, y: 150 }
+            });
+        }
+        
+        function testManual() {
+            const x = parseInt(document.getElementById('manual-x').value);
+            const y = parseInt(document.getElementById('manual-y').value);
+            
+            console.log(`🧪 Testing manual position (${x}, ${y})`);
+            createCanvas({
+                initialToolbarPosition: { x, y }
+            });
+        }
+        
+        function getCurrentPosition() {
+            if (currentCanvas) {
+                const pos = currentCanvas.getToolbarPosition();
+                document.getElementById('current-position').textContent = 
+                    `Current: (${pos.x}, ${pos.y})`;
+                console.log('📍 Current toolbar position:', pos);
+            }
+        }
+        
+        // Start with default
+        testDefault();
+    </script>
+</body>
+</html>
