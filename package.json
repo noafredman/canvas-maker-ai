@@ -5,7 +5,8 @@
   "main": "canvas.js",
   "exports": {
     ".": "./canvas.js",
-    "./styles": "./styles.css"
+    "./styles": "./styles.css",
+    "./styles.css": "./styles.css"
   },
   "scripts": {
     "test": "node test-react-integration.js",
