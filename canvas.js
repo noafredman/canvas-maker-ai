@@ -359,15 +359,20 @@ class CanvasMaker {
             toolbar.id = 'floating-toolbar';
             toolbar.className = 'floating-toolbar';
             
-            // Position based on options
+            // Set up absolute positioning for drag compatibility
+            toolbar.style.position = 'absolute';
+            
+            // Position based on options (convert to absolute coordinates)
             const positions = {
-                'top-left': { top: '20px', left: '20px' },
-                'top-right': { top: '20px', right: '20px' },
-                'bottom-left': { bottom: '20px', left: '20px' },
-                'bottom-right': { bottom: '20px', right: '20px' }
+                'top-left': { x: 20, y: 20 },
+                'top-right': { x: window.innerWidth - 200, y: 20 }, // Estimate toolbar width
+                'bottom-left': { x: 20, y: window.innerHeight - 100 }, // Estimate toolbar height
+                'bottom-right': { x: window.innerWidth - 200, y: window.innerHeight - 100 }
             };
             const pos = positions[this.options.toolbarPosition] || positions['top-left'];
-            Object.assign(toolbar.style, pos);
+            
+            toolbar.style.left = pos.x + 'px';
+            toolbar.style.top = pos.y + 'px';
             
             toolbar.innerHTML = `
                 <div class="toolbar-drag-handle" id="toolbar-drag-handle">
@@ -696,8 +701,12 @@ class CanvasMaker {
         let isDragging = false;
         let dragOffset = { x: 0, y: 0 };
         
-        // Store initial position for external API
-        this.toolbarPosition = { x: 20, y: 20 };
+        // Store initial position from toolbar's actual position
+        const rect = toolbar.getBoundingClientRect();
+        this.toolbarPosition = { 
+            x: parseInt(toolbar.style.left) || rect.left, 
+            y: parseInt(toolbar.style.top) || rect.top 
+        };
         
         dragHandle.addEventListener('mousedown', (e) => {
             e.preventDefault();
@@ -760,11 +769,42 @@ class CanvasMaker {
         const constrainedX = Math.max(0, Math.min(maxX, x));
         const constrainedY = Math.max(0, Math.min(maxY, y));
         
+        // Clear any existing positioning properties to avoid conflicts
+        toolbar.style.right = '';
+        toolbar.style.bottom = '';
+        
+        // Set absolute positioning for drag compatibility
+        toolbar.style.position = 'absolute';
         toolbar.style.left = constrainedX + 'px';
         toolbar.style.top = constrainedY + 'px';
         
+        // Update stored position
         this.toolbarPosition.x = constrainedX;
         this.toolbarPosition.y = constrainedY;
+        
+        console.log(`[TOOLBAR] Position set externally: ${constrainedX}, ${constrainedY}`);
+        
+        // Re-setup drag functionality to ensure it works after position change
+        this.ensureToolbarDragReady();
+    }
+    
+    // Ensure drag functionality is ready after external position changes
+    ensureToolbarDragReady() {
+        const toolbar = document.getElementById('floating-toolbar');
+        const dragHandle = document.getElementById('toolbar-drag-handle');
+        
+        if (!toolbar || !dragHandle) return;
+        
+        // Ensure toolbar has proper positioning context for dragging
+        if (toolbar.style.position !== 'absolute') {
+            toolbar.style.position = 'absolute';
+        }
+        
+        // Verify drag handle is still interactive
+        dragHandle.style.cursor = 'move';
+        dragHandle.style.userSelect = 'none';
+        
+        console.log('[TOOLBAR] Drag functionality verified and ready');
     }
     
     getToolbarPosition() {
