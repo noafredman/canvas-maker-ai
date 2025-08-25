@@ -135,6 +135,20 @@ h1 {
     transform: translateY(-1px);
 }
 
+/* Enhanced SVG rendering for cross-environment compatibility */
+.tool-btn svg,
+.make-real-btn svg,
+.clear-btn svg {
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+.tool-btn svg path,
+.make-real-btn svg path,
+.clear-btn svg path {
+    fill: inherit;
+}
+
 .clear-btn {
     display: flex;
     align-items: center;

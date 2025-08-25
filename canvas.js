@@ -1934,8 +1934,8 @@ class CanvasMaker {
                 button.setAttribute('data-tool', tool.tool);
                 button.title = tool.title;
                 
-                button.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="${tool.icon}"${tool.transform ? ` transform="${tool.transform}"` : ''}/>
+                button.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display: block; fill: currentColor;">
+                    <path d="${tool.icon}" fill="currentColor" stroke="none" vector-effect="non-scaling-stroke"${tool.transform ? ` transform="${tool.transform}"` : ''}/>
                 </svg>`;
                 
                 // Add event listener
@@ -1978,9 +1978,11 @@ class CanvasMaker {
                 button.className = action.class || 'tool-btn';
                 button.title = action.title;
                 
-                button.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="${action.icon}"/>
+                // Robust SVG rendering for outer app environments
+                button.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display: block; fill: currentColor;">
+                    <path d="${action.icon}" fill="currentColor" stroke="none" vector-effect="non-scaling-stroke"/>
                 </svg>`;
+                
                 
                 // Add event listener
                 if (action.customHandler) {
