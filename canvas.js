@@ -940,6 +940,9 @@ class CanvasMaker {
         const finalWidth = width !== null ? width : this.options.defaultComponentWidth;
         const finalHeight = height !== null ? height : this.options.defaultComponentHeight;
         
+        // Only auto-size if width or height was not provided
+        const needsAutoSizing = width === null || height === null;
+        
         const shape = {
             type: 'reactComponent',
             id: options.id || Date.now() + Math.random(),
@@ -947,7 +950,7 @@ class CanvasMaker {
             y: finalY,
             width: finalWidth,
             height: finalHeight,
-            pendingContentMeasurement: true, // Flag to indicate we need to measure content
+            pendingContentMeasurement: needsAutoSizing, // Flag to indicate we need to measure content
             fillColor: options.fill || options.fillColor || 'transparent',
             strokeColor: options.stroke || options.strokeColor || '#333',
             htmlContent: typeof content === 'string' ? content : null,

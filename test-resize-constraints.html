@@ -97,6 +97,7 @@
             <button onclick="addSmallComponent()">Add Small HTML Component</button>
             <button onclick="addLargeComponent()">Add Large HTML Component</button>
             <button onclick="addAutoSizeComponent()">Add Auto-Size Component (No Size Specified)</button>
+            <button onclick="addNetflixComponent()">Add Netflix Navigation (Real HTML Test)</button>
             <button onclick="addMobileComponent()">Add Mobile Component (Bug Test)</button>
             <button onclick="testManualConstraints()">Test Manual Constraint Override</button>
             <button onclick="testAbsoluteLimit()">Test Absolute Maximum Limit</button>
@@ -219,6 +220,117 @@
             );
             
             logResult(`Added auto-size component ${componentCount} - no size specified, will auto-size to content`);
+        }
+        
+        function addNetflixComponent() {
+            componentCount++;
+            
+            // Your provided HTML content (with CSS isolation - no body styles)
+            const content = `
+                <style>
+                    /* Scoped styles - no body selector to avoid affecting parent page */
+                    .netflix-wrapper { 
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        margin: 0; 
+                        padding: 20px;
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center;
+                        background: #f8f9fa; 
+                        min-height: 200px; /* Changed from 100vh */
+                        width: 100%;
+                        box-sizing: border-box;
+                    }
+                    .netflix-container {
+                        background: white; 
+                        padding: 20px; 
+                        border-radius: 12px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+                        text-align: center;
+                        width: 100%; 
+                        max-width: 500px;
+                    }
+                    .netflix-navigation {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 16px;
+                        background-color: #000000;
+                        border-radius: 8px;
+                    }
+                    .netflix-logo {
+                        color: #E50914;
+                        font-size: 24px;
+                        font-weight: bold;
+                    }
+                    .netflix-nav-links {
+                        list-style: none;
+                        padding: 0;
+                        margin: 0;
+                        display: flex;
+                        gap: 16px;
+                    }
+                    .netflix-nav-link {
+                        text-decoration: none;
+                        color: #FFFFFF;
+                        font-size: 16px;
+                    }
+                    .netflix-nav-link:hover {
+                        color: #B2B2B2;
+                    }
+                    @media (max-width: 768px) {
+                        .netflix-nav-links {
+                            flex-direction: column;
+                            align-items: center;
+                        }
+                    }
+                </style>
+                
+                <div class="netflix-wrapper">
+                    <div class="netflix-container">
+                        <nav class="netflix-navigation">
+                            <a href="#" class="netflix-logo">Netflix</a>
+                            <ul class="netflix-nav-links">
+                                <li><a href="#" class="netflix-nav-link">Home</a></li>
+                                <li><a href="#" class="netflix-nav-link">TV Shows</a></li>
+                                <li><a href="#" class="netflix-nav-link">Movies</a></li>
+                                <li><a href="#" class="netflix-nav-link">New & Popular</a></li>
+                                <li><a href="#" class="netflix-nav-link">My List</a></li>
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+            `;
+            
+            // Test auto-sizing with complex real-world HTML
+            const shape = canvas.addReactComponentWithHTML(
+                50,
+                300,
+                null, // No width specified - should auto-size
+                null, // No height specified - should auto-size  
+                content,
+                { 
+                    id: `netflix-component-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            logResult(`Added Netflix navigation component ${componentCount} - complex HTML, auto-sizing`);
+            logResult(`Expected: Component should auto-size to content, max 375×650px`);
+            
+            // Debug: Check the component after a short delay to see if auto-sizing worked
+            setTimeout(() => {
+                const debugShape = canvas.activeCanvasContext.shapes.find(s => s.id === `netflix-component-${componentCount}`);
+                if (debugShape) {
+                    logResult(`DEBUG: Component actual size: ${Math.round(debugShape.width)}×${Math.round(debugShape.height)}`);
+                    logResult(`DEBUG: Has overflow info: ${!!debugShape.overflowInfo}`);
+                    logResult(`DEBUG: Pending measurement: ${!!debugShape.pendingContentMeasurement}`);
+                    if (debugShape.overflowInfo) {
+                        const contentSize = `${debugShape.overflowInfo.scrollWidth}×${debugShape.overflowInfo.scrollHeight}`;
+                        logResult(`DEBUG: Content size: ${contentSize}`);
+                    }
+                }
+            }, 500);
         }
         
         function addMobileComponent() {
@@ -344,6 +456,10 @@
                 lastLogTime = now;
             }
         });
+        
+        // Ensure page scrolling is always enabled
+        document.body.style.overflow = 'auto';
+        document.documentElement.style.overflow = 'auto';
         
         // Initial instructions
         logResult('Canvas initialized. Add HTML components and test resize constraints.');
