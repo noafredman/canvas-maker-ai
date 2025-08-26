@@ -2,10 +2,16 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.8)
+## Recent Updates (v1.8.1)
 
-### Content-Aware Resize Constraints
-- ✅ **Automatic content-based resize limits** - HTML components cannot be resized larger than content size + 10px
+### Content-Aware Resize Constraints - Bug Fix
+- 🐛 **Fixed manual constraint override bug** - Manual constraints now properly take precedence over content-based limits
+- ✅ **Respects setResizeConstraints() calls** - Components can now be resized beyond content size when manually configured
+- ✅ **Conditional constraint application** - Content-based limits only apply when no manual constraints are set
+- ✅ **Maintains backward compatibility** - Existing behavior preserved for components without manual constraints
+
+### Content-Aware Resize Constraints (Original)
+- ✅ **Automatic content-based resize limits** - HTML components cannot be resized larger than content size + 10px when no manual override exists
 - ✅ **Smart constraint integration** - Works alongside existing resize constraint system
 - ✅ **Real-time content measurement** - Uses existing overflow detection system for accurate sizing
 - ✅ **Prevents UI bloat** - Maintains clean, content-appropriate component dimensions
@@ -2317,39 +2323,51 @@ canvas.setPersistenceFilter((item, type) => {
 
 Canvas Maker includes a comprehensive resize constraints system to prevent component distortion and ensure good user experience:
 
-### Content-Aware Resize Constraints (v1.8)
+### Content-Aware Resize Constraints (v1.8.1)
 
-HTML components now automatically prevent resizing beyond their content size + 10px buffer:
+HTML components now automatically prevent resizing beyond their content size + 10px buffer, but respect manual constraint overrides:
 
 ```javascript
-// When user tries to resize an HTML component:
-// 1. System measures actual content size (scrollWidth/scrollHeight)
-// 2. Calculates max allowed size: contentSize + 10px
-// 3. Prevents resize handles from going beyond this limit
-
+// DEFAULT BEHAVIOR: Content-based constraints
 const component = canvas.addReactComponentWithHTML(content, x, y, width, height);
-// User can resize, but not larger than the actual content needs
+// User can resize, but not larger than content + 10px
 
-// Check current content constraints
-const shape = canvas.activeCanvasContext.shapes.find(s => s.id === 'my-component');
-if (shape.overflowInfo) {
-    const maxWidth = shape.overflowInfo.scrollWidth + 10;
-    const maxHeight = shape.overflowInfo.scrollHeight + 10;
-    console.log(`Max resize: ${maxWidth}x${maxHeight}`);
+// MANUAL OVERRIDE: Set larger constraints to allow more space
+canvas.setResizeConstraints(component.id, {
+    maxWidth: 589,   // Larger than content width
+    maxHeight: 667   // Larger than content height
+});
+// Now user can resize up to 589x667, even if content is smaller
+
+// Check current effective constraints
+const shape = canvas.activeCanvasContext.shapes.find(s => s.id === component.id);
+const constraints = canvas.getResizeConstraints('reactComponent', shape);
+if (constraints.maxWidth < Infinity) {
+    console.log(`Manual constraints active: ${constraints.maxWidth}x${constraints.maxHeight}`);
+} else if (shape.overflowInfo) {
+    const contentMax = shape.overflowInfo.scrollWidth + 10;
+    console.log(`Content constraints active: ${contentMax}x${shape.overflowInfo.scrollHeight + 10}`);
 }
 ```
 
 **Key Benefits:**
-- **Prevents UI bloat** - Components can't be made unnecessarily large
-- **Maintains content relationship** - Visual size matches actual content
+- **Prevents UI bloat** - Components can't be made unnecessarily large by default
+- **Respects developer intent** - Manual constraints override content-based limits when set
+- **Flexible behavior** - Automatic content-based limits when no manual override exists
 - **Seamless integration** - Works with existing constraint system
-- **No configuration needed** - Automatic based on content measurement
+- **Backward compatible** - Existing code behavior unchanged
 
 **Technical Details:**
 - Uses existing `overflowInfo` system for content measurement
 - Applied in both `performResize()` and `performResizeForContext()` functions
-- Takes precedence over configured max constraints if content-based limit is smaller
+- **NEW (v1.8.1)**: Manual constraints take precedence when explicitly set via `setResizeConstraints()`
+- Content-based constraints only apply when `maxWidth`/`maxHeight` are not manually configured
 - Only applies to `reactComponent` shapes with measured content
+
+**Priority Logic:**
+1. **Manual constraints** (if set via `setResizeConstraints()`) - Takes highest precedence
+2. **Content-based constraints** (content + 10px) - Applied when no manual constraints exist
+3. **Default constraints** (very large limits) - Fallback when neither above apply
 
 ### Traditional Resize Constraints
 

@@ -96,15 +96,18 @@
         <div class="controls">
             <button onclick="addSmallComponent()">Add Small HTML Component</button>
             <button onclick="addLargeComponent()">Add Large HTML Component</button>
+            <button onclick="addMobileComponent()">Add Mobile Component (Bug Test)</button>
+            <button onclick="testManualConstraints()">Test Manual Constraint Override</button>
             <button onclick="checkConstraints()">Check Component Constraints</button>
             <button onclick="canvas.clear()">Clear Canvas</button>
             
             <div class="info">
                 <strong>Instructions:</strong>
                 1. Add HTML components using the buttons above
-                2. Select a component and try to resize it by dragging the resize handles
-                3. Notice that you can't resize beyond content size + 10px
+                2. For <strong>Bug Test</strong>: Click "Add Mobile Component", then "Test Manual Constraint Override"
+                3. Try resizing the mobile component - it should now resize up to 589px width (not ~385px)
                 4. Use "Check Component Constraints" to see current size limits
+                5. Regular components still limited to content size + 10px when no manual constraints set
             </div>
         </div>
         
@@ -129,6 +132,7 @@
         canvas.currentTool = 'select';
         
         let componentCount = 0;
+        let mobileComponent = null;
         
         function addSmallComponent() {
             componentCount++;
@@ -180,6 +184,56 @@
             );
             
             logResult(`Added large component ${componentCount} with initial size 400x300, content ~300x200`);
+        }
+        
+        function addMobileComponent() {
+            componentCount++;
+            const content = `
+                <div style="width: 579px; height: 200px; background: #ff6b6b; padding: 15px; border-radius: 8px; color: white;">
+                    <h3>Mobile Bug Test Component ${componentCount}</h3>
+                    <p>This component has content width of 579px but is constrained to 375px container.</p>
+                    <p>Content size: 579px × 200px</p>
+                    <p>Initial container: 375px × 250px</p>
+                    <p>After manual constraint: Should resize up to 589px × 667px</p>
+                </div>
+            `;
+            
+            const shape = canvas.addReactComponentWithHTML(
+                content,
+                50,
+                400,
+                375, // Mobile width constraint
+                250,
+                { 
+                    id: `mobile-component-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            mobileComponent = shape;
+            logResult(`Added mobile component ${componentCount} - content 579x200, container 375x250`);
+        }
+        
+        function testManualConstraints() {
+            if (!mobileComponent) {
+                logResult('ERROR: Add Mobile Component first!');
+                return;
+            }
+            
+            // Set manual constraints larger than content size
+            const success = canvas.setResizeConstraints(mobileComponent.id, {
+                minWidth: 50,
+                minHeight: 30,
+                maxWidth: 589,  // Larger than content width (579px)
+                maxHeight: 667  // Larger than content height (200px)
+            });
+            
+            if (success) {
+                logResult(`✅ Manual constraints set: maxWidth=589px, maxHeight=667px`);
+                logResult(`🧪 Now try manually resizing - should go up to 589px width, not stop at ~385px`);
+            } else {
+                logResult(`❌ Failed to set manual constraints`);
+            }
         }
         
         function checkConstraints() {

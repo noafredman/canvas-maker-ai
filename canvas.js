@@ -5932,12 +5932,20 @@ class CanvasMaker {
                 const contentMaxWidth = shape.overflowInfo.scrollWidth + 10;
                 const contentMaxHeight = shape.overflowInfo.scrollHeight + 10;
                 
-                // Apply content-based max constraints
-                if (shape.width > contentMaxWidth) {
-                    shape.width = contentMaxWidth;
+                // Get current constraints to check for manual overrides
+                const constraints = this.getResizeConstraints(shape.type, shape);
+                const hasManualMaxWidth = constraints.maxWidth && constraints.maxWidth < Infinity;
+                const hasManualMaxHeight = constraints.maxHeight && constraints.maxHeight < Infinity;
+                
+                // Only apply content-based constraints if no manual constraints are set
+                const maxWidth = hasManualMaxWidth ? constraints.maxWidth : contentMaxWidth;
+                const maxHeight = hasManualMaxHeight ? constraints.maxHeight : contentMaxHeight;
+                
+                if (shape.width > maxWidth) {
+                    shape.width = maxWidth;
                 }
-                if (shape.height > contentMaxHeight) {
-                    shape.height = contentMaxHeight;
+                if (shape.height > maxHeight) {
+                    shape.height = maxHeight;
                 }
             }
             
@@ -7267,16 +7275,20 @@ class CanvasMaker {
                 // Get constraints for this shape type and individual shape
                 let constraints = this.getResizeConstraints(shape.type, shape);
                 
-                // For HTML components, dynamically calculate max size based on content + 10px
+                // For HTML components, apply content-aware constraints only when no manual override exists
                 if (shape.type === 'reactComponent' && shape.overflowInfo) {
                     const contentMaxWidth = shape.overflowInfo.scrollWidth + 10;
                     const contentMaxHeight = shape.overflowInfo.scrollHeight + 10;
                     
-                    // Override max constraints with content-based limits
+                    // Only apply content-based limits if no manual constraints are set
+                    // If manual constraints exist, respect them even if they're larger than content
+                    const hasManualMaxWidth = constraints.maxWidth && constraints.maxWidth < Infinity;
+                    const hasManualMaxHeight = constraints.maxHeight && constraints.maxHeight < Infinity;
+                    
                     constraints = {
                         ...constraints,
-                        maxWidth: Math.min(constraints.maxWidth || Infinity, contentMaxWidth),
-                        maxHeight: Math.min(constraints.maxHeight || Infinity, contentMaxHeight)
+                        maxWidth: hasManualMaxWidth ? constraints.maxWidth : contentMaxWidth,
+                        maxHeight: hasManualMaxHeight ? constraints.maxHeight : contentMaxHeight
                     };
                 }
                 
