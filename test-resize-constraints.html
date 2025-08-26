@@ -98,6 +98,7 @@
             <button onclick="addLargeComponent()">Add Large HTML Component</button>
             <button onclick="addAutoSizeComponent()">Add Auto-Size Component (No Size Specified)</button>
             <button onclick="addNetflixComponent()">Add Netflix Navigation (Real HTML Test)</button>
+            <button onclick="addOriginalHtmlComponent()">Add Original HTML (558×212)</button>
             <button onclick="addMobileComponent()">Add Mobile Component (Bug Test)</button>
             <button onclick="testManualConstraints()">Test Manual Constraint Override</button>
             <button onclick="testAbsoluteLimit()">Test Absolute Maximum Limit</button>
@@ -224,6 +225,7 @@
         
         function addNetflixComponent() {
             componentCount++;
+            logResult(`🔄 Starting to create Netflix component ${componentCount}...`);
             
             // Your provided HTML content (with CSS isolation - no body styles)
             const content = `
@@ -303,17 +305,28 @@
             `;
             
             // Test auto-sizing with complex real-world HTML
-            const shape = canvas.addReactComponentWithHTML(
-                50,
-                300,
-                null, // No width specified - should auto-size
-                null, // No height specified - should auto-size  
-                content,
-                { 
-                    id: `netflix-component-${componentCount}`,
-                    backgroundColor: 'transparent'
-                }
-            );
+            logResult(`🔄 Calling addReactComponentWithHTML with null dimensions...`);
+            
+            let shape;
+            try {
+                shape = canvas.addReactComponentWithHTML(
+                    50,
+                    300,
+                    null, // No width specified - should auto-size
+                    null, // No height specified - should auto-size  
+                    content,
+                    { 
+                        id: `netflix-component-${componentCount}`,
+                        backgroundColor: 'transparent'
+                    }
+                );
+                logResult(`✅ Component created successfully`);
+                logResult(`📊 Initial size: ${shape.width}×${shape.height}`);
+                logResult(`🏁 Has pending measurement: ${shape.pendingContentMeasurement}`);
+            } catch (error) {
+                logResult(`❌ Error creating component: ${error.message}`);
+                return;
+            }
             
             logResult(`Added Netflix navigation component ${componentCount} - complex HTML, auto-sizing`);
             logResult(`Expected: Component should auto-size to content, max 375×650px`);
@@ -328,6 +341,112 @@
                     if (debugShape.overflowInfo) {
                         const contentSize = `${debugShape.overflowInfo.scrollWidth}×${debugShape.overflowInfo.scrollHeight}`;
                         logResult(`DEBUG: Content size: ${contentSize}`);
+                    }
+                }
+            }, 500);
+        }
+        
+        function addOriginalHtmlComponent() {
+            componentCount++;
+            logResult(`🔄 Creating component with your exact original HTML...`);
+            
+            // Your exact original HTML content (cleaned up but maintaining structure)
+            const content = `
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body { 
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        margin: 0; padding: 20px;
+                        display: flex; align-items: center; justify-content: center;
+                        background: #f8f9fa; min-height: 100vh;
+                    }
+                    .container {
+                        background: white; padding: 20px; border-radius: 12px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center;
+                        width: 100%; max-width: 500px;
+                    }
+                    .navigation {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 16px;
+                        background-color: #000000;
+                    }
+                    .logo {
+                        color: #E50914;
+                        font-size: 24px;
+                        font-weight: bold;
+                    }
+                    .nav-links {
+                        list-style: none;
+                        padding: 0;
+                        margin: 0;
+                        display: flex;
+                        gap: 16px;
+                    }
+                    .nav-link {
+                        text-decoration: none;
+                        color: #FFFFFF;
+                        font-size: 16px;
+                    }
+                    .nav-link:hover {
+                        color: #B2B2B2;
+                    }
+                </style>
+                
+                <div class="container">
+                    <nav class="navigation">
+                        <a href="#" class="logo">Netflix</a>
+                        <ul class="nav-links">
+                            <li><a href="#" class="nav-link">Home</a></li>
+                            <li><a href="#" class="nav-link">TV Shows</a></li>
+                            <li><a href="#" class="nav-link">Movies</a></li>
+                            <li><a href="#" class="nav-link">New & Popular</a></li>
+                            <li><a href="#" class="nav-link">My List</a></li>
+                        </ul>
+                    </nav>
+                </div>
+            `;
+            
+            // Create with explicit size matching your original (558×212)
+            const shape = canvas.addReactComponentWithHTML(
+                100,
+                500,
+                558, // Explicit width from your original HTML
+                212, // Explicit height from your original HTML  
+                content,
+                { 
+                    id: `original-html-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            logResult(`✅ Added original HTML component: requested 558×212px`);
+            logResult(`📏 Initial actual size: ${Math.round(shape.width)}×${Math.round(shape.height)}px (should be capped at 375×212)`);
+            logResult(`📦 Stored requested size: ${shape.requestedWidth}×${shape.requestedHeight}px`);
+            logResult(`🧪 Try resizing - should be limited to max(558+10, content+10)`);
+            
+            // Debug after content loads
+            setTimeout(() => {
+                const debugShape = canvas.activeCanvasContext.shapes.find(s => s.id === `original-html-${componentCount}`);
+                if (debugShape) {
+                    logResult(`🔍 After content measurement:`);
+                    logResult(`   Current size: ${Math.round(debugShape.width)}×${Math.round(debugShape.height)}px`);
+                    logResult(`   Requested size: ${debugShape.requestedWidth}×${debugShape.requestedHeight}px`);
+                    
+                    if (debugShape.overflowInfo) {
+                        const contentSize = `${debugShape.overflowInfo.scrollWidth}×${debugShape.overflowInfo.scrollHeight}`;
+                        const requestedMaxW = debugShape.requestedWidth + 10;
+                        const requestedMaxH = debugShape.requestedHeight + 10;
+                        const contentMaxW = debugShape.overflowInfo.scrollWidth + 10;
+                        const contentMaxH = debugShape.overflowInfo.scrollHeight + 10;
+                        const effectiveMaxW = Math.max(requestedMaxW, contentMaxW);
+                        const effectiveMaxH = Math.max(requestedMaxH, contentMaxH);
+                        
+                        logResult(`   Content size: ${contentSize}px`);
+                        logResult(`   Max resize should be: ${effectiveMaxW}×${effectiveMaxH}px`);
+                        logResult(`   (= max(${requestedMaxW}, ${contentMaxW}) × max(${requestedMaxH}, ${contentMaxH}))`);
                     }
                 }
             }, 500);

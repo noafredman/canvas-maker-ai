@@ -936,9 +936,26 @@ class CanvasMaker {
         // Input: (x,y) in world coordinate units
         // Output: same world coordinates
         
-        // Use default sizes if not provided
-        const finalWidth = width !== null ? width : this.options.defaultComponentWidth;
-        const finalHeight = height !== null ? height : this.options.defaultComponentHeight;
+        // Use default sizes if not provided, and cap explicit sizes at defaults
+        let finalWidth, finalHeight;
+        
+        if (width !== null) {
+            // Cap explicit width at default maximum
+            finalWidth = Math.min(width, this.options.defaultComponentWidth);
+        } else {
+            finalWidth = this.options.defaultComponentWidth;
+        }
+        
+        if (height !== null) {
+            // Cap explicit height at default maximum  
+            finalHeight = Math.min(height, this.options.defaultComponentHeight);
+        } else {
+            finalHeight = this.options.defaultComponentHeight;
+        }
+        
+        // Store original requested sizes for resize limits
+        const requestedWidth = width;
+        const requestedHeight = height;
         
         // Only auto-size if width or height was not provided
         const needsAutoSizing = width === null || height === null;
@@ -951,12 +968,15 @@ class CanvasMaker {
             width: finalWidth,
             height: finalHeight,
             pendingContentMeasurement: needsAutoSizing, // Flag to indicate we need to measure content
+            requestedWidth: requestedWidth, // Store original requested width for resize limits
+            requestedHeight: requestedHeight, // Store original requested height for resize limits
             fillColor: options.fill || options.fillColor || 'transparent',
             strokeColor: options.stroke || options.strokeColor || '#333',
             htmlContent: typeof content === 'string' ? content : null,
             reactContent: typeof content !== 'string' ? content : null,
             ...options
         };
+        
         
         // Add to active canvas context
         this.activeCanvasContext.shapes.push(shape);
@@ -5975,8 +5995,8 @@ class CanvasMaker {
             
             // Apply constraints for reactComponent shapes based on content size with absolute limits
             if (element.type === 'shape' && shape.type === 'reactComponent' && shape.overflowInfo) {
-                const buffer = this.options.contentResizeBuffer || 10;
-                const multiplier = this.options.maxContentMultiplier || 3;
+                    const buffer = this.options.contentResizeBuffer || 10;
+                    const multiplier = this.options.maxContentMultiplier || 3;
                 
                 const contentMaxWidth = shape.overflowInfo.scrollWidth + buffer;
                 const contentMaxHeight = shape.overflowInfo.scrollHeight + buffer;
@@ -5985,28 +6005,33 @@ class CanvasMaker {
                 const absoluteMaxWidth = shape.overflowInfo.scrollWidth * multiplier;
                 const absoluteMaxHeight = shape.overflowInfo.scrollHeight * multiplier;
                 
-                // Get current constraints to check for manual overrides
-                const constraints = this.getResizeConstraints(shape.type, shape);
-                const hasManualMaxWidth = constraints.maxWidth && constraints.maxWidth < Infinity;
-                const hasManualMaxHeight = constraints.maxHeight && constraints.maxHeight < Infinity;
+                // For content-aware components, only consider individual shape constraints as "manual"
+                // Default type constraints should not override content-based logic
+                const hasManualMaxWidth = shape.resizeConstraints && shape.resizeConstraints.maxWidth && shape.resizeConstraints.maxWidth < Infinity;
+                const hasManualMaxHeight = shape.resizeConstraints && shape.resizeConstraints.maxHeight && shape.resizeConstraints.maxHeight < Infinity;
                 
                 // Apply constraint priority: Manual → Content-based → Absolute maximum
                 let effectiveMaxWidth, effectiveMaxHeight;
                 
                 if (hasManualMaxWidth) {
-                    // Manual constraint exists - cap it at absolute maximum
-                    effectiveMaxWidth = Math.min(constraints.maxWidth, absoluteMaxWidth);
+                    // Individual manual constraint exists - cap it at absolute maximum
+                    effectiveMaxWidth = Math.min(shape.resizeConstraints.maxWidth, absoluteMaxWidth);
                 } else {
-                    // No manual constraint - use content-based limit
-                    effectiveMaxWidth = contentMaxWidth;
+                    // No individual manual constraint - allow resize up to max(requestedSize, contentSize) + buffer
+                    const requestedWidth = shape.requestedWidth || shape.width;
+                    const requestedMaxWidth = requestedWidth + buffer;
+                    const contentBasedWidth = contentMaxWidth;
+                    effectiveMaxWidth = Math.max(requestedMaxWidth, contentBasedWidth);
                 }
                 
                 if (hasManualMaxHeight) {
-                    // Manual constraint exists - cap it at absolute maximum
-                    effectiveMaxHeight = Math.min(constraints.maxHeight, absoluteMaxHeight);
+                    // Individual manual constraint exists - cap it at absolute maximum
+                    effectiveMaxHeight = Math.min(shape.resizeConstraints.maxHeight, absoluteMaxHeight);
                 } else {
-                    // No manual constraint - use content-based limit
-                    effectiveMaxHeight = contentMaxHeight;
+                    // No individual manual constraint - allow resize up to max(requestedSize, contentSize) + buffer
+                    const requestedHeight = shape.requestedHeight || shape.height;
+                    const contentBasedHeight = contentMaxHeight;
+                    effectiveMaxHeight = Math.max(requestedHeight + buffer, contentBasedHeight);
                 }
                 
                 if (shape.width > effectiveMaxWidth) {
@@ -6343,26 +6368,34 @@ class CanvasMaker {
                 
                 // Auto-resize component to content size when first created (if pending measurement)
                 if (shape.pendingContentMeasurement) {
+                    console.log(`[AUTO-RESIZE] Processing auto-resize for component ${shape.id}`);
                     const buffer = this.options.contentResizeBuffer || 10;
                     const contentWidth = contentWrapper.scrollWidth;
                     const contentHeight = contentWrapper.scrollHeight;
+                    console.log(`[AUTO-RESIZE] Content dimensions: ${contentWidth}×${contentHeight}`);
                     
                     // Calculate desired size based on content + buffer
                     const desiredWidth = contentWidth + buffer;
                     const desiredHeight = contentHeight + buffer;
+                    console.log(`[AUTO-RESIZE] Desired size: ${desiredWidth}×${desiredHeight}`);
                     
                     // Cap at default maximum (375×650 or configured defaults)
                     const maxWidth = this.options.defaultComponentWidth;
                     const maxHeight = this.options.defaultComponentHeight;
+                    console.log(`[AUTO-RESIZE] Max limits: ${maxWidth}×${maxHeight}`);
                     
                     // Set final size: min of desired size and maximum
-                    shape.width = Math.min(desiredWidth, maxWidth);
-                    shape.height = Math.min(desiredHeight, maxHeight);
+                    const finalWidth = Math.min(desiredWidth, maxWidth);
+                    const finalHeight = Math.min(desiredHeight, maxHeight);
+                    shape.width = finalWidth;
+                    shape.height = finalHeight;
+                    console.log(`[AUTO-RESIZE] Final size: ${finalWidth}×${finalHeight}`);
                     
                     // Clear the pending flag and update the display
                     shape.pendingContentMeasurement = false;
                     this.updateHTMLElementTransform(element, shape, this.activeCanvasContext.camera);
                     this.redrawCanvas();
+                    console.log(`[AUTO-RESIZE] Auto-resize complete for component ${shape.id}`);
                 }
                 
                 // Update scrollable size if configured by external app
@@ -7379,27 +7412,33 @@ class CanvasMaker {
                     const absoluteMaxWidth = shape.overflowInfo.scrollWidth * multiplier;
                     const absoluteMaxHeight = shape.overflowInfo.scrollHeight * multiplier;
                     
-                    // Apply constraint priority: Manual → Content-based → Absolute maximum
-                    const hasManualMaxWidth = constraints.maxWidth && constraints.maxWidth < Infinity;
-                    const hasManualMaxHeight = constraints.maxHeight && constraints.maxHeight < Infinity;
+                    // For content-aware components, only consider individual shape constraints as "manual"
+                    const hasManualMaxWidth = shape.resizeConstraints && shape.resizeConstraints.maxWidth && shape.resizeConstraints.maxWidth < Infinity;
+                    const hasManualMaxHeight = shape.resizeConstraints && shape.resizeConstraints.maxHeight && shape.resizeConstraints.maxHeight < Infinity;
                     
                     let effectiveMaxWidth, effectiveMaxHeight;
                     
                     if (hasManualMaxWidth) {
-                        // Manual constraint exists - cap it at absolute maximum
-                        effectiveMaxWidth = Math.min(constraints.maxWidth, absoluteMaxWidth);
+                        // Individual manual constraint exists - cap it at absolute maximum
+                        effectiveMaxWidth = Math.min(shape.resizeConstraints.maxWidth, absoluteMaxWidth);
                     } else {
-                        // No manual constraint - use content-based limit
-                        effectiveMaxWidth = contentMaxWidth;
+                        // No individual manual constraint - use content + buffer, but allow larger initial sizes
+                        // For explicitly sized components, allow resize up to max(requestedSize, contentSize) + buffer
+                        const requestedWidth = shape.requestedWidth || shape.width; // Original requested width or current width
+                        const contentBasedWidth = contentMaxWidth;
+                        effectiveMaxWidth = Math.max(requestedWidth + buffer, contentBasedWidth);
                     }
                     
                     if (hasManualMaxHeight) {
-                        // Manual constraint exists - cap it at absolute maximum  
-                        effectiveMaxHeight = Math.min(constraints.maxHeight, absoluteMaxHeight);
+                        // Individual manual constraint exists - cap it at absolute maximum  
+                        effectiveMaxHeight = Math.min(shape.resizeConstraints.maxHeight, absoluteMaxHeight);
                     } else {
-                        // No manual constraint - use content-based limit
-                        effectiveMaxHeight = contentMaxHeight;
+                        // No individual manual constraint - use content + buffer, but allow larger initial sizes
+                        const requestedHeight = shape.requestedHeight || shape.height; // Original requested height or current height  
+                        const contentBasedHeight = contentMaxHeight;
+                        effectiveMaxHeight = Math.max(requestedHeight + buffer, contentBasedHeight);
                     }
+                    
                     
                     constraints = {
                         ...constraints,

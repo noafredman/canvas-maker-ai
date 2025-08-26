@@ -2,7 +2,16 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.8.2)
+## Recent Updates (v1.8.3)
+
+### Enhanced Size Capping and Resize Logic
+- ✅ **Initial size capping with resize memory** - Components with explicit dimensions larger than defaults (e.g., 558×212) are initially capped at default maximums (375×212) but remember original requested dimensions for resize limits
+- ✅ **Content-aware vs manual constraint distinction** - System now properly distinguishes between default type constraints and individual manual constraints, preventing unwanted override behavior
+- ✅ **Optimal resize limits** - Components can resize up to `max(originalRequested + buffer, contentSize + buffer)`, enabling proper growth beyond initial caps
+- ✅ **Cleaner constraint priority** - Individual shape constraints override content-aware logic, while default type constraints do not
+- 🐛 **Fixed default constraint interference** - Default `reactComponent` maxWidth/maxHeight no longer incorrectly treated as manual constraints
+
+### Previous Updates (v1.8.2)
 
 ### Enhanced Content-Aware Resize System
 - ✅ **Configurable content buffer** - Default 10px buffer beyond content size, customizable via API
@@ -2414,17 +2423,41 @@ canvas.setResizeConstraints(wideComponent.id, { maxWidth: 800 });
 - **Configurable settings**: All behavior customizable via constructor options or runtime API
 - Applied in both `performResize()` and `performResizeForContext()` functions
 
-**Constraint Priority Logic:**
+**Constraint Priority Logic (v1.8.3):**
 1. **Absolute maximum limit** (content × multiplier) - Ultimate ceiling, cannot be exceeded
-2. **Manual constraints** (via `setResizeConstraints()`) - Respected but capped by #1
-3. **Content-based constraints** (content + buffer) - Applied when no manual constraints
-4. **Minimum constraints** - Floor values to prevent components becoming too small
+2. **Individual manual constraints** (via `setResizeConstraints()` on specific components) - Respected but capped by #1
+3. **Content-aware constraints** - Applied when no individual manual constraints exist:
+   - Uses `max(originalRequested + buffer, contentSize + buffer)` 
+   - Remembers originally requested dimensions even if initially capped
+   - Example: 558×212 component → initially 375×212, resizable up to 568×222
+4. **Default type constraints** (reactComponent defaults) - Do not override content-aware logic
+5. **Minimum constraints** - Floor values to prevent components becoming too small
 
 **Configuration Options:**
 - `contentResizeBuffer`: Pixels beyond content size (default: 10)
 - `maxContentMultiplier`: Maximum size as multiple of content (default: 3)
 - `defaultComponentWidth`: Default width when null specified (default: 375)
 - `defaultComponentHeight`: Default height when null specified (default: 650)
+
+**Example: Size Capping with Resize Memory (v1.8.3)**
+
+```javascript
+// Component with explicit dimensions larger than defaults
+const component = canvas.addReactComponentWithHTML(x, y, 558, 212, content);
+
+// Initial state:
+// - Displayed at: 375×212 (width capped at default, height preserved)
+// - Stored requested: 558×212 (for resize calculations)
+
+// During resize:
+// - Content measured as: 397×194
+// - Max resize width: max(558+10, 397+10) = 568
+// - Max resize height: max(212+10, 194+10) = 222
+// - Component resizable up to: 568×222
+
+// Without individual manual constraints, content-aware logic applies
+// Default type constraints (reactComponent: maxWidth 1500) do not interfere
+```
 
 ### Traditional Resize Constraints
 
