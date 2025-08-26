@@ -6602,9 +6602,7 @@ class CanvasMaker {
         
         element.classList.add('editing');
         
-        // Add visual indicator with smooth transition
-        element.style.outline = '2px solid #3b82f6';
-        element.style.outlineOffset = '2px';
+        // Ensure smooth transition
         element.style.opacity = '1';
         
         // Listen for clicks outside to exit edit mode
@@ -6647,10 +6645,6 @@ class CanvasMaker {
             
             element.classList.remove('editing');
             // console.log(`[EDIT-EXIT] Removed editing class`);
-            
-            // Remove visual indicator
-            element.style.outline = 'none';
-            // console.log(`[EDIT-EXIT] Removed outline`);
         }
         
         // Remove event listeners
