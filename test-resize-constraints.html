@@ -96,18 +96,25 @@
         <div class="controls">
             <button onclick="addSmallComponent()">Add Small HTML Component</button>
             <button onclick="addLargeComponent()">Add Large HTML Component</button>
+            <button onclick="addAutoSizeComponent()">Add Auto-Size Component (No Size Specified)</button>
             <button onclick="addMobileComponent()">Add Mobile Component (Bug Test)</button>
             <button onclick="testManualConstraints()">Test Manual Constraint Override</button>
+            <button onclick="testAbsoluteLimit()">Test Absolute Maximum Limit</button>
+            <button onclick="configureSettings()">Configure Content Settings</button>
             <button onclick="checkConstraints()">Check Component Constraints</button>
             <button onclick="canvas.clear()">Clear Canvas</button>
             
             <div class="info">
-                <strong>Instructions:</strong>
-                1. Add HTML components using the buttons above
-                2. For <strong>Bug Test</strong>: Click "Add Mobile Component", then "Test Manual Constraint Override"
-                3. Try resizing the mobile component - it should now resize up to 589px width (not ~385px)
-                4. Use "Check Component Constraints" to see current size limits
-                5. Regular components still limited to content size + 10px when no manual constraints set
+                <strong>v1.8.2 Features:</strong><br>
+                1. <strong>Auto-size components</strong> - Don't specify width/height, auto-sizes to content (max 375×650px)
+                2. <strong>Configurable buffer</strong> - Default 10px buffer beyond content, can be changed
+                3. <strong>Absolute maximum limits</strong> - Even manual constraints capped at content × 3
+                4. <strong>Default size cap</strong> - Auto-sized components capped at default size (375×650px)
+                <br><br>
+                <strong>Instructions:</strong><br>
+                • Try "Add Auto-Size Component" to see automatic content sizing
+                • Use "Configure Content Settings" to change buffer and limits
+                • "Test Absolute Maximum Limit" shows how manual constraints are capped
             </div>
         </div>
         
@@ -186,6 +193,34 @@
             logResult(`Added large component ${componentCount} with initial size 400x300, content ~300x200`);
         }
         
+        function addAutoSizeComponent() {
+            componentCount++;
+            const content = `
+                <div style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 12px;">
+                    <h3 style="margin: 0 0 15px 0;">Auto-Size Component ${componentCount}</h3>
+                    <p style="margin: 5px 0;">This component has NO width/height specified.</p>
+                    <p style="margin: 5px 0;">Auto-sizes to content, max 375×650px</p>
+                    <p style="margin: 5px 0;">Content size: ~320×120px</p>
+                    <p style="margin: 5px 0;">Expected final: ~330×130px (content + buffer, under max)</p>
+                </div>
+            `;
+            
+            // Don't specify width/height - let it auto-size
+            const shape = canvas.addReactComponentWithHTML(
+                150 + (componentCount * 30),
+                50 + (componentCount * 30),
+                null, // No width specified
+                null, // No height specified
+                content,
+                { 
+                    id: `auto-size-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            logResult(`Added auto-size component ${componentCount} - no size specified, will auto-size to content`);
+        }
+        
         function addMobileComponent() {
             componentCount++;
             const content = `
@@ -234,6 +269,42 @@
             } else {
                 logResult(`❌ Failed to set manual constraints`);
             }
+        }
+        
+        function testAbsoluteLimit() {
+            if (!mobileComponent) {
+                logResult('ERROR: Add Mobile Component first!');
+                return;
+            }
+            
+            // Try to set constraints beyond absolute maximum (content × 3)
+            const success = canvas.setResizeConstraints(mobileComponent.id, {
+                maxWidth: 2000,  // Much larger than content × 3 (~579 × 3 = 1737px)
+                maxHeight: 2000
+            });
+            
+            if (success) {
+                logResult(`✅ Trying to set huge constraints: maxWidth=2000px, maxHeight=2000px`);
+                logResult(`🧪 Try resizing - should be capped at content×3 ≈ ${579*3}px × ${200*3}px`);
+                logResult(`📏 Absolute limit prevents excessive resizing even with manual constraints`);
+            }
+        }
+        
+        function configureSettings() {
+            // Show current settings
+            const current = canvas.getContentResizeSettings();
+            logResult(`Current settings: buffer=${current.buffer}px, maxMultiplier=${current.maxMultiplier}x, default=${current.defaultWidth}×${current.defaultHeight}px`);
+            
+            // Change settings
+            const newSettings = canvas.setContentResizeSettings({
+                buffer: 25,           // Increase buffer to 25px
+                maxMultiplier: 2.5,   // Reduce max multiplier to 2.5x
+                defaultWidth: 400,    // Change defaults
+                defaultHeight: 300
+            });
+            
+            logResult(`✅ Updated settings: buffer=${newSettings.buffer}px, maxMultiplier=${newSettings.maxMultiplier}x, default=${newSettings.defaultWidth}×${newSettings.defaultHeight}px`);
+            logResult(`🧪 Add new components to see effect of new settings`);
         }
         
         function checkConstraints() {

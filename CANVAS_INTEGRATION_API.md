@@ -2,7 +2,16 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.8.1)
+## Recent Updates (v1.8.2)
+
+### Enhanced Content-Aware Resize System
+- ✅ **Configurable content buffer** - Default 10px buffer beyond content size, customizable via API
+- ✅ **Absolute maximum limits** - Manual constraints capped at content size × multiplier (default 3x) 
+- ✅ **Auto-sizing components** - Components without specified dimensions auto-resize to content on creation
+- ✅ **Configurable defaults** - Default component size now 375×650px (mobile-friendly), customizable
+- ✅ **Smart content measurement** - Components resize when content differs significantly from defaults
+
+### Previous Updates (v1.8.1)
 
 ### Content-Aware Resize Constraints - Bug Fix
 - 🐛 **Fixed manual constraint override bug** - Manual constraints now properly take precedence over content-based limits
@@ -2323,51 +2332,99 @@ canvas.setPersistenceFilter((item, type) => {
 
 Canvas Maker includes a comprehensive resize constraints system to prevent component distortion and ensure good user experience:
 
-### Content-Aware Resize Constraints (v1.8.1)
+### Content-Aware Resize Constraints (v1.8.2)
 
-HTML components now automatically prevent resizing beyond their content size + 10px buffer, but respect manual constraint overrides:
+HTML components now feature a sophisticated content-aware resize system with configurable settings and absolute limits:
+
+#### Basic Usage
 
 ```javascript
-// DEFAULT BEHAVIOR: Content-based constraints
-const component = canvas.addReactComponentWithHTML(content, x, y, width, height);
-// User can resize, but not larger than content + 10px
+// AUTO-SIZING: Don't specify dimensions, let component auto-size to content
+const autoComponent = canvas.addReactComponentWithHTML(x, y, null, null, content);
+// Component auto-sizes to content + buffer, capped at default size (375×650px max)
 
-// MANUAL OVERRIDE: Set larger constraints to allow more space
+// EXPLICIT SIZING: Specify dimensions as before
+const fixedComponent = canvas.addReactComponentWithHTML(x, y, 400, 300, content);
+// Component uses specified size, subject to content constraints
+
+// MANUAL OVERRIDE: Set larger constraints when needed
 canvas.setResizeConstraints(component.id, {
-    maxWidth: 589,   // Larger than content width
-    maxHeight: 667   // Larger than content height
+    maxWidth: 800,   // Larger than content width
+    maxHeight: 600   // Larger than content height
 });
-// Now user can resize up to 589x667, even if content is smaller
+// User can resize up to 800×600, but capped at content × maxMultiplier
+```
 
-// Check current effective constraints
-const shape = canvas.activeCanvasContext.shapes.find(s => s.id === component.id);
-const constraints = canvas.getResizeConstraints('reactComponent', shape);
-if (constraints.maxWidth < Infinity) {
-    console.log(`Manual constraints active: ${constraints.maxWidth}x${constraints.maxHeight}`);
-} else if (shape.overflowInfo) {
-    const contentMax = shape.overflowInfo.scrollWidth + 10;
-    console.log(`Content constraints active: ${contentMax}x${shape.overflowInfo.scrollHeight + 10}`);
-}
+#### Configuration API
+
+```javascript
+// Configure content-aware resize behavior
+canvas.setContentResizeSettings({
+    buffer: 15,              // px beyond content size (default: 10)
+    maxMultiplier: 2.5,      // Max size = content × multiplier (default: 3)
+    defaultWidth: 400,       // Default width when no size specified (default: 375)
+    defaultHeight: 500       // Default height when no size specified (default: 650)
+});
+
+// Get current settings
+const settings = canvas.getContentResizeSettings();
+console.log(`Buffer: ${settings.buffer}px, Max: ${settings.maxMultiplier}x`);
+
+// Constructor configuration
+const canvas = new CanvasMaker('#container', {
+    contentResizeBuffer: 20,
+    maxContentMultiplier: 4,
+    defaultComponentWidth: 320,
+    defaultComponentHeight: 568
+});
+```
+
+#### Advanced Examples
+
+```javascript
+// Mobile-first responsive component
+const mobileComponent = canvas.addReactComponentWithHTML(
+    x, y, null, null,  // Let it auto-size
+    `<div style="width: 300px">Mobile content</div>`
+);
+// Auto-sizes to ~310×[content height + buffer], max 375×650px
+
+// Content larger than container
+const wideComponent = canvas.addReactComponentWithHTML(x, y, 300, 200, 
+    `<div style="width: 500px; height: 150px">Wide content</div>`
+);
+// User can resize container, but limited by content constraints
+
+// Override for special cases
+canvas.setResizeConstraints(wideComponent.id, { maxWidth: 800 });
+// Can now resize up to 800px width (but capped at 500 × 3 = 1500px absolute max)
 ```
 
 **Key Benefits:**
-- **Prevents UI bloat** - Components can't be made unnecessarily large by default
-- **Respects developer intent** - Manual constraints override content-based limits when set
-- **Flexible behavior** - Automatic content-based limits when no manual override exists
-- **Seamless integration** - Works with existing constraint system
-- **Backward compatible** - Existing code behavior unchanged
+- **Auto-sizing components** - No need to guess component dimensions, auto-sizes to content
+- **Configurable behavior** - Buffer size, max multiplier, and defaults all customizable
+- **Absolute safety limits** - Manual constraints capped to prevent excessive resizing
+- **Mobile-first defaults** - 375×650px default size works well for mobile content
+- **Backward compatible** - Existing explicit sizing behavior unchanged
 
-**Technical Details:**
-- Uses existing `overflowInfo` system for content measurement
+**Technical Details (v1.8.2):**
+- **Auto-sizing logic**: Components with `null` dimensions auto-resize to content + buffer, capped at default size
+- **Absolute maximum limits**: Manual constraints capped at `contentSize × maxContentMultiplier`
+- **Auto-size cap**: Auto-sized components cannot exceed default dimensions (375×650px by default)
+- **Configurable settings**: All behavior customizable via constructor options or runtime API
 - Applied in both `performResize()` and `performResizeForContext()` functions
-- **NEW (v1.8.1)**: Manual constraints take precedence when explicitly set via `setResizeConstraints()`
-- Content-based constraints only apply when `maxWidth`/`maxHeight` are not manually configured
-- Only applies to `reactComponent` shapes with measured content
 
-**Priority Logic:**
-1. **Manual constraints** (if set via `setResizeConstraints()`) - Takes highest precedence
-2. **Content-based constraints** (content + 10px) - Applied when no manual constraints exist
-3. **Default constraints** (very large limits) - Fallback when neither above apply
+**Constraint Priority Logic:**
+1. **Absolute maximum limit** (content × multiplier) - Ultimate ceiling, cannot be exceeded
+2. **Manual constraints** (via `setResizeConstraints()`) - Respected but capped by #1
+3. **Content-based constraints** (content + buffer) - Applied when no manual constraints
+4. **Minimum constraints** - Floor values to prevent components becoming too small
+
+**Configuration Options:**
+- `contentResizeBuffer`: Pixels beyond content size (default: 10)
+- `maxContentMultiplier`: Maximum size as multiple of content (default: 3)
+- `defaultComponentWidth`: Default width when null specified (default: 375)
+- `defaultComponentHeight`: Default height when null specified (default: 650)
 
 ### Traditional Resize Constraints
 
