@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CanvasMaker Resize Constraints Test</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .controls button {
+            margin: 5px;
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .controls button:hover {
+            background: #0056b3;
+        }
+        
+        .info {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .canvas-wrapper {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ccc;
+            position: relative;
+        }
+        
+        /* Test content styles */
+        .test-content {
+            padding: 10px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+        
+        .long-content {
+            width: 300px;
+            height: 200px;
+            background: #ffd93d;
+            padding: 15px;
+            border-radius: 8px;
+            color: #333;
+        }
+        
+        .long-content h3 {
+            margin: 0 0 10px 0;
+        }
+        
+        .long-content p {
+            margin: 5px 0;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CanvasMaker Resize Constraints Test</h1>
+        <p>This test demonstrates the new HTML component resize constraint feature that limits resizing to content size + 10px.</p>
+        
+        <div class="controls">
+            <button onclick="addSmallComponent()">Add Small HTML Component</button>
+            <button onclick="addLargeComponent()">Add Large HTML Component</button>
+            <button onclick="checkConstraints()">Check Component Constraints</button>
+            <button onclick="canvas.clear()">Clear Canvas</button>
+            
+            <div class="info">
+                <strong>Instructions:</strong>
+                1. Add HTML components using the buttons above
+                2. Select a component and try to resize it by dragging the resize handles
+                3. Notice that you can't resize beyond content size + 10px
+                4. Use "Check Component Constraints" to see current size limits
+            </div>
+        </div>
+        
+        <div class="canvas-wrapper" id="canvas-container"></div>
+        
+        <div class="controls">
+            <h4>Test Results:</h4>
+            <div id="test-results" style="font-family: monospace; font-size: 12px;"></div>
+        </div>
+    </div>
+
+    <script src="canvas.js"></script>
+    <script>
+        // Initialize CanvasMaker
+        const canvas = new CanvasMaker('#canvas-container', {
+            width: 1200,
+            height: 600,
+            toolbarPosition: 'top-left'
+        });
+        
+        // Switch to select tool by default
+        canvas.currentTool = 'select';
+        
+        let componentCount = 0;
+        
+        function addSmallComponent() {
+            componentCount++;
+            const content = `
+                <div class="test-content">
+                    Small Component ${componentCount}
+                    <br>Content: 150x50px
+                </div>
+            `;
+            
+            const shape = canvas.addReactComponentWithHTML(
+                content,
+                100 + (componentCount * 20),
+                100 + (componentCount * 20),
+                180, // Initial size bigger than content
+                80,
+                { 
+                    id: `small-component-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            logResult(`Added small component ${componentCount} with initial size 180x80, content ~150x50`);
+        }
+        
+        function addLargeComponent() {
+            componentCount++;
+            const content = `
+                <div class="long-content">
+                    <h3>Large Component ${componentCount}</h3>
+                    <p>This component has a lot of content that takes up space.</p>
+                    <p>The actual content size is approximately 300x200px.</p>
+                    <p>Try resizing this component - it should not resize beyond content size + 10px.</p>
+                    <p>Current content dimensions: width=300px, height=200px</p>
+                    <p>Maximum allowed resize: width=310px, height=210px</p>
+                </div>
+            `;
+            
+            const shape = canvas.addReactComponentWithHTML(
+                content,
+                300 + (componentCount * 30),
+                150 + (componentCount * 30),
+                400, // Initial size bigger than content
+                300,
+                { 
+                    id: `large-component-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            logResult(`Added large component ${componentCount} with initial size 400x300, content ~300x200`);
+        }
+        
+        function checkConstraints() {
+            const shapes = canvas.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+            
+            if (shapes.length === 0) {
+                logResult('No HTML components found. Add some first!');
+                return;
+            }
+            
+            shapes.forEach((shape, index) => {
+                const overflow = shape.overflowInfo;
+                if (overflow) {
+                    const maxWidth = overflow.scrollWidth + 10;
+                    const maxHeight = overflow.scrollHeight + 10;
+                    logResult(`Component ${shape.id || index}: Current size ${Math.round(shape.width)}x${Math.round(shape.height)}, Content size ${overflow.scrollWidth}x${overflow.scrollHeight}, Max allowed ${maxWidth}x${maxHeight}`);
+                } else {
+                    logResult(`Component ${shape.id || index}: No overflow info available yet (try double-clicking to activate)`);
+                }
+            });
+        }
+        
+        function logResult(message) {
+            const results = document.getElementById('test-results');
+            const timestamp = new Date().toLocaleTimeString();
+            results.innerHTML += `[${timestamp}] ${message}<br>`;
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        // Monitor resize events
+        let lastLogTime = 0;
+        canvas.on('beforeResize', (data) => {
+            // Throttle logging to avoid spam during drag
+            const now = Date.now();
+            if (now - lastLogTime > 500) {
+                logResult(`Resizing component: ${data.element?.type || 'unknown'}`);
+                lastLogTime = now;
+            }
+        });
+        
+        // Initial instructions
+        logResult('Canvas initialized. Add HTML components and test resize constraints.');
+        logResult('Select a component and drag the resize handles to test the content size + 10px limit.');
+    </script>
+</body>
+</html>

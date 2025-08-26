@@ -2,7 +2,23 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.7)
+## Recent Updates (v1.8)
+
+### Content-Aware Resize Constraints
+- ✅ **Automatic content-based resize limits** - HTML components cannot be resized larger than content size + 10px
+- ✅ **Smart constraint integration** - Works alongside existing resize constraint system
+- ✅ **Real-time content measurement** - Uses existing overflow detection system for accurate sizing
+- ✅ **Prevents UI bloat** - Maintains clean, content-appropriate component dimensions
+- ✅ **Seamless UX** - Users cannot drag resize handles beyond content boundaries
+
+### HTML Component Selection & Hit Detection
+- ✅ **Native selection system compatibility** - HTML components fully integrated into CanvasMaker's selection system
+- ✅ **First-class shape treatment** - HTML components handled identically to rectangles, circles, and other primitives
+- ✅ **Multi-selection support** - HTML components can be selected alongside other elements
+- ✅ **Proper hit testing** - Accurate click detection for HTML component boundaries
+- ✅ **No external event handlers required** - Selection works out-of-the-box without additional setup
+
+### Previous Updates (v1.7)
 
 ### Component Layering & Context Menu System
 - ✅ **Right-click context menu** - Modern context menu with bring to front/back, duplicate, and delete options
@@ -18,6 +34,12 @@ This document provides a complete guide for integrating the Canvas Maker system 
 - ✅ **Method accessibility verified** - All React component methods properly exported on instance
 - 🐛 **Fixed clearAllReactComponents() DOM cleanup** - Now properly removes visible DOM elements from page
 - ✅ **Added forceVisualClear() method** - Clears cached visual state and forces complete canvas redraw
+
+### Toolbar Positioning Enhancements
+- ✅ **Added initialToolbarPosition constructor option** - Position toolbar at exact coordinates from creation
+- 🐛 **Fixed toolbar drag after external position changes** - Maintains draggability when moved programmatically
+- ✅ **Enhanced SVG icon rendering** - Robust cross-environment compatibility with explicit namespaces
+- ✅ **No visual flash/jump** - Toolbar appears at intended position without repositioning animation
 
 ### Previous Updates (v1.6)
 
@@ -77,6 +99,29 @@ The canvas system is built around a `CanvasMaker` class that manages:
 - **Multi-layered rendering** (paths, shapes, text, nested canvases)
 - **Interactive tools** (select, drag, resize, draw)
 - **Component lifecycle** (create, select, modify, delete)
+
+### HTML Component Selection System
+
+CanvasMaker's native selection system fully supports HTML components without requiring additional event handlers:
+
+- **Integrated hit detection** - HTML components are treated as first-class shapes in `getElementAtPoint()`
+- **Unified selection API** - Same selection events and methods work for all element types
+- **Multi-selection compatible** - HTML components can be selected with other shapes
+- **Standard resize/drag behavior** - Full manipulation support using existing systems
+- **No external setup required** - Works out-of-the-box when you add HTML components
+
+```javascript
+// HTML components automatically participate in selection
+const component = canvas.addReactComponentWithHTML(content, x, y, w, h);
+
+// Standard selection events work
+canvas.on('selectionChange', ({ selectedElements }) => {
+    // selectedElements may include HTML components alongside other shapes
+    console.log('Selected:', selectedElements);
+});
+
+// Click to select, drag to move, resize handles - all work automatically
+```
 
 ## Quick Start Integration
 
@@ -210,6 +255,71 @@ All components added to the data arrays automatically support:
 - **Dragging** (click and drag selected elements)
 - **Resize handles** (single selected elements)
 - **Keyboard shortcuts** (Delete, Ctrl+C, Ctrl+V, Ctrl+X)
+
+## Toolbar Positioning API (v1.7)
+
+CanvasMaker provides comprehensive control over floating toolbar positioning to prevent visual jumps and enable precise placement.
+
+### Constructor Options
+
+```javascript
+// Option 1: Position toolbar at exact coordinates from creation (RECOMMENDED)
+const canvas = new CanvasMaker('#container', {
+    initialToolbarPosition: { x: 300, y: 150 }
+});
+// ✅ Toolbar appears at (300, 150) immediately - no flash or jump
+
+// Option 2: Use named positions (legacy)
+const canvas = new CanvasMaker('#container', {
+    toolbarPosition: 'top-right' // 'top-left', 'top-right', 'bottom-left', 'bottom-right'
+});
+// ⚠️ May cause visual jump if repositioned later
+```
+
+### Programmatic Positioning
+
+```javascript
+// Move toolbar to specific coordinates (maintains draggability)
+canvas.setToolbarPosition(400, 200);
+
+// Get current toolbar position
+const position = canvas.getToolbarPosition();
+console.log(`Toolbar at: ${position.x}, ${position.y}`);
+
+// The toolbar remains draggable after programmatic positioning
+```
+
+### Best Practices
+
+**For Outer Apps:**
+```javascript
+// ✅ GOOD: Position immediately during creation
+const canvas = new CanvasMaker('#container', {
+    initialToolbarPosition: { x: 100, y: 50 }  // No visual jump
+});
+
+// ❌ AVOID: Create then reposition (causes flash)
+const canvas = new CanvasMaker('#container');
+canvas.setToolbarPosition(100, 50);  // Visible jump from default position
+```
+
+**Responsive Positioning:**
+```javascript
+// Position relative to viewport size
+const canvas = new CanvasMaker('#container', {
+    initialToolbarPosition: { 
+        x: window.innerWidth - 250,  // 250px from right edge
+        y: 20                         // 20px from top
+    }
+});
+```
+
+### Integration Notes
+
+- **Coordinate System**: Absolute pixel coordinates from top-left of viewport
+- **Viewport Constraints**: Automatically constrained to prevent off-screen positioning  
+- **Drag Compatibility**: All positioning methods maintain toolbar draggability
+- **Visual Performance**: `initialToolbarPosition` prevents layout shifts and visual jumps
 
 ## Tool Management
 
@@ -2206,6 +2316,42 @@ canvas.setPersistenceFilter((item, type) => {
 ### Resize Constraints and Content Protection
 
 Canvas Maker includes a comprehensive resize constraints system to prevent component distortion and ensure good user experience:
+
+### Content-Aware Resize Constraints (v1.8)
+
+HTML components now automatically prevent resizing beyond their content size + 10px buffer:
+
+```javascript
+// When user tries to resize an HTML component:
+// 1. System measures actual content size (scrollWidth/scrollHeight)
+// 2. Calculates max allowed size: contentSize + 10px
+// 3. Prevents resize handles from going beyond this limit
+
+const component = canvas.addReactComponentWithHTML(content, x, y, width, height);
+// User can resize, but not larger than the actual content needs
+
+// Check current content constraints
+const shape = canvas.activeCanvasContext.shapes.find(s => s.id === 'my-component');
+if (shape.overflowInfo) {
+    const maxWidth = shape.overflowInfo.scrollWidth + 10;
+    const maxHeight = shape.overflowInfo.scrollHeight + 10;
+    console.log(`Max resize: ${maxWidth}x${maxHeight}`);
+}
+```
+
+**Key Benefits:**
+- **Prevents UI bloat** - Components can't be made unnecessarily large
+- **Maintains content relationship** - Visual size matches actual content
+- **Seamless integration** - Works with existing constraint system
+- **No configuration needed** - Automatic based on content measurement
+
+**Technical Details:**
+- Uses existing `overflowInfo` system for content measurement
+- Applied in both `performResize()` and `performResizeForContext()` functions
+- Takes precedence over configured max constraints if content-based limit is smaller
+- Only applies to `reactComponent` shapes with measured content
+
+### Traditional Resize Constraints
 
 #### Default Resize Constraints
 

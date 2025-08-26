@@ -5927,6 +5927,20 @@ class CanvasMaker {
                     break;
             }
             
+            // Apply constraints for reactComponent shapes based on content size
+            if (element.type === 'shape' && shape.type === 'reactComponent' && shape.overflowInfo) {
+                const contentMaxWidth = shape.overflowInfo.scrollWidth + 10;
+                const contentMaxHeight = shape.overflowInfo.scrollHeight + 10;
+                
+                // Apply content-based max constraints
+                if (shape.width > contentMaxWidth) {
+                    shape.width = contentMaxWidth;
+                }
+                if (shape.height > contentMaxHeight) {
+                    shape.height = contentMaxHeight;
+                }
+            }
+            
             // Prevent negative dimensions
             if (shape.width < 10) {
                 shape.width = 10;
@@ -7251,7 +7265,20 @@ class CanvasMaker {
             
             if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
                 // Get constraints for this shape type and individual shape
-                const constraints = this.getResizeConstraints(shape.type, shape);
+                let constraints = this.getResizeConstraints(shape.type, shape);
+                
+                // For HTML components, dynamically calculate max size based on content + 10px
+                if (shape.type === 'reactComponent' && shape.overflowInfo) {
+                    const contentMaxWidth = shape.overflowInfo.scrollWidth + 10;
+                    const contentMaxHeight = shape.overflowInfo.scrollHeight + 10;
+                    
+                    // Override max constraints with content-based limits
+                    constraints = {
+                        ...constraints,
+                        maxWidth: Math.min(constraints.maxWidth || Infinity, contentMaxWidth),
+                        maxHeight: Math.min(constraints.maxHeight || Infinity, contentMaxHeight)
+                    };
+                }
                 
                 // Store original values to calculate constrained values
                 const originalX = shape.x;
