@@ -99,6 +99,7 @@
             <button onclick="addAutoSizeComponent()">Add Auto-Size Component (No Size Specified)</button>
             <button onclick="addNetflixComponent()">Add Netflix Navigation (Real HTML Test)</button>
             <button onclick="addOriginalHtmlComponent()">Add Original HTML (558×212)</button>
+            <button onclick="addContentAnalysisTest()">Test Content Analysis (No Size Provided)</button>
             <button onclick="addMobileComponent()">Add Mobile Component (Bug Test)</button>
             <button onclick="testManualConstraints()">Test Manual Constraint Override</button>
             <button onclick="testAbsoluteLimit()">Test Absolute Maximum Limit</button>
@@ -447,6 +448,52 @@
                         logResult(`   Content size: ${contentSize}px`);
                         logResult(`   Max resize should be: ${effectiveMaxW}×${effectiveMaxH}px`);
                         logResult(`   (= max(${requestedMaxW}, ${contentMaxW}) × max(${requestedMaxH}, ${contentMaxH}))`);
+                    }
+                }
+            }, 500);
+        }
+        
+        function addContentAnalysisTest() {
+            componentCount++;
+            logResult(`🔍 Testing content analysis with explicit styling...`);
+            
+            // HTML content with explicit dimensions in styles
+            const contentWithStyles = `
+                <div style="width: 558px; height: 200px; background: linear-gradient(45deg, #ff6b6b, #4ecdc4); padding: 20px; border-radius: 8px; color: white;">
+                    <h2 style="margin: 0 0 10px 0;">Content Analysis Test</h2>
+                    <p style="margin: 5px 0;">This component has explicit styling: width: 558px, height: 200px</p>
+                    <p style="margin: 5px 0;">The system should detect these dimensions automatically</p>
+                    <p style="margin: 5px 0;">No width/height parameters provided to addReactComponentWithHTML()</p>
+                </div>
+            `;
+            
+            // Create component WITHOUT providing width/height - let content analysis handle it
+            const shape = canvas.addReactComponentWithHTML(
+                200,
+                100,
+                null, // No width - should detect from content
+                null, // No height - should detect from content  
+                contentWithStyles,
+                { 
+                    id: `content-analysis-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            logResult(`✅ Created component using content analysis`);
+            logResult(`📐 Expected: Content analysis should detect 558×200 from inline styles`);
+            logResult(`🎯 Should be initially capped but resizable to detected size + buffer`);
+            
+            // Debug after creation
+            setTimeout(() => {
+                const debugShape = canvas.activeCanvasContext.shapes.find(s => s.id === `content-analysis-${componentCount}`);
+                if (debugShape) {
+                    logResult(`🔍 Debug Results:`);
+                    logResult(`   Initial size: ${Math.round(debugShape.width)}×${Math.round(debugShape.height)}`);
+                    logResult(`   Stored requested: ${debugShape.requestedWidth}×${debugShape.requestedHeight}`);
+                    if (debugShape.overflowInfo) {
+                        const contentSize = `${debugShape.overflowInfo.scrollWidth}×${debugShape.overflowInfo.scrollHeight}`;
+                        logResult(`   Measured content: ${contentSize}`);
                     }
                 }
             }, 500);

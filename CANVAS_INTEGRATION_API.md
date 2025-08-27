@@ -2,7 +2,16 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.8.3)
+## Recent Updates (v1.8.4)
+
+### Automatic HTML Content Analysis
+- ✅ **Intelligent size detection** - System now automatically analyzes HTML content to extract dimensions from inline styles and CSS
+- ✅ **Multiple detection methods** - Supports inline `style="width: 558px; height: 212px"`, CSS rules, and content-based estimation
+- ✅ **Content type awareness** - Different estimation algorithms for forms, tables, images, and text content
+- ✅ **Seamless integration** - Works with existing resize constraint system and size capping logic
+- ✅ **No external dependencies** - Pure HTML/CSS parsing without requiring external size measurement
+
+### Previous Updates (v1.8.3)
 
 ### Enhanced Size Capping and Resize Logic
 - ✅ **Initial size capping with resize memory** - Components with explicit dimensions larger than defaults (e.g., 558×212) are initially capped at default maximums (375×212) but remember original requested dimensions for resize limits
@@ -2458,6 +2467,137 @@ const component = canvas.addReactComponentWithHTML(x, y, 558, 212, content);
 // Without individual manual constraints, content-aware logic applies
 // Default type constraints (reactComponent: maxWidth 1500) do not interfere
 ```
+
+### Automatic HTML Content Analysis (v1.8.4)
+
+Canvas Maker now automatically analyzes HTML content to detect dimensions, eliminating the need for external size measurement:
+
+#### How It Works
+
+The system analyzes HTML content using multiple methods to extract dimensions:
+
+1. **Inline Style Detection** - Extracts `width` and `height` from `style` attributes
+2. **CSS Rule Analysis** - Parses `<style>` tags for container dimensions  
+3. **Content-Based Estimation** - Estimates sizes based on content type and length
+
+```javascript
+// Example: HTML with inline dimensions
+const htmlContent = `
+    <div style="width: 558px; height: 212px; background: #ff6b6b; padding: 20px;">
+        <h2>Netflix Navigation</h2>
+        <p>This content has explicit dimensions that will be detected automatically</p>
+    </div>
+`;
+
+// Create component WITHOUT specifying dimensions - let content analysis handle it
+const component = canvas.addReactComponentWithHTML(x, y, null, null, htmlContent);
+
+// System automatically:
+// 1. Analyzes content and detects 558×212 dimensions
+// 2. Applies size capping: initially displayed as 375×212 (width capped)
+// 3. Stores original 558×212 for resize limits
+// 4. Allows resizing up to 568×222 (detected size + buffer)
+```
+
+#### Supported Detection Methods
+
+**Method 1: Inline Styles** *(Highest Priority)*
+```javascript
+// Automatically detects 400×300
+const content1 = `<div style="width: 400px; height: 300px;">Content</div>`;
+const comp1 = canvas.addReactComponentWithHTML(x, y, null, null, content1);
+```
+
+**Method 2: CSS Rules** *(Second Priority)*
+```javascript
+// Automatically detects 500×250 from .container class
+const content2 = `
+    <style>
+        .container { width: 500px; height: 250px; background: #fff; }
+    </style>
+    <div class="container">Content with CSS styling</div>
+`;
+const comp2 = canvas.addReactComponentWithHTML(x, y, null, null, content2);
+```
+
+**Method 3: Content-Based Estimation** *(Fallback)*
+```javascript
+// No explicit dimensions - estimates based on content type
+const content3 = `
+    <form>
+        <input type="text" placeholder="Name">
+        <input type="email" placeholder="Email">
+        <textarea placeholder="Message"></textarea>
+        <button>Submit</button>
+    </form>
+`;
+const comp3 = canvas.addReactComponentWithHTML(x, y, null, null, content3);
+// Estimates ~350×200 based on form content pattern
+```
+
+#### Integration with Existing Systems
+
+Content analysis seamlessly integrates with all existing resize constraint features:
+
+```javascript
+// 1. DETECTED DIMENSIONS: Content analysis finds 558×200
+const htmlWithDimensions = `<div style="width: 558px; height: 200px;">...</div>`;
+const component = canvas.addReactComponentWithHTML(x, y, null, null, htmlWithDimensions);
+
+// 2. SIZE CAPPING: Initially displayed as 375×200 (width capped at default)
+console.log(`Initial size: ${component.width}×${component.height}`); // 375×200
+
+// 3. RESIZE MEMORY: Can resize up to detected size + buffer
+// Max resize: max(558+10, measuredContent+10) = 568×[content+10]
+
+// 4. MANUAL OVERRIDE: Still works with setResizeConstraints()
+canvas.setResizeConstraints(component.id, {
+    maxWidth: 700,  // Overrides content analysis limits
+    maxHeight: 400
+});
+```
+
+#### Content Type Intelligence
+
+The system uses different estimation algorithms based on detected content patterns:
+
+| Content Type | Width Estimation | Height Estimation | Use Case |
+|-------------|------------------|-------------------|-----------|
+| **Form elements** | 320-500px | 150-350px | Login forms, contact forms |
+| **Tables** | 400-600px | 200-400px | Data grids, spreadsheets |
+| **Images** | 300-500px | 200-300px | Galleries, media content |
+| **Text content** | 250-400px | 100-250px | Articles, descriptions |
+
+```javascript
+// Form content automatically gets form-specific sizing
+const formHTML = `
+    <form>
+        <input type="email" placeholder="Email">
+        <input type="password" placeholder="Password">
+        <button>Sign In</button>
+    </form>
+`;
+
+// Table content gets table-specific sizing  
+const tableHTML = `
+    <table>
+        <tr><th>Name</th><th>Age</th><th>City</th></tr>
+        <tr><td>John</td><td>30</td><td>NYC</td></tr>
+    </table>
+`;
+
+// Both auto-size appropriately based on content type
+const formComp = canvas.addReactComponentWithHTML(x, y, null, null, formHTML);
+const tableComp = canvas.addReactComponentWithHTML(x, y+100, null, null, tableHTML);
+```
+
+#### Benefits
+
+- ✅ **No external measurement needed** - Pure HTML/CSS parsing
+- ✅ **Maintains existing behavior** - All size capping and constraints work as before  
+- ✅ **Progressive enhancement** - Falls back gracefully when no dimensions detected
+- ✅ **Performance optimized** - Lightweight regex-based parsing
+- ✅ **Works with complex HTML** - Handles nested structures and multiple style sources
 
 ### Traditional Resize Constraints
 

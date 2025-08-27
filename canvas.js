@@ -889,6 +889,104 @@ class CanvasMaker {
     //   - Coordinates are offsets from viewport center in world units
     //   - Use this for placing components relative to what user is currently viewing
     //
+    
+    // Analyze HTML content to extract sizing information
+    analyzeHTMLContent(content) {
+        if (!content || typeof content !== 'string') {
+            return { width: null, height: null, analysis: 'No content provided' };
+        }
+        
+        const analysis = {
+            width: null,
+            height: null,
+            analysis: 'Content analyzed'
+        };
+        
+        // Extract inline styles from the root element
+        const inlineStyleMatch = content.match(/<[^>]+style\s*=\s*["']([^"']*)["']/i);
+        if (inlineStyleMatch) {
+            const styles = inlineStyleMatch[1];
+            
+            // Extract width from inline styles
+            const widthMatch = styles.match(/width\s*:\s*(\d+)px/i);
+            if (widthMatch) {
+                analysis.width = parseInt(widthMatch[1], 10);
+            }
+            
+            // Extract height from inline styles
+            const heightMatch = styles.match(/height\s*:\s*(\d+)px/i);
+            if (heightMatch) {
+                analysis.height = parseInt(heightMatch[1], 10);
+            }
+        }
+        
+        // Extract CSS styles from <style> tags
+        const styleTagMatch = content.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        if (styleTagMatch) {
+            const cssContent = styleTagMatch[1];
+            
+            // Look for container/wrapper styles that might define dimensions
+            const containerRules = cssContent.match(/\.container[^{]*\{([^}]*)\}/i) ||
+                                  cssContent.match(/\.wrapper[^{]*\{([^}]*)\}/i) ||
+                                  cssContent.match(/body[^{]*\{([^}]*)\}/i);
+            
+            if (containerRules) {
+                const rules = containerRules[1];
+                
+                // Extract width from CSS rules
+                const widthMatch = rules.match(/width\s*:\s*(\d+)px/i);
+                if (widthMatch && !analysis.width) {
+                    analysis.width = parseInt(widthMatch[1], 10);
+                }
+                
+                // Extract height from CSS rules
+                const heightMatch = rules.match(/height\s*:\s*(\d+)px/i);
+                if (heightMatch && !analysis.height) {
+                    analysis.height = parseInt(heightMatch[1], 10);
+                }
+            }
+        }
+        
+        // Content-based size estimation when no explicit sizing found
+        if (!analysis.width || !analysis.height) {
+            const contentLength = content.replace(/<[^>]*>/g, '').trim().length;
+            const hasImages = content.includes('<img');
+            const hasForm = content.includes('<form') || content.includes('<input');
+            const hasTable = content.includes('<table');
+            
+            // Estimate dimensions based on content type and length
+            if (!analysis.width) {
+                if (hasTable) {
+                    analysis.width = Math.min(600, Math.max(400, contentLength * 2));
+                } else if (hasForm) {
+                    analysis.width = Math.min(500, Math.max(320, contentLength * 1.5));
+                } else if (hasImages) {
+                    analysis.width = Math.min(500, Math.max(300, contentLength * 1.2));
+                } else {
+                    // Text-based content
+                    analysis.width = Math.min(400, Math.max(250, Math.sqrt(contentLength) * 20));
+                }
+            }
+            
+            if (!analysis.height) {
+                if (hasTable) {
+                    analysis.height = Math.min(400, Math.max(200, contentLength * 0.8));
+                } else if (hasForm) {
+                    analysis.height = Math.min(350, Math.max(150, contentLength * 0.6));
+                } else if (hasImages) {
+                    analysis.height = Math.min(300, Math.max(200, contentLength * 0.5));
+                } else {
+                    // Text-based content
+                    analysis.height = Math.min(250, Math.max(100, Math.sqrt(contentLength) * 10));
+                }
+            }
+            
+            analysis.analysis += ` (estimated from content: ${contentLength} chars, images: ${hasImages}, form: ${hasForm}, table: ${hasTable})`;
+        }
+        
+        return analysis;
+    }
+    
     addReactComponentWithHTML(x, y, width = null, height = null, content, options = {}) {
         // Handle coordinate system based on options
         let finalX = x;
@@ -936,26 +1034,37 @@ class CanvasMaker {
         // Input: (x,y) in world coordinate units
         // Output: same world coordinates
         
-        // Use default sizes if not provided, and cap explicit sizes at defaults
+        // Analyze HTML content to determine appropriate sizing
+        const contentAnalysis = this.analyzeHTMLContent(content);
+        
+        // Use content-derived sizes or provided dimensions, and cap explicit sizes at defaults
         let finalWidth, finalHeight;
         
         if (width !== null) {
-            // Cap explicit width at default maximum
+            // Use provided width, capped at default maximum
             finalWidth = Math.min(width, this.options.defaultComponentWidth);
+        } else if (contentAnalysis.width) {
+            // Use content-derived width, capped at default maximum
+            finalWidth = Math.min(contentAnalysis.width, this.options.defaultComponentWidth);
         } else {
+            // Use default width
             finalWidth = this.options.defaultComponentWidth;
         }
         
         if (height !== null) {
-            // Cap explicit height at default maximum  
+            // Use provided height, capped at default maximum  
             finalHeight = Math.min(height, this.options.defaultComponentHeight);
+        } else if (contentAnalysis.height) {
+            // Use content-derived height, capped at default maximum
+            finalHeight = Math.min(contentAnalysis.height, this.options.defaultComponentHeight);
         } else {
+            // Use default height
             finalHeight = this.options.defaultComponentHeight;
         }
         
-        // Store original requested sizes for resize limits
-        const requestedWidth = width;
-        const requestedHeight = height;
+        // Store original requested sizes for resize limits (content-derived takes priority)
+        const requestedWidth = width !== null ? width : (contentAnalysis.width || null);
+        const requestedHeight = height !== null ? height : (contentAnalysis.height || null);
         
         // Only auto-size if width or height was not provided
         const needsAutoSizing = width === null || height === null;
