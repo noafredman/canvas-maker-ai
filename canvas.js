@@ -1072,8 +1072,16 @@ class CanvasMaker {
             // Use provided width, capped at default maximum
             finalWidth = Math.min(width, this.options.defaultComponentWidth);
         } else if (contentAnalysis.width) {
-            // Use content-derived width - only cap if significantly larger than reasonable desktop size
-            finalWidth = Math.min(contentAnalysis.width, 800); // Much more generous cap
+            // Use content-derived width - cap at configurable maximum (or no cap if disabled)
+            const contentAnalysisMaxWidth = this.options.contentAnalysisMaxWidth;
+            if (contentAnalysisMaxWidth === null || contentAnalysisMaxWidth === Infinity) {
+                // Caps disabled - use content width without limit
+                finalWidth = contentAnalysis.width;
+            } else {
+                // Apply configurable cap (defaults to defaultComponentWidth if not set)
+                const effectiveCap = contentAnalysisMaxWidth || this.options.defaultComponentWidth;
+                finalWidth = Math.min(contentAnalysis.width, effectiveCap);
+            }
         } else {
             // Use default width
             finalWidth = this.options.defaultComponentWidth;
@@ -1083,8 +1091,16 @@ class CanvasMaker {
             // Use provided height, capped at default maximum  
             finalHeight = Math.min(height, this.options.defaultComponentHeight);
         } else if (contentAnalysis.height) {
-            // Use content-derived height - more generous cap for auto-detected content
-            finalHeight = Math.min(contentAnalysis.height, 500); // Allow taller content when auto-detected
+            // Use content-derived height - cap at configurable maximum (or no cap if disabled)
+            const contentAnalysisMaxHeight = this.options.contentAnalysisMaxHeight;
+            if (contentAnalysisMaxHeight === null || contentAnalysisMaxHeight === Infinity) {
+                // Caps disabled - use content height without limit
+                finalHeight = contentAnalysis.height;
+            } else {
+                // Apply configurable cap (defaults to defaultComponentHeight if not set)
+                const effectiveCap = contentAnalysisMaxHeight || this.options.defaultComponentHeight;
+                finalHeight = Math.min(contentAnalysis.height, effectiveCap);
+            }
         } else {
             // Use default height
             finalHeight = this.options.defaultComponentHeight;
@@ -1163,12 +1179,30 @@ class CanvasMaker {
         if (settings.defaultHeight !== undefined) {
             this.options.defaultComponentHeight = Math.max(30, settings.defaultHeight);
         }
+        if (settings.contentAnalysisMaxWidth !== undefined) {
+            // Allow null or Infinity to disable caps, otherwise enforce minimum
+            if (settings.contentAnalysisMaxWidth === null || settings.contentAnalysisMaxWidth === Infinity) {
+                this.options.contentAnalysisMaxWidth = settings.contentAnalysisMaxWidth;
+            } else {
+                this.options.contentAnalysisMaxWidth = Math.max(100, settings.contentAnalysisMaxWidth);
+            }
+        }
+        if (settings.contentAnalysisMaxHeight !== undefined) {
+            // Allow null or Infinity to disable caps, otherwise enforce minimum
+            if (settings.contentAnalysisMaxHeight === null || settings.contentAnalysisMaxHeight === Infinity) {
+                this.options.contentAnalysisMaxHeight = settings.contentAnalysisMaxHeight;
+            } else {
+                this.options.contentAnalysisMaxHeight = Math.max(50, settings.contentAnalysisMaxHeight);
+            }
+        }
         
         return {
             buffer: this.options.contentResizeBuffer,
             maxMultiplier: this.options.maxContentMultiplier,
             defaultWidth: this.options.defaultComponentWidth,
-            defaultHeight: this.options.defaultComponentHeight
+            defaultHeight: this.options.defaultComponentHeight,
+            contentAnalysisMaxWidth: this.options.contentAnalysisMaxWidth || this.options.defaultComponentWidth,
+            contentAnalysisMaxHeight: this.options.contentAnalysisMaxHeight || this.options.defaultComponentHeight
         };
     }
     
@@ -1178,7 +1212,9 @@ class CanvasMaker {
             buffer: this.options.contentResizeBuffer,
             maxMultiplier: this.options.maxContentMultiplier,
             defaultWidth: this.options.defaultComponentWidth,
-            defaultHeight: this.options.defaultComponentHeight
+            defaultHeight: this.options.defaultComponentHeight,
+            contentAnalysisMaxWidth: this.options.contentAnalysisMaxWidth || this.options.defaultComponentWidth,
+            contentAnalysisMaxHeight: this.options.contentAnalysisMaxHeight || this.options.defaultComponentHeight
         };
     }
     
@@ -6599,12 +6635,18 @@ class CanvasMaker {
         
         // Set content based on shape properties
         if (shape.htmlContent) {
-            // HTML string content
-            contentWrapper.innerHTML = shape.htmlContent;
+            // HTML string content - wrap in stable container to prevent reflow
+            const stableContainer = document.createElement('div');
+            stableContainer.style.cssText = 'width: max-content; height: max-content; min-width: 100%; min-height: 100%;';
+            stableContainer.innerHTML = shape.htmlContent;
+            contentWrapper.appendChild(stableContainer);
         } else if (shape.reactContent) {
             // React component (for now, treat as HTML)
             if (typeof shape.reactContent === 'string') {
-                contentWrapper.innerHTML = shape.reactContent;
+                const stableContainer = document.createElement('div');
+                stableContainer.style.cssText = 'width: max-content; height: max-content; min-width: 100%; min-height: 100%;';
+                stableContainer.innerHTML = shape.reactContent;
+                contentWrapper.appendChild(stableContainer);
             } else {
                 // For actual React components, you'd need to render them here
                 // This is a simplified approach for now
@@ -7553,26 +7595,39 @@ class CanvasMaker {
                         // Individual manual constraint exists - cap it at absolute maximum
                         effectiveMaxWidth = Math.min(shape.resizeConstraints.maxWidth, absoluteMaxWidth);
                     } else {
-                        // No individual manual constraint - for auto-detected content, be generous with resize limits
-                        const requestedWidth = shape.requestedWidth || shape.width;
-                        const contentBasedWidth = contentMaxWidth;
+                        // No individual manual constraint - only allow resize if content is larger than default
+                        const defaultWidth = this.options.defaultComponentWidth; // 375
+                        const contentWidth = shape.overflowInfo.scrollWidth;
                         
-                        // For auto-detected content, allow resizing beyond both requested and measured content
-                        // Use a generous multiplier to allow manual expansion
-                        const generousWidth = Math.max(requestedWidth, contentBasedWidth) * 1.5;
-                        effectiveMaxWidth = Math.min(generousWidth, 1000); // Cap at reasonable maximum
+                        if (contentWidth > defaultWidth) {
+                            // Content is larger than default - allow resizing up to content size + buffer + padding
+                            // Add extra space to account for padding, borders, etc. to ensure no scrolling
+                            const paddingBuffer = 20; // Account for padding/borders/margins
+                            effectiveMaxWidth = contentMaxWidth + paddingBuffer;
+                        } else {
+                            // Content is smaller than default - don't allow width resizing beyond initial size
+                            const initialWidth = shape.requestedWidth || defaultWidth;
+                            effectiveMaxWidth = initialWidth;
+                        }
                     }
                     
                     if (hasManualMaxHeight) {
                         // Individual manual constraint exists - cap it at absolute maximum  
                         effectiveMaxHeight = Math.min(shape.resizeConstraints.maxHeight, absoluteMaxHeight);
                     } else {
-                        // No individual manual constraint - for auto-detected content, be generous with resize limits  
-                        const requestedHeight = shape.requestedHeight || shape.height;
-                        const contentBasedHeight = contentMaxHeight;
-                        // Allow generous height expansion for auto-detected content
-                        const generousHeight = Math.max(requestedHeight, contentBasedHeight) * 1.3;
-                        effectiveMaxHeight = Math.min(generousHeight, 600); // Cap at reasonable maximum
+                        // No individual manual constraint - only allow resize if content is larger than default
+                        const defaultHeight = this.options.defaultComponentHeight; // 650
+                        const contentHeight = shape.overflowInfo.scrollHeight;
+                        
+                        if (contentHeight > defaultHeight) {
+                            // Content is larger than default - allow resizing up to content size + buffer + padding
+                            const paddingBuffer = 20; // Account for padding/borders/margins  
+                            effectiveMaxHeight = contentMaxHeight + paddingBuffer;
+                        } else {
+                            // Content is smaller than default - don't allow height resizing beyond initial size
+                            const initialHeight = shape.requestedHeight || defaultHeight;
+                            effectiveMaxHeight = initialHeight;
+                        }
                     }
                     
                     

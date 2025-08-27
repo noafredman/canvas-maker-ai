@@ -105,6 +105,7 @@
             <button onclick="testManualConstraints()">Test Manual Constraint Override</button>
             <button onclick="testAbsoluteLimit()">Test Absolute Maximum Limit</button>
             <button onclick="configureSettings()">Configure Content Settings</button>
+            <button onclick="disableCaps()">Disable Content Analysis Caps</button>
             <button onclick="checkConstraints()">Check Component Constraints</button>
             <button onclick="canvas.clear()">Clear Canvas</button>
             
@@ -620,17 +621,34 @@
             // Show current settings
             const current = canvas.getContentResizeSettings();
             logResult(`Current settings: buffer=${current.buffer}px, maxMultiplier=${current.maxMultiplier}x, default=${current.defaultWidth}×${current.defaultHeight}px`);
+            logResult(`Content analysis caps: ${current.contentAnalysisMaxWidth}×${current.contentAnalysisMaxHeight}px`);
             
-            // Change settings
+            // Change settings including new content analysis caps
             const newSettings = canvas.setContentResizeSettings({
-                buffer: 25,           // Increase buffer to 25px
-                maxMultiplier: 2.5,   // Reduce max multiplier to 2.5x
-                defaultWidth: 400,    // Change defaults
-                defaultHeight: 300
+                buffer: 25,                    // Increase buffer to 25px
+                maxMultiplier: 2.5,            // Reduce max multiplier to 2.5x
+                defaultWidth: 400,             // Change defaults
+                defaultHeight: 300,
+                contentAnalysisMaxWidth: 800,  // Allow wider auto-detected content
+                contentAnalysisMaxHeight: 500  // Allow taller auto-detected content
             });
             
             logResult(`✅ Updated settings: buffer=${newSettings.buffer}px, maxMultiplier=${newSettings.maxMultiplier}x, default=${newSettings.defaultWidth}×${newSettings.defaultHeight}px`);
+            logResult(`✅ Content analysis caps: ${newSettings.contentAnalysisMaxWidth}×${newSettings.contentAnalysisMaxHeight}px`);
             logResult(`🧪 Add new components to see effect of new settings`);
+        }
+        
+        function disableCaps() {
+            // Disable content analysis caps entirely
+            const newSettings = canvas.setContentResizeSettings({
+                contentAnalysisMaxWidth: null,   // Disable width cap
+                contentAnalysisMaxHeight: null   // Disable height cap
+            });
+            
+            logResult(`✅ Content analysis caps disabled!`);
+            logResult(`✅ Width cap: ${newSettings.contentAnalysisMaxWidth} (null = no limit)`);
+            logResult(`✅ Height cap: ${newSettings.contentAnalysisMaxHeight} (null = no limit)`);
+            logResult(`🧪 Now content can be any size without caps - create components to test`);
         }
         
         function checkConstraints() {

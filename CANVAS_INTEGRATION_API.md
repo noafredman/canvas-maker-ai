@@ -2,14 +2,15 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.8.5)
+## Recent Updates (v1.8.6)
 
-### Enhanced Content Analysis & Resize Flexibility
+### Enhanced Content Analysis & Resize Flexibility  
 - ✅ **Structural HTML analysis** - Intelligent sizing based on element composition (paragraphs, list items, forms) rather than hardcoded component types
-- ✅ **Generous resize constraints** - Auto-detected content can be manually resized up to 1.5x detected size (capped at 1000px width, 600px height)
-- ✅ **Smart navigation handling** - Navigation bars with many list items get appropriate height estimates (assumes horizontal layout)
-- ✅ **Improved size caps** - Content-derived dimensions capped at 800×500px instead of restrictive 375×650px mobile defaults
-- ✅ **Full-width support** - Components can now display and resize to their intended widths without aggressive mobile-first capping
+- ✅ **Smart conditional resizing** - Only allow resizing if content exceeds defaults (width > 375px, height > 650px)
+- ✅ **Content stability during resize** - HTML content wrapped in stable containers to prevent layout reflow
+- ✅ **Perfect fit sizing** - Extra padding buffer ensures no scrolling when resized to maximum width
+- ✅ **Configurable/Disableable caps** - Content-derived dimensions can be capped, configured, or completely unlimited (null/Infinity)
+- ✅ **Reversible resize** - Can always resize back to original maximum after making smaller
 
 ### Previous Updates (v1.8.4)
 
@@ -2575,7 +2576,7 @@ The system analyzes HTML structure to make intelligent size estimates based on e
 - Adjusted for horizontal elements (many list items suggest horizontal layout)
 - Increased for tables based on expected column count
 - **Range: 250-500px** depending on content complexity
-- **Content-derived cap: 800px** (much more generous than 375px mobile default)
+- **Content-derived cap: Configurable** (defaults to 375px, can be set to any value by outer app)
 
 **Height Estimation Logic:**
 - Calculated by intelligently stacking vertical elements:
@@ -2587,13 +2588,48 @@ The system analyzes HTML structure to make intelligent size estimates based on e
   - Table rows: ~35px each
 - Plus base padding/margin space (~20px, reduced from 40px)
 - **Range: 50-400px** based on element count and intelligent layout detection
-- **Content-derived cap: 500px**
+- **Content-derived cap: Configurable** (defaults to 650px, can be set to any value by outer app)
 
 **Manual Resize Flexibility:**
 - Auto-detected content can be manually resized up to **1.5x the larger of (detected size, initial size)**
 - **Width limit: 1000px** for generous manual expansion
 - **Height limit: 600px** for reasonable vertical growth
 - Explicit dimensions still respect original size capping behavior
+
+**Configurable Content Analysis Caps:**
+```javascript
+// Configure content analysis maximum sizes (outer app can set these)
+canvas.setContentResizeSettings({
+    contentAnalysisMaxWidth: 800,   // Allow content-derived widths up to 800px
+    contentAnalysisMaxHeight: 500,  // Allow content-derived heights up to 500px
+    buffer: 10,                     // Content buffer size
+    defaultWidth: 375,              // Default component width
+    defaultHeight: 650              // Default component height
+});
+
+// Disable caps entirely - allow unlimited content-derived sizes
+canvas.setContentResizeSettings({
+    contentAnalysisMaxWidth: null,    // null = no width cap
+    contentAnalysisMaxHeight: null    // null = no height cap
+    // Can also use Infinity instead of null
+});
+
+// Alternative: Use Infinity to disable caps
+canvas.setContentResizeSettings({
+    contentAnalysisMaxWidth: Infinity,   // Infinity = no width cap  
+    contentAnalysisMaxHeight: Infinity   // Infinity = no height cap
+});
+
+// Get current settings
+const settings = canvas.getContentResizeSettings();
+console.log(settings.contentAnalysisMaxWidth);  // 800, null, or Infinity
+console.log(settings.contentAnalysisMaxHeight); // 500, null, or Infinity
+```
+
+**Backward Compatibility:**
+- **Default caps**: 375×650px (same as `defaultWidth` × `defaultHeight`)
+- **Explicit dimensions**: Still capped at defaults for consistency
+- **Content-derived**: Uses configurable caps, allowing outer app control
 
 ```javascript
 // Navigation with list items - analyzed structurally (v1.8.5)
