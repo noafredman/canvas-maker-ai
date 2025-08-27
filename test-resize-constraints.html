@@ -100,6 +100,7 @@
             <button onclick="addNetflixComponent()">Add Netflix Navigation (Real HTML Test)</button>
             <button onclick="addOriginalHtmlComponent()">Add Original HTML (558×212)</button>
             <button onclick="addContentAnalysisTest()">Test Content Analysis (No Size Provided)</button>
+            <button onclick="addNavigationTest()">Test Navigation Analysis (Should be ~60px tall)</button>
             <button onclick="addMobileComponent()">Add Mobile Component (Bug Test)</button>
             <button onclick="testManualConstraints()">Test Manual Constraint Override</button>
             <button onclick="testAbsoluteLimit()">Test Absolute Maximum Limit</button>
@@ -495,6 +496,53 @@
                         const contentSize = `${debugShape.overflowInfo.scrollWidth}×${debugShape.overflowInfo.scrollHeight}`;
                         logResult(`   Measured content: ${contentSize}`);
                     }
+                }
+            }, 500);
+        }
+        
+        function addNavigationTest() {
+            componentCount++;
+            logResult(`🧭 Testing navigation content analysis...`);
+            
+            // Simple navigation HTML that should be detected as navigation
+            const navHTML = `
+                <nav style="background: #000; padding: 16px; border-radius: 8px;">
+                    <a href="#" style="color: #E50914; font-weight: bold; font-size: 24px;">Netflix</a>
+                    <ul style="list-style: none; display: flex; gap: 16px; margin: 0; padding: 0;">
+                        <li><a href="#" style="color: white; text-decoration: none;">Home</a></li>
+                        <li><a href="#" style="color: white; text-decoration: none;">TV Shows</a></li>
+                        <li><a href="#" style="color: white; text-decoration: none;">Movies</a></li>
+                        <li><a href="#" style="color: white; text-decoration: none;">New & Popular</a></li>
+                        <li><a href="#" style="color: white; text-decoration: none;">My List</a></li>
+                    </ul>
+                </nav>
+            `;
+            
+            // Create component WITHOUT providing width/height - let content analysis detect navigation
+            const shape = canvas.addReactComponentWithHTML(
+                50,
+                50,
+                null, // No width - should detect navigation content  
+                null, // No height - should detect navigation content (should be ~60px)
+                navHTML,
+                { 
+                    id: `navigation-test-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            logResult(`✅ Created navigation component using content analysis`);
+            logResult(`🎯 Expected: Should detect navigation and use short height (~60px instead of 200+)`);
+            logResult(`📐 Initial size: ${Math.round(shape.width)}×${Math.round(shape.height)}`);
+            
+            // Debug after creation to check if navigation was detected
+            setTimeout(() => {
+                const debugShape = canvas.activeCanvasContext.shapes.find(s => s.id === `navigation-test-${componentCount}`);
+                if (debugShape) {
+                    logResult(`🔍 Navigation Analysis Results:`);
+                    logResult(`   Final size: ${Math.round(debugShape.width)}×${Math.round(debugShape.height)}`);
+                    logResult(`   Stored requested: ${debugShape.requestedWidth}×${debugShape.requestedHeight}`);
+                    logResult(`   Height should be ~60-70px for navigation content`);
                 }
             }, 500);
         }

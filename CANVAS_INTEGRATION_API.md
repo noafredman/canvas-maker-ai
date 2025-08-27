@@ -2,9 +2,18 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.8.4)
+## Recent Updates (v1.8.5)
 
-### Automatic HTML Content Analysis
+### Enhanced Content Analysis & Resize Flexibility
+- ✅ **Structural HTML analysis** - Intelligent sizing based on element composition (paragraphs, list items, forms) rather than hardcoded component types
+- ✅ **Generous resize constraints** - Auto-detected content can be manually resized up to 1.5x detected size (capped at 1000px width, 600px height)
+- ✅ **Smart navigation handling** - Navigation bars with many list items get appropriate height estimates (assumes horizontal layout)
+- ✅ **Improved size caps** - Content-derived dimensions capped at 800×500px instead of restrictive 375×650px mobile defaults
+- ✅ **Full-width support** - Components can now display and resize to their intended widths without aggressive mobile-first capping
+
+### Previous Updates (v1.8.4)
+
+### Automatic HTML Content Analysis  
 - ✅ **Intelligent size detection** - System now automatically analyzes HTML content to extract dimensions from inline styles and CSS
 - ✅ **Multiple detection methods** - Supports inline `style="width: 558px; height: 212px"`, CSS rules, and content-based estimation
 - ✅ **Content type awareness** - Different estimation algorithms for forms, tables, images, and text content
@@ -2557,19 +2566,53 @@ canvas.setResizeConstraints(component.id, {
 });
 ```
 
-#### Content Type Intelligence
+#### Structural Intelligence (v1.8.5)
 
-The system uses different estimation algorithms based on detected content patterns:
+The system analyzes HTML structure to make intelligent size estimates based on element composition:
 
-| Content Type | Width Estimation | Height Estimation | Use Case |
-|-------------|------------------|-------------------|-----------|
-| **Form elements** | 320-500px | 150-350px | Login forms, contact forms |
-| **Tables** | 400-600px | 200-400px | Data grids, spreadsheets |
-| **Images** | 300-500px | 200-300px | Galleries, media content |
-| **Text content** | 250-400px | 100-250px | Articles, descriptions |
+**Width Estimation Logic:**
+- Base width calculated from content density and text length
+- Adjusted for horizontal elements (many list items suggest horizontal layout)
+- Increased for tables based on expected column count
+- **Range: 250-500px** depending on content complexity
+- **Content-derived cap: 800px** (much more generous than 375px mobile default)
+
+**Height Estimation Logic:**
+- Calculated by intelligently stacking vertical elements:
+  - Paragraphs: ~25px each
+  - Headings: ~35px each  
+  - Form inputs: ~40px each
+  - Buttons: ~45px each
+  - **List items: Smart horizontal detection** - If >4 items, assumes some are horizontal (like navigation)
+  - Table rows: ~35px each
+- Plus base padding/margin space (~20px, reduced from 40px)
+- **Range: 50-400px** based on element count and intelligent layout detection
+- **Content-derived cap: 500px**
+
+**Manual Resize Flexibility:**
+- Auto-detected content can be manually resized up to **1.5x the larger of (detected size, initial size)**
+- **Width limit: 1000px** for generous manual expansion
+- **Height limit: 600px** for reasonable vertical growth
+- Explicit dimensions still respect original size capping behavior
 
 ```javascript
-// Form content automatically gets form-specific sizing
+// Navigation with list items - analyzed structurally (v1.8.5)
+const navHTML = `
+    <nav>
+        <a href="#" class="logo">Netflix</a>
+        <ul>
+            <li><a href="#">Home</a></li>
+            <li><a href="#">Movies</a></li>
+            <li><a href="#">TV Shows</a></li>
+        </ul>
+    </nav>
+`;
+// Analysis: 5 list items detected - smart horizontal layout assumed
+// Width: max(base_width, 5 * 60px) = ~300px
+// Height: ceil(5/4) vertical items * 30px + 20px base = ~110px (much better!)
+// Manual resize: Up to ~450px width, ~165px height (1.5x multiplier)
+
+// Form with multiple inputs - counted structurally
 const formHTML = `
     <form>
         <input type="email" placeholder="Email">
@@ -2577,18 +2620,24 @@ const formHTML = `
         <button>Sign In</button>
     </form>
 `;
+// Analysis: 2 inputs + 1 button stacked vertically
+// Height: 2 * 40px + 1 * 45px + 40px base = ~165px
 
-// Table content gets table-specific sizing  
+// Table with rows - counted structurally
 const tableHTML = `
     <table>
         <tr><th>Name</th><th>Age</th><th>City</th></tr>
         <tr><td>John</td><td>30</td><td>NYC</td></tr>
     </table>
 `;
+// Analysis: 2 table rows detected
+// Width: 400 + (2 * 20px) = ~440px
+// Height: 2 * 35px + 40px base = ~110px
 
-// Both auto-size appropriately based on content type
-const formComp = canvas.addReactComponentWithHTML(x, y, null, null, formHTML);
-const tableComp = canvas.addReactComponentWithHTML(x, y+100, null, null, tableHTML);
+// All auto-size based on structural analysis
+const navComp = canvas.addReactComponentWithHTML(x, y, null, null, navHTML);
+const formComp = canvas.addReactComponentWithHTML(x, y+200, null, null, formHTML);
+const tableComp = canvas.addReactComponentWithHTML(x, y+380, null, null, tableHTML);
 ```
 
 #### Benefits

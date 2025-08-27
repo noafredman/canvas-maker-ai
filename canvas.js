@@ -949,39 +949,67 @@ class CanvasMaker {
         
         // Content-based size estimation when no explicit sizing found
         if (!analysis.width || !analysis.height) {
-            const contentLength = content.replace(/<[^>]*>/g, '').trim().length;
-            const hasImages = content.includes('<img');
-            const hasForm = content.includes('<form') || content.includes('<input');
-            const hasTable = content.includes('<table');
+            // Analyze HTML structure more intelligently
+            const textContent = content.replace(/<[^>]*>/g, '').trim();
+            const contentLength = textContent.length;
             
-            // Estimate dimensions based on content type and length
+            // Count different types of elements for better estimation
+            const elementCounts = {
+                divs: (content.match(/<div/gi) || []).length,
+                paragraphs: (content.match(/<p\b/gi) || []).length,
+                headings: (content.match(/<h[1-6]\b/gi) || []).length,
+                lists: (content.match(/<[uo]l\b/gi) || []).length,
+                listItems: (content.match(/<li\b/gi) || []).length,
+                inputs: (content.match(/<input\b/gi) || []).length,
+                buttons: (content.match(/<button\b/gi) || []).length,
+                images: (content.match(/<img\b/gi) || []).length,
+                tables: (content.match(/<table\b/gi) || []).length,
+                tableRows: (content.match(/<tr\b/gi) || []).length
+            };
+            
+            // Estimate based on structural analysis rather than hardcoded types
             if (!analysis.width) {
-                if (hasTable) {
-                    analysis.width = Math.min(600, Math.max(400, contentLength * 2));
-                } else if (hasForm) {
-                    analysis.width = Math.min(500, Math.max(320, contentLength * 1.5));
-                } else if (hasImages) {
-                    analysis.width = Math.min(500, Math.max(300, contentLength * 1.2));
-                } else {
-                    // Text-based content
-                    analysis.width = Math.min(400, Math.max(250, Math.sqrt(contentLength) * 20));
+                // Base width on content density and structure
+                let baseWidth = Math.min(400, Math.max(250, Math.sqrt(contentLength) * 15));
+                
+                // Adjust based on horizontal elements
+                if (elementCounts.listItems > 3) {
+                    // Many list items might be horizontal
+                    baseWidth = Math.max(baseWidth, elementCounts.listItems * 60);
                 }
+                
+                if (elementCounts.tables > 0) {
+                    // Tables need more width
+                    baseWidth = Math.max(baseWidth, 400 + (elementCounts.tableRows * 20));
+                }
+                
+                analysis.width = Math.min(500, baseWidth);
             }
             
             if (!analysis.height) {
-                if (hasTable) {
-                    analysis.height = Math.min(400, Math.max(200, contentLength * 0.8));
-                } else if (hasForm) {
-                    analysis.height = Math.min(350, Math.max(150, contentLength * 0.6));
-                } else if (hasImages) {
-                    analysis.height = Math.min(300, Math.max(200, contentLength * 0.5));
-                } else {
-                    // Text-based content
-                    analysis.height = Math.min(250, Math.max(100, Math.sqrt(contentLength) * 10));
+                // Base height on vertical stack of elements
+                let baseHeight = Math.max(50, elementCounts.paragraphs * 25 + elementCounts.headings * 35);
+                
+                // Add height for form elements (they stack vertically)
+                baseHeight += elementCounts.inputs * 40 + elementCounts.buttons * 45;
+                
+                // Add height for list items - but be smart about horizontal vs vertical layouts
+                if (elementCounts.listItems > 0) {
+                    // If many list items, assume some might be horizontal (like navigation)
+                    const assumedVerticalItems = elementCounts.listItems > 4 ? Math.ceil(elementCounts.listItems / 4) : elementCounts.listItems;
+                    baseHeight += assumedVerticalItems * 30;
                 }
+                
+                // Add height for table rows
+                baseHeight += elementCounts.tableRows * 35;
+                
+                // Add some base padding/margin space
+                baseHeight += 20; // Reduced from 40px
+                
+                analysis.height = Math.min(400, Math.max(50, baseHeight)); // Reduced minimum from 60px
             }
             
-            analysis.analysis += ` (estimated from content: ${contentLength} chars, images: ${hasImages}, form: ${hasForm}, table: ${hasTable})`;
+            analysis.analysis += ` (estimated from structure: ${contentLength} chars, ${elementCounts.divs} divs, ${elementCounts.paragraphs} paragraphs, ${elementCounts.listItems} list items)`;
         }
         
         return analysis;
@@ -1044,8 +1072,8 @@ class CanvasMaker {
             // Use provided width, capped at default maximum
             finalWidth = Math.min(width, this.options.defaultComponentWidth);
         } else if (contentAnalysis.width) {
-            // Use content-derived width, capped at default maximum
-            finalWidth = Math.min(contentAnalysis.width, this.options.defaultComponentWidth);
+            // Use content-derived width - only cap if significantly larger than reasonable desktop size
+            finalWidth = Math.min(contentAnalysis.width, 800); // Much more generous cap
         } else {
             // Use default width
             finalWidth = this.options.defaultComponentWidth;
@@ -1055,8 +1083,8 @@ class CanvasMaker {
             // Use provided height, capped at default maximum  
             finalHeight = Math.min(height, this.options.defaultComponentHeight);
         } else if (contentAnalysis.height) {
-            // Use content-derived height, capped at default maximum
-            finalHeight = Math.min(contentAnalysis.height, this.options.defaultComponentHeight);
+            // Use content-derived height - more generous cap for auto-detected content
+            finalHeight = Math.min(contentAnalysis.height, 500); // Allow taller content when auto-detected
         } else {
             // Use default height
             finalHeight = this.options.defaultComponentHeight;
@@ -7525,21 +7553,26 @@ class CanvasMaker {
                         // Individual manual constraint exists - cap it at absolute maximum
                         effectiveMaxWidth = Math.min(shape.resizeConstraints.maxWidth, absoluteMaxWidth);
                     } else {
-                        // No individual manual constraint - use content + buffer, but allow larger initial sizes
-                        // For explicitly sized components, allow resize up to max(requestedSize, contentSize) + buffer
-                        const requestedWidth = shape.requestedWidth || shape.width; // Original requested width or current width
+                        // No individual manual constraint - for auto-detected content, be generous with resize limits
+                        const requestedWidth = shape.requestedWidth || shape.width;
                         const contentBasedWidth = contentMaxWidth;
-                        effectiveMaxWidth = Math.max(requestedWidth + buffer, contentBasedWidth);
+                        
+                        // For auto-detected content, allow resizing beyond both requested and measured content
+                        // Use a generous multiplier to allow manual expansion
+                        const generousWidth = Math.max(requestedWidth, contentBasedWidth) * 1.5;
+                        effectiveMaxWidth = Math.min(generousWidth, 1000); // Cap at reasonable maximum
                     }
                     
                     if (hasManualMaxHeight) {
                         // Individual manual constraint exists - cap it at absolute maximum  
                         effectiveMaxHeight = Math.min(shape.resizeConstraints.maxHeight, absoluteMaxHeight);
                     } else {
-                        // No individual manual constraint - use content + buffer, but allow larger initial sizes
-                        const requestedHeight = shape.requestedHeight || shape.height; // Original requested height or current height  
+                        // No individual manual constraint - for auto-detected content, be generous with resize limits  
+                        const requestedHeight = shape.requestedHeight || shape.height;
                         const contentBasedHeight = contentMaxHeight;
-                        effectiveMaxHeight = Math.max(requestedHeight + buffer, contentBasedHeight);
+                        // Allow generous height expansion for auto-detected content
+                        const generousHeight = Math.max(requestedHeight, contentBasedHeight) * 1.3;
+                        effectiveMaxHeight = Math.min(generousHeight, 600); // Cap at reasonable maximum
                     }
                     
                     
