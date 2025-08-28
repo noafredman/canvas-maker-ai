@@ -2487,7 +2487,7 @@ canvas.setResizeConstraints(wideComponent.id, { maxWidth: 800 });
 5. **Minimum constraints** - Floor values to prevent components becoming too small
 
 **Configuration Options:**
-- `contentResizeBuffer`: Pixels beyond content size (default: 10)
+- `contentResizeBuffer`: Pixels beyond content size (default: 0) - pixel-perfect constraints
 - `maxContentMultiplier`: Maximum size as multiple of content (default: 3)
 - `defaultComponentWidth`: Default width when null specified (default: 375)
 - `defaultComponentHeight`: Default height when null specified (default: 650)

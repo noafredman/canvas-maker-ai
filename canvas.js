@@ -19,7 +19,7 @@ class CanvasMaker {
             width: 1200,
             height: 800,
             // Content-aware resize settings
-            contentResizeBuffer: 10, // px buffer beyond content size
+            contentResizeBuffer: 0, // px buffer beyond content size (0 for pixel-perfect)
             maxContentMultiplier: 3, // Max size = content size * multiplier
             defaultComponentWidth: 375, // Default width when no size provided
             defaultComponentHeight: 650, // Default height when no size provided
@@ -1136,6 +1136,15 @@ class CanvasMaker {
         
         // Trigger redraw to create and position the HTML element
         this.redrawCanvas();
+        
+        // Apply constraints immediately after measurement completes
+        // This ensures initial size respects content bounds even with explicit dimensions
+        setTimeout(() => {
+            if (shape.overflowInfo) {
+                this.applyHTMLComponentConstraints(shape);
+                this.redrawCanvas();
+            }
+        }, 100);
         
         // Return the shape for external reference
         return shape;
@@ -6382,7 +6391,7 @@ class CanvasMaker {
             
             // Apply constraints for reactComponent shapes based on content size with absolute limits
             if (element.type === 'shape' && shape.type === 'reactComponent' && shape.overflowInfo) {
-                    const buffer = this.options.contentResizeBuffer || 10;
+                    const buffer = this.options.contentResizeBuffer || 0;
                     const multiplier = this.options.maxContentMultiplier || 3;
                 
                 const contentMaxWidth = shape.overflowInfo.scrollWidth + buffer;
@@ -6451,7 +6460,6 @@ class CanvasMaker {
         
         // Update HTML component size in real-time during resize for React components
         if (element.type === 'shape' && shape.type === 'reactComponent') {
-            console.log(`[RESIZE-TRIGGER] Real-time HTML update for ${shape.id} at ${Date.now()}`);
             this.updateReactComponentHTML(shape);
         }
     }
@@ -6465,6 +6473,12 @@ class CanvasMaker {
             
             // Use the current active canvas context's camera for transform
             this.updateHTMLElementTransform(htmlElement, shape, this.activeCanvasContext.camera);
+            
+            // Update overflow info after resize
+            const contentWrapper = htmlElement.querySelector('div[style*="overflow"]');
+            if (contentWrapper && contentWrapper._checkContentOverflow) {
+                contentWrapper._checkContentOverflow();
+            }
             
             // console.log(`[RESIZE-HTML] Updated element size:`, htmlElement.style.width, htmlElement.style.height);
             // console.log(`[RESIZE-HTML] Element computed size:`, getComputedStyle(htmlElement).width, getComputedStyle(htmlElement).height);
@@ -6725,6 +6739,8 @@ class CanvasMaker {
             user-select: none;
             -webkit-user-select: none;
             transition: outline 0.15s ease, opacity 0.1s ease;
+            overflow: hidden;
+            padding: 0;
         `;
         
         // Create content wrapper - make it transparent to mouse events initially
@@ -6734,57 +6750,79 @@ class CanvasMaker {
             height: 100%;
             pointer-events: none;
             overflow: hidden;
+            position: relative;
         `;
         
         // Function to check if content overflows container
         const checkContentOverflow = () => {
             // Small delay to ensure content is rendered
             setTimeout(() => {
-                const containerRect = contentWrapper.getBoundingClientRect();
-                const hasHorizontalOverflow = contentWrapper.scrollWidth > contentWrapper.clientWidth;
-                const hasVerticalOverflow = contentWrapper.scrollHeight > contentWrapper.clientHeight;
+                // Find the stable container that holds the actual content
+                const stableContainer = contentWrapper.firstElementChild;
+                
+                // Get the actual content dimensions
+                let contentWidth = 0;
+                let contentHeight = 0;
+                
+                if (stableContainer) {
+                    // First, get the intrinsic size of the content
+                    const originalWidth = stableContainer.style.width;
+                    const originalHeight = stableContainer.style.height;
+                    
+                    // Temporarily set to auto to get natural size
+                    stableContainer.style.width = 'auto';
+                    stableContainer.style.height = 'auto';
+                    
+                    contentWidth = stableContainer.scrollWidth;
+                    contentHeight = stableContainer.scrollHeight;
+                    
+                    // Restore original styles
+                    stableContainer.style.width = originalWidth;
+                    stableContainer.style.height = originalHeight;
+                } else {
+                    contentWidth = contentWrapper.scrollWidth;
+                    contentHeight = contentWrapper.scrollHeight;
+                }
+                
+                const hasHorizontalOverflow = contentWidth > contentWrapper.clientWidth;
+                const hasVerticalOverflow = contentHeight > contentWrapper.clientHeight;
                 
                 // Store overflow info on the shape for external apps to query
                 shape.hasOverflow = hasHorizontalOverflow || hasVerticalOverflow;
                 shape.overflowInfo = {
                     horizontal: hasHorizontalOverflow,
                     vertical: hasVerticalOverflow,
-                    scrollWidth: contentWrapper.scrollWidth,
-                    scrollHeight: contentWrapper.scrollHeight,
+                    scrollWidth: contentWidth,
+                    scrollHeight: contentHeight,
                     clientWidth: contentWrapper.clientWidth,
                     clientHeight: contentWrapper.clientHeight
                 };
                 
+                
                 // Auto-resize component to content size when first created (if pending measurement)
                 if (shape.pendingContentMeasurement) {
-                    console.log(`[AUTO-RESIZE] Processing auto-resize for component ${shape.id}`);
-                    const buffer = this.options.contentResizeBuffer || 10;
+                    const buffer = this.options.contentResizeBuffer || 0;
                     const contentWidth = contentWrapper.scrollWidth;
                     const contentHeight = contentWrapper.scrollHeight;
-                    console.log(`[AUTO-RESIZE] Content dimensions: ${contentWidth}×${contentHeight}`);
                     
                     // Calculate desired size based on content + buffer
                     const desiredWidth = contentWidth + buffer;
                     const desiredHeight = contentHeight + buffer;
-                    console.log(`[AUTO-RESIZE] Desired size: ${desiredWidth}×${desiredHeight}`);
                     
                     // Cap at default maximum (375×650 or configured defaults)
                     const maxWidth = this.options.defaultComponentWidth;
                     const maxHeight = this.options.defaultComponentHeight;
-                    console.log(`[AUTO-RESIZE] Max limits: ${maxWidth}×${maxHeight}`);
                     
                     // Set final size: min of desired size and maximum
                     const finalWidth = Math.min(desiredWidth, maxWidth);
                     const finalHeight = Math.min(desiredHeight, maxHeight);
                     shape.width = finalWidth;
                     shape.height = finalHeight;
-                    console.log(`[AUTO-RESIZE] Final size: ${finalWidth}×${finalHeight}`);
                     
                     // Clear the pending flag and update the display
                     shape.pendingContentMeasurement = false;
                     this.updateHTMLElementTransform(element, shape, this.activeCanvasContext.camera);
                     this.redrawCanvas();
-                    console.log(`[AUTO-RESIZE] Auto-resize complete for component ${shape.id}`);
                 }
                 
                 // Update scrollable size if configured by external app
@@ -6853,16 +6891,36 @@ class CanvasMaker {
         if (shape.htmlContent) {
             // HTML string content - wrap in stable container to prevent reflow
             const stableContainer = document.createElement('div');
-            stableContainer.style.cssText = 'width: max-content; height: max-content; min-width: 100%; min-height: 100%;';
+            // Use fixed dimensions based on initial content size to prevent reflow
+            stableContainer.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                transform-origin: top left;
+                margin: 0;
+                padding: 0;
+            `;
             stableContainer.innerHTML = shape.htmlContent;
             contentWrapper.appendChild(stableContainer);
+            
+            // Don't set fixed dimensions - let content flow naturally
         } else if (shape.reactContent) {
             // React component (for now, treat as HTML)
             if (typeof shape.reactContent === 'string') {
                 const stableContainer = document.createElement('div');
-                stableContainer.style.cssText = 'width: max-content; height: max-content; min-width: 100%; min-height: 100%;';
+                // Use fixed dimensions based on initial content size to prevent reflow
+                stableContainer.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    transform-origin: top left;
+                    margin: 0;
+                    padding: 0;
+                `;
                 stableContainer.innerHTML = shape.reactContent;
                 contentWrapper.appendChild(stableContainer);
+                
+                // Don't set fixed dimensions - let content flow naturally
             } else {
                 // For actual React components, you'd need to render them here
                 // This is a simplified approach for now
@@ -7948,7 +8006,6 @@ class CanvasMaker {
         if (element.type === 'shape') {
             const shape = canvasContext.shapes[element.index];
             if (shape.type === 'reactComponent') {
-                console.log(`[RESIZE-TRIGGER] Real-time HTML update for ${shape.id} at ${Date.now()}`);
                 this.updateReactComponentHTML(shape);
             }
         }
@@ -7958,48 +8015,22 @@ class CanvasMaker {
     applyHTMLComponentConstraints(shape) {
         if (!shape.overflowInfo) return;
         
-        const buffer = this.options.contentResizeBuffer || 10;
-        const multiplier = this.options.maxContentMultiplier || 3;
+        // Use the overflow info directly - it should already have the correct measurements
+        const contentWidth = shape.overflowInfo.scrollWidth;
+        const contentHeight = shape.overflowInfo.scrollHeight;
         
-        const contentMaxWidth = shape.overflowInfo.scrollWidth + buffer;
-        const contentMaxHeight = shape.overflowInfo.scrollHeight + buffer;
+        const buffer = 0;  // Always 0 for HTML components - no extra space
         
-        // Absolute maximum limits (content size * multiplier)
-        const absoluteMaxWidth = shape.overflowInfo.scrollWidth * multiplier;
-        const absoluteMaxHeight = shape.overflowInfo.scrollHeight * multiplier;
+        // Simple constraint: can't resize larger than content
+        const maxWidth = contentWidth + buffer;
+        const maxHeight = contentHeight + buffer;
         
-        // For content-aware components, only consider individual shape constraints as "manual"
-        const hasManualMaxWidth = shape.resizeConstraints && shape.resizeConstraints.maxWidth && shape.resizeConstraints.maxWidth < Infinity;
-        const hasManualMaxHeight = shape.resizeConstraints && shape.resizeConstraints.maxHeight && shape.resizeConstraints.maxHeight < Infinity;
-        
-        let effectiveMaxWidth, effectiveMaxHeight;
-        
-        if (hasManualMaxWidth) {
-            // Individual manual constraint exists - cap it at absolute maximum
-            effectiveMaxWidth = Math.min(shape.resizeConstraints.maxWidth, absoluteMaxWidth);
-        } else {
-            // No individual manual constraint - allow resize up to max(requestedSize, contentSize) + buffer
-            const requestedWidth = shape.requestedWidth || shape.width;
-            const requestedMaxWidth = requestedWidth + buffer;
-            const contentBasedWidth = contentMaxWidth;
-            effectiveMaxWidth = Math.max(requestedMaxWidth, contentBasedWidth);
+        // Apply constraints immediately
+        if (shape.width > maxWidth) {
+            shape.width = maxWidth;
         }
-        
-        if (hasManualMaxHeight) {
-            // Individual manual constraint exists - cap it at absolute maximum
-            effectiveMaxHeight = Math.min(shape.resizeConstraints.maxHeight, absoluteMaxHeight);
-        } else {
-            // No individual manual constraint - allow resize up to max(requestedSize, contentSize) + buffer
-            const requestedHeight = shape.requestedHeight || shape.height;
-            const contentBasedHeight = contentMaxHeight;
-            effectiveMaxHeight = Math.max(requestedHeight + buffer, contentBasedHeight);
-        }
-        
-        if (shape.width > effectiveMaxWidth) {
-            shape.width = effectiveMaxWidth;
-        }
-        if (shape.height > effectiveMaxHeight) {
-            shape.height = effectiveMaxHeight;
+        if (shape.height > maxHeight) {
+            shape.height = maxHeight;
         }
     }
     
@@ -8242,7 +8273,6 @@ class CanvasMaker {
         
         // Update HTML component size in real-time during resize for React components
         if (element.type === 'shape' && canvasContext.shapes[element.index].type === 'reactComponent') {
-            console.log(`[RESIZE-TRIGGER] Real-time HTML update for ${canvasContext.shapes[element.index].id} at ${Date.now()}`);
             this.updateReactComponentHTML(canvasContext.shapes[element.index]);
         }
     }
