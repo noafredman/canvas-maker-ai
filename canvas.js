@@ -379,7 +379,6 @@ class CanvasMaker {
                     x: this.options.initialToolbarPosition.x,
                     y: this.options.initialToolbarPosition.y
                 };
-                console.log(`[TOOLBAR] Using initialToolbarPosition: ${finalPosition.x}, ${finalPosition.y}`);
             } else {
                 // Fall back to named positions
                 const positions = {
@@ -389,7 +388,6 @@ class CanvasMaker {
                     'bottom-right': { x: window.innerWidth - 200, y: window.innerHeight - 100 }
                 };
                 finalPosition = positions[this.options.toolbarPosition] || positions['top-left'];
-                console.log(`[TOOLBAR] Using toolbarPosition '${this.options.toolbarPosition}': ${finalPosition.x}, ${finalPosition.y}`);
             }
             
             // Constrain to viewport to prevent off-screen placement
@@ -524,7 +522,6 @@ class CanvasMaker {
             canvas.style.width = `${width}px`;
             canvas.style.height = `${height}px`;
             
-            console.log(`[NESTED-CANVAS] Canvas positioned normally within container`);
         }
         
         // With CSS transforms: camera coordinates represent the world position at screen center
@@ -736,7 +733,6 @@ class CanvasMaker {
             y: parseInt(toolbar.style.top) || 20
         };
         
-        console.log(`[TOOLBAR] Initial drag position stored: ${this.toolbarPosition.x}, ${this.toolbarPosition.y}`);
         
         dragHandle.addEventListener('mousedown', (e) => {
             e.preventDefault();
@@ -812,7 +808,6 @@ class CanvasMaker {
         this.toolbarPosition.x = constrainedX;
         this.toolbarPosition.y = constrainedY;
         
-        console.log(`[TOOLBAR] Position set externally: ${constrainedX}, ${constrainedY}`);
         
         // Re-setup drag functionality to ensure it works after position change
         this.ensureToolbarDragReady();
@@ -834,7 +829,6 @@ class CanvasMaker {
         dragHandle.style.cursor = 'move';
         dragHandle.style.userSelect = 'none';
         
-        console.log('[TOOLBAR] Drag functionality verified and ready');
     }
     
     getToolbarPosition() {
@@ -1259,7 +1253,6 @@ class CanvasMaker {
             }
         }
         
-        console.log(`[SCROLLABLE-SIZE] Set scrollable size for ${shapeId}: ${width}x${height}`);
         return true;
     }
 
@@ -1298,7 +1291,6 @@ class CanvasMaker {
             // Create new constraints for custom shape type
             this.resizeConstraints[type] = constraints;
         }
-        console.log(`[RESIZE-CONSTRAINTS] Updated constraints for ${type}:`, this.resizeConstraints[type] || this.resizeConstraints);
     }
 
     // External API: Set global resize constraints with validation and warnings
@@ -1352,7 +1344,6 @@ class CanvasMaker {
             };
         }
         
-        console.log(`[RESIZE-CONSTRAINTS] Removed constraints for ${type} - components can now resize without bounds`);
         return true;
     }
 
@@ -1449,7 +1440,6 @@ class CanvasMaker {
         const shape = this.activeCanvasContext.shapes.find(s => s.id === componentId);
         if (shape) {
             shape.resizeConstraints = { ...shape.resizeConstraints, ...constraints };
-            console.log(`[RESIZE-CONSTRAINTS] Updated constraints for component ${componentId}:`, shape.resizeConstraints);
             return true;
         }
         console.warn(`[RESIZE-CONSTRAINTS] Component ${componentId} not found`);
@@ -1567,14 +1557,12 @@ class CanvasMaker {
                 componentData.scrollableSize.height);
         }
 
-        console.log(`[CREATE-FROM-DATA] Restored HTML component: ${componentData.id}`);
         return shape;
     }
 
     // Set persistence filter function for custom state control
     setPersistenceFilter(filterFn) {
         this.persistenceFilter = filterFn;
-        console.log('[PERSISTENCE] Custom persistence filter set');
     }
 
     // Export complete canvas state including HTML components
@@ -1611,7 +1599,6 @@ class CanvasMaker {
             editingComponentId: this.editingComponentId
         };
 
-        console.log(`[EXPORT-STATE] Exported state with ${state.htmlComponents.length} HTML components`);
         return state;
     }
 
@@ -1698,7 +1685,6 @@ class CanvasMaker {
             // Force redraw
             this.redrawCanvas();
 
-            console.log(`[IMPORT-STATE] Successfully imported state with ${state.htmlComponents?.length || 0} HTML components`);
             return true;
 
         } catch (error) {
@@ -1723,7 +1709,6 @@ class CanvasMaker {
             shape = shapeOrId;
         }
         
-        console.log('[REMOVE] removeReactComponent called for shape:', shape.id);
         const shapes = this.activeCanvasContext.shapes;
         const index = shapes.indexOf(shape);
         if (index > -1) {
@@ -1761,7 +1746,6 @@ class CanvasMaker {
                 }
             }
             
-            console.log(`[REMOVE] Successfully removed reactComponent ${shape.id} from both layers`);
             this.redrawCanvas();
             return true;
         }
@@ -1770,28 +1754,23 @@ class CanvasMaker {
     
     // Clear all React components from both layers
     clearAllReactComponents() {
-        console.log('[CLEAR-ALL] Clearing all React components');
         const shapes = this.activeCanvasContext.shapes;
         let removedCount = 0;
         
         // FIRST: Remove DOM elements from htmlComponents Map before clearing internal state
-        console.log(`[CLEAR-ALL] Removing DOM elements from htmlComponents Map (${this.htmlComponents.size} components)`);
         const htmlComponentEntries = Array.from(this.htmlComponents.entries());
         
         for (const [shapeId, domElement] of htmlComponentEntries) {
             if (domElement && domElement.remove) {
-                console.log(`[CLEAR-ALL] Removing DOM element for component ${shapeId}`);
                 domElement.remove(); // Remove from DOM
             }
         }
         
         // Clear the htmlComponents Map
         this.htmlComponents.clear();
-        console.log('[CLEAR-ALL] Cleared htmlComponents Map');
         
         // SECOND: Clean up reactComponent shapes from shapes array
         const reactShapes = shapes.filter(shape => shape.type === 'reactComponent');
-        console.log(`[CLEAR-ALL] Processing ${reactShapes.length} reactComponent shapes`);
         
         for (const shape of reactShapes) {
             // Clean up canvas renderer
@@ -1831,7 +1810,6 @@ class CanvasMaker {
         // Remove all reactComponent shapes from the shapes array
         this.activeCanvasContext.shapes = shapes.filter(shape => shape.type !== 'reactComponent');
         
-        console.log(`[CLEAR-ALL] Successfully removed ${removedCount} React components from both layers`);
         
         // Force visual clearing to ensure canvas matches empty state
         this.forceVisualClear();
@@ -1841,7 +1819,6 @@ class CanvasMaker {
     
     // Force complete visual clearing of canvas to match empty state
     forceVisualClear() {
-        console.log('[FORCE-CLEAR] Starting complete visual canvas clear');
         
         // Get all available canvas contexts for comprehensive clearing
         const contexts = [
@@ -1851,7 +1828,6 @@ class CanvasMaker {
             { name: 'root', ctx: this.canvas?.getContext('2d'), canvas: this.canvas }
         ].filter(c => c.ctx && c.canvas);
         
-        console.log(`[FORCE-CLEAR] Clearing ${contexts.length} canvas contexts`);
         
         // Clear all canvas pixels multiple times to ensure complete clearing
         for (let pass = 0; pass < 3; pass++) {
@@ -1866,7 +1842,6 @@ class CanvasMaker {
                     ctx.globalCompositeOperation = 'source-over'; // Reset composite
                     
                     if (pass === 0) {
-                        console.log(`[FORCE-CLEAR] Cleared ${name} canvas: ${canvas.width}x${canvas.height}`);
                     }
                 } catch (error) {
                     console.warn(`[FORCE-CLEAR] Error clearing ${name} canvas:`, error);
@@ -1877,7 +1852,6 @@ class CanvasMaker {
         // Clear any cached visual state
         if (this.clearVisualCache && typeof this.clearVisualCache === 'function') {
             this.clearVisualCache();
-            console.log('[FORCE-CLEAR] Cleared visual cache');
         }
         
         // Reset camera transform on active canvas
@@ -1887,10 +1861,8 @@ class CanvasMaker {
         }
         
         // Force complete redraw from current (empty) state
-        console.log('[FORCE-CLEAR] Forcing complete redraw from empty state');
         this.redrawCanvas();
         
-        console.log('[FORCE-CLEAR] Visual canvas clearing complete');
     }
     
     // React Component Registration System
@@ -2067,7 +2039,6 @@ class CanvasMaker {
         // Hide selection boxes for shapes
         this.hideSelectionBox();
         
-        console.log('[CLEAR-SHAPES] Cleared canvas shapes, keeping HTML components');
         this.redrawCanvas();
     }
 
@@ -2115,14 +2086,12 @@ class CanvasMaker {
             this.exitComponentEditMode();
         }
         
-        console.log('[CLEAR-HTML] Cleared HTML components, keeping canvas shapes');
         this.redrawCanvas();
     }
 
     clearAll() {
         // Clear everything - equivalent to clear() but more explicit
         this.clearCanvas();
-        console.log('[CLEAR-ALL] Cleared all content (shapes + HTML components)');
     }
     
     // API method to properly dispose of the canvas instance
@@ -2917,7 +2886,6 @@ class CanvasMaker {
                 return;
             } else if (this.isResizing && this.resizeHandle) {
                 // Handle resizing elements
-                console.log(`[RESIZE-PERF] Resize update at ${Date.now()}, mouse at (${pos.x}, ${pos.y})`);
                 this.performResizeForContext(pos.x, pos.y, this.activeCanvasContext);
                 this.redrawCanvas();
                 return;
@@ -3013,7 +2981,6 @@ class CanvasMaker {
     }
     
     handleMouseUp(e) {
-        console.log('[MOUSEUP] handleMouseUp called - currentTool:', this.currentTool, 'isDragging:', this.isDragging, 'isDrawing:', this.isDrawing, 'isSelecting:', this.isSelecting);
         
         // Don't prevent default to allow click events
         // e.preventDefault(); // Removed this if present
@@ -3051,21 +3018,12 @@ class CanvasMaker {
                 this.redrawCanvas();
                 return;
             } else if (this.isSelecting) {
-                console.log('[MOUSEUP] Ending selection, calling selectElementsInArea, currentTool:', this.currentTool);
                 this.isSelecting = false;
                 this.hideSelectionBox();
                 // Clear preview selection before finalizing the actual selection
                 this.activeCanvasContext.previewSelectedElements = [];
-                console.log('[MOUSEUP] About to call selectElementsInArea with:', {
-                    startX: this.startX, 
-                    startY: this.startY, 
-                    endX: pos.x, 
-                    endY: pos.y
-                });
                 this.selectElementsInArea(this.startX, this.startY, pos.x, pos.y);
-                console.log('[MOUSEUP] After selectElementsInArea, selectedElements:', this.activeCanvasContext.selectedElements.length);
                 this.justFinishedSelection = true; // Flag to prevent click handler from clearing selection
-        console.log('[MOUSEUP-SELECT] About to return from first select section');
                 this.updateCanvasCursor();
                 this.redrawCanvas();
                 return;
@@ -3134,7 +3092,6 @@ class CanvasMaker {
             }
             
             this.updateCanvasCursor();
-            console.log('[MOUSEUP-SELECT] About to return from second select section, selectedElements:', this.activeCanvasContext.selectedElements.length);
             return;
         }
         
@@ -3328,7 +3285,6 @@ class CanvasMaker {
         
         // Prevent click handling immediately after drag selection to avoid deselection
         if (this.justFinishedSelection) {
-            console.log('[CLICK] Ignoring click after drag selection completion');
             this.justFinishedSelection = false;
             return;
         }
@@ -3848,7 +3804,6 @@ class CanvasMaker {
                 // Remove from current position and add to end (front)
                 shapes.splice(element.index, 1);
                 shapes.push(shape);
-                console.log(`[BRING-TO-FRONT] Moved shape to front`, shape);
             }
         } else if (element.type === 'text') {
             // For text elements, we need to work with the texts array
@@ -3857,7 +3812,6 @@ class CanvasMaker {
             if (text) {
                 texts.splice(element.index, 1);
                 texts.push(text);
-                console.log(`[BRING-TO-FRONT] Moved text to front`, text);
             }
         } else if (element.type === 'path') {
             // For path elements, work with paths array
@@ -3866,7 +3820,6 @@ class CanvasMaker {
             if (path) {
                 paths.splice(element.index, 1);
                 paths.push(path);
-                console.log(`[BRING-TO-FRONT] Moved path to front`, path);
             }
         }
         
@@ -3883,7 +3836,6 @@ class CanvasMaker {
                 // Remove from current position and add to beginning (back)
                 shapes.splice(element.index, 1);
                 shapes.unshift(shape);
-                console.log(`[SEND-TO-BACK] Moved shape to back`, shape);
             }
         } else if (element.type === 'text') {
             const texts = this.activeCanvasContext.texts;
@@ -3891,7 +3843,6 @@ class CanvasMaker {
             if (text) {
                 texts.splice(element.index, 1);
                 texts.unshift(text);
-                console.log(`[SEND-TO-BACK] Moved text to back`, text);
             }
         } else if (element.type === 'path') {
             const paths = this.activeCanvasContext.paths;
@@ -3899,7 +3850,6 @@ class CanvasMaker {
             if (path) {
                 paths.splice(element.index, 1);
                 paths.unshift(path);
-                console.log(`[SEND-TO-BACK] Moved path to back`, path);
             }
         }
         
@@ -3918,7 +3868,6 @@ class CanvasMaker {
                     y: shape.y + 20
                 };
                 this.activeCanvasContext.shapes.push(duplicate);
-                console.log(`[DUPLICATE] Created duplicate shape`, duplicate);
                 
                 // If it's a reactComponent, also duplicate the DOM element
                 if (shape.type === 'reactComponent' && shape.domElement) {
@@ -3937,7 +3886,6 @@ class CanvasMaker {
                     y: text.y + 20
                 };
                 this.activeCanvasContext.texts.push(duplicate);
-                console.log(`[DUPLICATE] Created duplicate text`, duplicate);
             }
         } else if (element.type === 'path') {
             const path = this.activeCanvasContext.paths[element.index];
@@ -3947,7 +3895,6 @@ class CanvasMaker {
                     points: path.points.map(point => ({ ...point, x: point.x + 20, y: point.y + 20 }))
                 };
                 this.activeCanvasContext.paths.push(duplicate);
-                console.log(`[DUPLICATE] Created duplicate path`, duplicate);
             }
         }
     }
@@ -3962,14 +3909,11 @@ class CanvasMaker {
                 } else {
                     this.activeCanvasContext.shapes.splice(element.index, 1);
                 }
-                console.log(`[DELETE] Removed shape`, shape);
             }
         } else if (element.type === 'text') {
             this.activeCanvasContext.texts.splice(element.index, 1);
-            console.log(`[DELETE] Removed text at index`, element.index);
         } else if (element.type === 'path') {
             this.activeCanvasContext.paths.splice(element.index, 1);
-            console.log(`[DELETE] Removed path at index`, element.index);
         }
         
         // Clear selection
@@ -4180,10 +4124,7 @@ class CanvasMaker {
             
             // Debug logging (only on first few attempts to avoid spam)
             if (retryCount < 3) {
-                console.log(`[NESTED-CANVAS] Attempt ${retryCount + 1}: container dimensions = ${containerRect.width}x${containerRect.height}`);
-                console.log(`[NESTED-CANVAS] Overlay dimensions:`, overlayRect.width, 'x', overlayRect.height);
             } else if (retryCount === 3) {
-                console.log(`[NESTED-CANVAS] Suppressing further debug logs to avoid spam. Still retrying...`);
             }
             
             // Try using overlay dimensions as fallback if container has no dimensions
@@ -4191,12 +4132,10 @@ class CanvasMaker {
             if (containerRect.width > 0 && containerRect.height > 0) {
                 canvasWidth = Math.round(containerRect.width);
                 canvasHeight = Math.round(containerRect.height);
-                console.log(`[NESTED-CANVAS] Using container dimensions: ${canvasWidth}x${canvasHeight}`);
             } else if (overlayRect.width > 0 && overlayRect.height > 0) {
                 // Use a reasonable portion of the overlay for the canvas
                 canvasWidth = Math.round(overlayRect.width - 100); // Account for margins/padding
                 canvasHeight = Math.round(overlayRect.height - 100);
-                console.log(`[NESTED-CANVAS] Using overlay-based dimensions: ${canvasWidth}x${canvasHeight}`);
             } else {
                 if (retryCount >= maxRetries) {
                     console.error(`[NESTED-CANVAS] Failed to get any valid dimensions after ${maxRetries} retries. Aborting.`);
@@ -4207,12 +4146,9 @@ class CanvasMaker {
                 return;
             }
             
-            console.log(`[NESTED-CANVAS] Canvas current size: ${this.nestedCanvas.width}x${this.nestedCanvas.height}`);
-            console.log(`[NESTED-CANVAS] Setting canvas size to: ${canvasWidth}x${canvasHeight}`);
             
             // Only resize if dimensions have actually changed to avoid coordinate issues
             if (this.nestedCanvas.width !== canvasWidth || this.nestedCanvas.height !== canvasHeight) {
-                console.log(`[NESTED-CANVAS] Resizing canvas from ${this.nestedCanvas.width}x${this.nestedCanvas.height} to ${canvasWidth}x${canvasHeight}`);
                 // Resizing nested canvas
                 
                 // Check if this is a new canvas (camera at default position)
@@ -4222,14 +4158,12 @@ class CanvasMaker {
                                    this.nestedCanvasContext.camera.y === 0 && 
                                    this.nestedCanvasContext.camera.zoom === 1;
                 
-                console.log(`[NESTED-CANVAS] isNewCanvas: ${isNewCanvas}, camera:`, this.nestedCanvasContext?.camera);
                 
                 if (isNewCanvas) {
-                    console.log(`[NESTED-CANVAS] Using setupCanvasContext for new canvas`);  
+  
                     // Use unified setup for new nested canvases
                     this.setupCanvasContext(this.nestedCanvasContext, canvasWidth, canvasHeight);
                 } else {
-                    console.log(`[NESTED-CANVAS] Using manual resize for existing canvas`);
                     // Just resize existing nested canvases without affecting camera
                     this.nestedCanvas.width = canvasWidth;
                     this.nestedCanvas.height = canvasHeight;
@@ -4239,34 +4173,22 @@ class CanvasMaker {
                     this.nestedCtx.lineJoin = 'round';
                 }
                 
-                console.log(`[NESTED-CANVAS] Set canvas style dimensions to: ${this.nestedCanvas.style.width} x ${this.nestedCanvas.style.height}`);
             }
             
             // Redraw the canvas with the new dimensions
-            console.log(`[NESTED-CANVAS] About to redraw canvas with context:`, this.nestedCanvasContext);
             this.redrawCanvas(this.nestedCanvasContext);
-            console.log(`[NESTED-CANVAS] Setup complete! Canvas should now be visible.`);
             
             // Force layout recalculation and then check
             setTimeout(() => {
                 const canvasRect = this.nestedCanvas.getBoundingClientRect();
                 const canvasStyles = window.getComputedStyle(this.nestedCanvas);
-                console.log(`[NESTED-CANVAS] Canvas final rect (after layout):`, canvasRect);
-                console.log(`[NESTED-CANVAS] Canvas visibility: ${canvasStyles.visibility}, display: ${canvasStyles.display}, opacity: ${canvasStyles.opacity}`);
-                console.log(`[NESTED-CANVAS] Canvas z-index: ${canvasStyles.zIndex}, position: ${canvasStyles.position}`);
-                console.log(`[NESTED-CANVAS] Canvas computed width: ${canvasStyles.width}, height: ${canvasStyles.height}`);
-                console.log(`[NESTED-CANVAS] Canvas inline style width: ${this.nestedCanvas.style.width}, height: ${this.nestedCanvas.style.height}`);
             }, 10);
             
             // Force layout reflow by accessing offsetWidth
             const actualWidth = this.nestedCanvas.offsetWidth;
             const actualHeight = this.nestedCanvas.offsetHeight;
-            console.log(`[NESTED-CANVAS] Canvas offset dimensions: ${actualWidth}x${actualHeight}`);
             
             // Try to debug what's preventing the canvas from showing
-            console.log(`[NESTED-CANVAS] Canvas element:`, this.nestedCanvas);
-            console.log(`[NESTED-CANVAS] Canvas parent:`, this.nestedCanvas.parentElement);
-            console.log(`[NESTED-CANVAS] Canvas parent computed style:`, window.getComputedStyle(this.nestedCanvas.parentElement));
             
             
             
@@ -4988,7 +4910,7 @@ class CanvasMaker {
     }
     
     // Dedicated rendering for HTML components (no rectangle background)
-    renderHTMLComponent(ctx, htmlShape, isSelected = false) {
+    renderHTMLComponent(ctx, htmlShape, isSelected = false, isPreviewSelected = false) {
         // HTML components are rendered via DOM elements, not canvas
         // This function handles any canvas-level decorations (selection indicators, etc.)
         
@@ -5009,6 +4931,15 @@ class CanvasMaker {
             if (isBeingResized || currentTransform !== expectedTransform) {
                 this.renderReactComponentHTML(htmlShape, this.activeCanvasContext.camera);
             }
+            
+            // Update selection visual state - show orange border during preview selection
+            const isInEditMode = this.editingComponentId === htmlShape.id;
+            if (isPreviewSelected && !isInEditMode) {
+                htmlElement.classList.add('preview-selected');
+            } else {
+                htmlElement.classList.remove('preview-selected');
+            }
+            
         } else {
             // Element doesn't exist yet, create it
             this.renderReactComponentHTML(htmlShape, this.activeCanvasContext.camera);
@@ -5713,28 +5644,10 @@ class CanvasMaker {
         const startWorld = {x: x1, y: y1};
         const endWorld = {x: x2, y: y2};
         
-        console.log('[SELECT-AREA] Input coords (already world):', {x1, y1, x2, y2});
-        console.log('[SELECT-AREA] World coords:', startWorld, endWorld);
-        console.log('[SELECT-AREA] Camera state:', {
-            x: this.activeCanvasContext.camera.x,
-            y: this.activeCanvasContext.camera.y,
-            zoom: this.activeCanvasContext.camera.zoom
-        });
-        console.log('[SELECT-AREA] Canvas size:', {
-            width: this.activeCanvasContext.canvas.width,
-            height: this.activeCanvasContext.canvas.height,
-            centerX: this.activeCanvasContext.canvas.width / 2,
-            centerY: this.activeCanvasContext.canvas.height / 2
-        });
-        this.activeCanvasContext.shapes.forEach((s, i) => {
-            console.log(`[SELECT-AREA] Shape ${i}: type=${s.type}, x=${s.x}, y=${s.y}, w=${s.width}, h=${s.height}, id=${s.id}`);
-        });
         
         const previewElements = this.getElementsInArea(startWorld.x, startWorld.y, endWorld.x, endWorld.y, this.activeCanvasContext);
-        console.log('[SELECT-AREA] Found elements:', previewElements.length, previewElements);
         
         this.activeCanvasContext.selectedElements = previewElements;
-        console.log('[SELECT-AREA] Set selectedElements to:', this.activeCanvasContext.selectedElements.length);
         
         this.updateCanvasCursor();
         this.redrawCanvas();
@@ -5841,7 +5754,7 @@ class CanvasMaker {
             
             // Skip HTML components - they'll be rendered separately
             if (shape.type === 'reactComponent') {
-                this.renderHTMLComponent(ctx, shape, isSelected);
+                this.renderHTMLComponent(ctx, shape, isSelected, isPreviewSelected);
                 return; // Skip the rest of the rectangle rendering logic
             }
             
@@ -6117,7 +6030,15 @@ class CanvasMaker {
             return; // Only show handles for single selection
         }
         
+        // Check if selected element is in edit mode - if so, hide resize handles
         const element = canvasContext.selectedElements[0];
+        if (element.type === 'shape') {
+            const shape = canvasContext.shapes[element.index];
+            if (shape.type === 'reactComponent' && this.editingComponentId === shape.id) {
+                // Component is in edit mode - don't draw resize handles
+                return;
+            }
+        }
         let bounds = null;
         
         if (element.type === 'shape') {
@@ -7059,6 +6980,10 @@ class CanvasMaker {
         // Ensure smooth transition
         element.style.opacity = '1';
         
+        
+        // Immediately redraw to hide resize handles
+        this.redrawCanvas();
+        
         // Listen for clicks outside to exit edit mode
         setTimeout(() => {
             // console.log(`[EDIT-MODE] Adding outside click listener`);
@@ -7100,6 +7025,7 @@ class CanvasMaker {
             element.classList.remove('editing');
             // console.log(`[EDIT-EXIT] Removed editing class`);
         }
+        
         
         // Remove event listeners
         // console.log(`[EDIT-EXIT] Removing event listeners`);
@@ -7711,6 +7637,16 @@ class CanvasMaker {
         if (canvasContext.selectedElements.length !== 1) return null;
         
         const element = canvasContext.selectedElements[0];
+        
+        // Disable resize handle detection if component is in edit mode
+        if (element.type === 'shape') {
+            const shape = canvasContext.shapes[element.index];
+            if (shape.type === 'reactComponent' && this.editingComponentId === shape.id) {
+                // Component is in edit mode - disable resize handles
+                return null;
+            }
+        }
+        
         let bounds = null;
         
         if (element.type === 'shape') {
@@ -7887,41 +7823,85 @@ class CanvasMaker {
             
             if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
                 if (shape.type === 'reactComponent') {
-                    // For HTML components, only resize from bottom-right to avoid moving content
-                    // Keep the top-left position fixed and only change dimensions
-                    const fixedLeft = shape.x;
-                    const fixedTop = shape.y;
+                    // For HTML components, handle viewport-style resizing where content stays fixed
+                    // and the viewport reveals/hides more content
+                    const originalLeft = shape.x;
+                    const originalTop = shape.y;
+                    const originalRight = shape.x + shape.width;
+                    const originalBottom = shape.y + shape.height;
+                    
+                    let newLeft = originalLeft;
+                    let newTop = originalTop;  
+                    let newRight = originalRight;
+                    let newBottom = originalBottom;
                     
                     switch (this.resizeHandle) {
-                        case 'nw': // top-left handle - resize from opposite corner
-                            shape.width = Math.max(10, shape.width - (adjustedX - fixedLeft));
-                            shape.height = Math.max(10, shape.height - (adjustedY - fixedTop));
+                        case 'nw': // top-left handle
+                            newLeft = adjustedX;
+                            newTop = adjustedY;
                             break;
-                        case 'ne': // top-right handle - resize width right, height up
-                            shape.width = Math.max(10, adjustedX - fixedLeft);
-                            shape.height = Math.max(10, shape.height - (adjustedY - fixedTop));
+                        case 'ne': // top-right handle
+                            newRight = adjustedX;
+                            newTop = adjustedY;
                             break;
-                        case 'sw': // bottom-left handle - resize width left, height down
-                            shape.width = Math.max(10, shape.width - (adjustedX - fixedLeft));
-                            shape.height = Math.max(10, adjustedY - fixedTop);
+                        case 'sw': // bottom-left handle
+                            newLeft = adjustedX;
+                            newBottom = adjustedY;
                             break;
-                        case 'se': // bottom-right handle - standard resize
-                            shape.width = Math.max(10, adjustedX - fixedLeft);
-                            shape.height = Math.max(10, adjustedY - fixedTop);
+                        case 'se': // bottom-right handle
+                            newRight = adjustedX;
+                            newBottom = adjustedY;
                             break;
-                        case 'n': // top handle - resize height up
-                            shape.height = Math.max(10, shape.height - (adjustedY - fixedTop));
+                        case 'n': // top handle
+                            newTop = adjustedY;
                             break;
-                        case 's': // bottom handle - resize height down
-                            shape.height = Math.max(10, adjustedY - fixedTop);
+                        case 's': // bottom handle
+                            newBottom = adjustedY;
                             break;
-                        case 'w': // left handle - resize width left
-                            shape.width = Math.max(10, shape.width - (adjustedX - fixedLeft));
+                        case 'w': // left handle - expand viewport to the left
+                            newLeft = adjustedX;
                             break;
-                        case 'e': // right handle - resize width right
-                            shape.width = Math.max(10, adjustedX - fixedLeft);
+                        case 'e': // right handle - expand viewport to the right
+                            newRight = adjustedX;
                             break;
                     }
+                    
+                    // Apply minimum constraints and adjust positions accordingly
+                    let finalWidth = newRight - newLeft;
+                    let finalHeight = newBottom - newTop;
+                    let finalLeft = newLeft;
+                    let finalTop = newTop;
+                    
+                    // Handle minimum width constraint
+                    if (finalWidth < 10) {
+                        const widthDiff = 10 - finalWidth;
+                        finalWidth = 10;
+                        
+                        // Adjust position based on which handle is being used
+                        if (this.resizeHandle && (this.resizeHandle.includes('w') || this.resizeHandle === 'nw' || this.resizeHandle === 'sw')) {
+                            // Resizing from left - keep right edge fixed
+                            finalLeft = newRight - 10;
+                        }
+                        // For right-side handles, left position stays the same (newLeft)
+                    }
+                    
+                    // Handle minimum height constraint
+                    if (finalHeight < 10) {
+                        const heightDiff = 10 - finalHeight;
+                        finalHeight = 10;
+                        
+                        // Adjust position based on which handle is being used
+                        if (this.resizeHandle && (this.resizeHandle.includes('n') || this.resizeHandle === 'nw' || this.resizeHandle === 'ne')) {
+                            // Resizing from top - keep bottom edge fixed
+                            finalTop = newBottom - 10;
+                        }
+                        // For bottom-side handles, top position stays the same (newTop)
+                    }
+                    
+                    shape.x = finalLeft;
+                    shape.y = finalTop;
+                    shape.width = finalWidth;
+                    shape.height = finalHeight;
                 } else {
                     // For rectangles, use the original approach that can move position
                     const originalLeft = shape.x;
@@ -8025,12 +8005,32 @@ class CanvasMaker {
         const maxWidth = contentWidth + buffer;
         const maxHeight = contentHeight + buffer;
         
-        // Apply constraints immediately
+        // Store original bounds for position adjustment
+        const originalRight = shape.x + shape.width;
+        const originalBottom = shape.y + shape.height;
+        
+        // Apply width constraint
         if (shape.width > maxWidth) {
+            const widthReduction = shape.width - maxWidth;
             shape.width = maxWidth;
+            
+            // If we're resizing from the left and hit the constraint,
+            // adjust position to maintain the right edge position
+            if (this.resizeHandle && (this.resizeHandle.includes('w') || this.resizeHandle === 'nw' || this.resizeHandle === 'sw')) {
+                shape.x = originalRight - shape.width;
+            }
         }
+        
+        // Apply height constraint  
         if (shape.height > maxHeight) {
+            const heightReduction = shape.height - maxHeight;
             shape.height = maxHeight;
+            
+            // If we're resizing from the top and hit the constraint,
+            // adjust position to maintain the bottom edge position
+            if (this.resizeHandle && (this.resizeHandle.includes('n') || this.resizeHandle === 'nw' || this.resizeHandle === 'ne')) {
+                shape.y = originalBottom - shape.height;
+            }
         }
     }
     
@@ -8434,6 +8434,7 @@ class CanvasMaker {
         this.notifySelectionChange();
     }
     
+
     // Selection change notification
     notifySelectionChange() {
         const selectionData = {

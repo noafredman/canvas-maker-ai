@@ -2,7 +2,60 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.8.7)
+## Recent Updates (v1.8.8)
+
+### 🎯 Enhanced Edit Mode & Selection Experience
+
+**Complete edit mode and selection system overhaul** - Improved interaction patterns and visual feedback for HTML components.
+
+#### Key Changes
+
+- **🚫 Edit Mode Resize Blocking**: Resize handles are hidden and disabled during edit mode to prevent conflicts
+- **🔄 Immediate Selection Feedback**: HTML components show orange preview selection when touched by selection rectangle
+- **🛠️ Fixed Left-Side Resizing**: Proper viewport-style resizing from all directions with constraint-aware positioning
+- **⚡ Seamless Mode Transitions**: Instant visual feedback when entering/exiting edit mode
+
+#### Edit Mode Behavior
+
+HTML components now have distinct interaction modes:
+
+```javascript
+// Selection mode - shows resize handles, allows repositioning
+const component = canvas.addReactComponentWithHTML(x, y, width, height, htmlContent);
+// ✅ Blue dashed border when selected
+// ✅ Resize handles visible and functional
+// ✅ Can drag to reposition
+
+// Edit mode - enables HTML interaction, hides resize controls  
+canvas.enterComponentEditMode(component);
+// ✅ Blue outline indicates edit mode
+// ✅ HTML content is interactive (clicks, scrolling, etc.)
+// ✅ Resize handles hidden to prevent conflicts
+// ✅ Exit with ESC or click outside
+```
+
+#### Selection System Improvements
+
+- **🎯 Preview Selection**: Components show orange border immediately when selection box touches them
+- **⚡ Real-time Feedback**: No waiting for mouse-up to see selection state
+- **🔄 Consistent Behavior**: HTML components match canvas shape selection patterns
+
+#### Left-Side Resize Fix
+
+Previous issues with left-side resizing causing drag behavior are now resolved:
+
+```javascript
+// Before: Left resize would cause jumping and drag behavior
+// After: Smooth viewport-style resizing from all directions
+const component = canvas.addReactComponentWithHTML(x, y, width, height, htmlContent);
+// ✅ Resize from left expands viewport leftward while content stays fixed
+// ✅ Proper constraint handling maintains visual stability
+// ✅ Minimum size constraints preserve edge positions
+```
+
+---
+
+## Previous Updates (v1.8.7)
 
 ### ✨ Standalone HTML Component System
 

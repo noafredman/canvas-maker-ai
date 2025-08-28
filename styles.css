@@ -604,6 +604,10 @@ body > #nested-canvas {
     min-height: 0 !important;
 }
 
+.react-component-html.preview-selected {
+    border: 2px solid #f97316 !important; /* Orange border for preview selection */
+}
+
 .react-component-html.editing {
     pointer-events: auto !important;
     outline: 2px solid #3b82f6 !important;
