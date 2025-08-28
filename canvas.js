@@ -2648,6 +2648,40 @@ class CanvasMaker {
             if (resizeHandle) {
                 this.isResizing = true;
                 this.resizeHandle = resizeHandle;
+                
+                // Calculate the actual handle center position to avoid jump
+                const handleCenter = this.getResizeHandleCenter(resizeHandle, this.activeCanvasContext);
+                if (handleCenter) {
+                    // For rectangles/HTML components - store offset from handle center
+                    this.resizeOffset = {
+                        x: pos.x - handleCenter.x,
+                        y: pos.y - handleCenter.y
+                    };
+                } else {
+                    // For circles - store initial radius to maintain consistent offset
+                    if (this.activeCanvasContext.selectedElements.length === 1) {
+                        const element = this.activeCanvasContext.selectedElements[0];
+                        if (element.type === 'shape') {
+                            const shape = this.activeCanvasContext.shapes[element.index];
+                            if (shape.type === 'circle') {
+                                // For circles, store the initial radius and click position
+                                const centerX = shape.x;
+                                const centerY = shape.y;
+                                const initialDistance = Math.sqrt(
+                                    Math.pow(pos.x - centerX, 2) + Math.pow(pos.y - centerY, 2)
+                                );
+                                this.initialCircleRadius = shape.radius;
+                                this.initialCircleClickDistance = initialDistance;
+                                this.resizeOffset = { x: 0, y: 0 };
+                            } else {
+                                this.resizeOffset = { x: 0, y: 0 };
+                            }
+                        }
+                    } else {
+                        this.resizeOffset = { x: 0, y: 0 };
+                    }
+                }
+                
                 this.dragOffset.x = pos.x;
                 this.dragOffset.y = pos.y;
                 this.dragStartX = pos.x;
@@ -2740,6 +2774,19 @@ class CanvasMaker {
             if (resizeHandle) {
                 this.isResizing = true;
                 this.resizeHandle = resizeHandle;
+                
+                // Calculate the actual handle center position to avoid jump
+                const handleCenter = this.getResizeHandleCenter(resizeHandle, this.activeCanvasContext);
+                if (handleCenter) {
+                    // Store the offset between click and handle center
+                    this.resizeOffset = {
+                        x: pos.x - handleCenter.x,
+                        y: pos.y - handleCenter.y
+                    };
+                } else {
+                    this.resizeOffset = { x: 0, y: 0 };
+                }
+                
                 this.dragOffset.x = pos.x;
                 this.dragOffset.y = pos.y;
                 this.dragStartX = pos.x;
@@ -2861,6 +2908,7 @@ class CanvasMaker {
                 return;
             } else if (this.isResizing && this.resizeHandle) {
                 // Handle resizing elements
+                console.log(`[RESIZE-PERF] Resize update at ${Date.now()}, mouse at (${pos.x}, ${pos.y})`);
                 this.performResizeForContext(pos.x, pos.y, this.activeCanvasContext);
                 this.redrawCanvas();
                 return;
@@ -2977,8 +3025,13 @@ class CanvasMaker {
             const pos = this.getMousePos(e);
             
             if (this.isResizing) {
+                // HTML components are already updated in real-time during resize
+                
                 this.isResizing = false;
                 this.resizeHandle = null;
+                this.resizeOffset = null;
+                this.initialCircleRadius = null;
+                this.initialCircleClickDistance = null;
                 this.updateCanvasCursor();
                 this.redrawCanvas();
                 return;
@@ -3024,8 +3077,14 @@ class CanvasMaker {
         if (this.currentTool === 'select') {
             if (this.isResizing) {
                 // console.log('[RESIZE-END] Ending resize, selected elements:', this.selectedElements.length);
+                
+                // HTML components are already updated in real-time during resize
+                
                 this.isResizing = false;
                 this.resizeHandle = null;
+                this.resizeOffset = null;
+                this.initialCircleRadius = null;
+                this.initialCircleClickDistance = null;
                 this.justFinishedResize = true; // Flag to prevent immediate click deselection
                 this.updateCanvasCursor();
                 // Keep component selected and redraw to show resize handles
@@ -4520,8 +4579,44 @@ class CanvasMaker {
             if (resizeHandle) {
                 this.isResizing = true;
                 this.resizeHandle = resizeHandle;
+                
+                // Calculate the actual handle center position to avoid jump
+                const handleCenter = this.getResizeHandleCenter(resizeHandle, this.nestedCanvasContext);
+                if (handleCenter) {
+                    // For rectangles/HTML components - store offset from handle center
+                    this.resizeOffset = {
+                        x: pos.x - handleCenter.x,
+                        y: pos.y - handleCenter.y
+                    };
+                } else {
+                    // For circles - store initial radius to maintain consistent offset
+                    if (this.nestedCanvasContext.selectedElements.length === 1) {
+                        const element = this.nestedCanvasContext.selectedElements[0];
+                        if (element.type === 'shape') {
+                            const shape = this.nestedCanvasContext.shapes[element.index];
+                            if (shape.type === 'circle') {
+                                // For circles, store the initial radius and click position
+                                const centerX = shape.x;
+                                const centerY = shape.y;
+                                const initialDistance = Math.sqrt(
+                                    Math.pow(pos.x - centerX, 2) + Math.pow(pos.y - centerY, 2)
+                                );
+                                this.initialCircleRadius = shape.radius;
+                                this.initialCircleClickDistance = initialDistance;
+                                this.resizeOffset = { x: 0, y: 0 };
+                            } else {
+                                this.resizeOffset = { x: 0, y: 0 };
+                            }
+                        }
+                    } else {
+                        this.resizeOffset = { x: 0, y: 0 };
+                    }
+                }
+                
                 this.dragOffset.x = pos.x;
                 this.dragOffset.y = pos.y;
+                this.dragStartX = pos.x;
+                this.dragStartY = pos.y;
                 return;
             }
             
@@ -4657,8 +4752,13 @@ class CanvasMaker {
             this.nestedCanvasContext.currentPath = [];
         } else if (this.currentTool === 'select') {
             if (this.isResizing) {
+                // HTML components are already updated in real-time during resize
+                
                 this.isResizing = false;
                 this.resizeHandle = null;
+                this.resizeOffset = null;
+                this.initialCircleRadius = null;
+                this.initialCircleClickDistance = null;
                 // Keep component selected and redraw to show resize handles
                 this.redrawCanvas(this.nestedCanvasContext);
             } else if (this.isDragging) {
@@ -4869,6 +4969,93 @@ class CanvasMaker {
         return this.canvasToWorld(canvasX, canvasY);
     }
     
+    // ===== HTML COMPONENT DEDICATED METHODS =====
+    
+    // Dedicated hit detection for HTML components
+    isHTMLComponentHit(x, y, htmlShape) {
+        // For now, use rectangular hit detection, but this can be enhanced
+        return x >= htmlShape.x && x <= htmlShape.x + htmlShape.width &&
+               y >= htmlShape.y && y <= htmlShape.y + htmlShape.height;
+    }
+    
+    // Dedicated rendering for HTML components (no rectangle background)
+    renderHTMLComponent(ctx, htmlShape, isSelected = false) {
+        // HTML components are rendered via DOM elements, not canvas
+        // This function handles any canvas-level decorations (selection indicators, etc.)
+        
+        // Check if this specific component is being resized
+        const isBeingResized = this.isResizing && 
+                              this.selectedElements.some(sel => 
+                                  sel.type === 'shape' && 
+                                  this.activeCanvasContext.shapes[sel.index] === htmlShape);
+        
+        // Only update DOM during resize if this is the component being resized
+        // Otherwise, only update if position/size actually changed
+        const htmlElement = this.htmlComponents.get(htmlShape.id);
+        if (htmlElement) {
+            const currentTransform = htmlElement.style.transform || '';
+            const expectedTransform = this.calculateHTMLTransform(htmlShape, this.activeCanvasContext.camera);
+            
+            // Only update DOM if transform actually changed or if being actively resized
+            if (isBeingResized || currentTransform !== expectedTransform) {
+                this.renderReactComponentHTML(htmlShape, this.activeCanvasContext.camera);
+            }
+        } else {
+            // Element doesn't exist yet, create it
+            this.renderReactComponentHTML(htmlShape, this.activeCanvasContext.camera);
+        }
+        
+        if (isSelected) {
+            ctx.save();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(htmlShape.x, htmlShape.y, htmlShape.width, htmlShape.height);
+            ctx.restore();
+        }
+    }
+    
+    // Calculate the expected transform for an HTML component
+    calculateHTMLTransform(shape, camera) {
+        // Match the exact calculation from updateHTMLElementTransform
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        const translateX = centerX + shape.x * camera.zoom + camera.x * camera.zoom;
+        const translateY = centerY + shape.y * camera.zoom + camera.y * camera.zoom;
+        
+        return `translate(${translateX}px, ${translateY}px) scale(${camera.zoom})`;
+    }
+    
+    // Dedicated bounds calculation for HTML components
+    getHTMLComponentBounds(htmlShape) {
+        return {
+            x: htmlShape.x,
+            y: htmlShape.y,
+            width: htmlShape.width,
+            height: htmlShape.height,
+            right: htmlShape.x + htmlShape.width,
+            bottom: htmlShape.y + htmlShape.height
+        };
+    }
+    
+    // Dedicated resize logic for HTML components
+    resizeHTMLComponent(htmlShape, newWidth, newHeight) {
+        htmlShape.width = Math.max(50, newWidth);  // Minimum width
+        htmlShape.height = Math.max(30, newHeight); // Minimum height
+        
+        // Trigger HTML element resize
+        this.updateHTMLElementSize(htmlShape);
+    }
+    
+    // Update the actual HTML element size
+    updateHTMLElementSize(htmlShape) {
+        const element = document.querySelector(`[data-shape-id="${htmlShape.id}"]`);
+        if (element) {
+            element.style.width = `${htmlShape.width}px`;
+            element.style.height = `${htmlShape.height}px`;
+        }
+    }
+    
     
     getElementAtPointForContext(x, y, canvasContext) {
         const { shapes, texts, paths } = canvasContext;
@@ -4876,11 +5063,16 @@ class CanvasMaker {
         // Check shapes first
         for (let i = shapes.length - 1; i >= 0; i--) {
             const shape = shapes[i];
-            if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
+            if (shape.type === 'rectangle') {
                 const hit = x >= shape.x && x <= shape.x + shape.width &&
                            y >= shape.y && y <= shape.y + shape.height;
                 if (hit) {
                     return { type: 'shape', index: i };
+                }
+            } else if (shape.type === 'reactComponent') {
+                // HTML components have dedicated hit detection  
+                if (this.isHTMLComponentHit(x, y, shape)) {
+                    return { type: 'shape', index: i, subtype: 'htmlComponent' };
                 }
             } else if (shape.type === 'circle') {
                 const distance = Math.sqrt(
@@ -4921,13 +5113,6 @@ class CanvasMaker {
                 
                 const distance = Math.sqrt((x - xx) * (x - xx) + (y - yy) * (y - yy));
                 if (distance <= tolerance) {
-                    return { type: 'shape', index: i };
-                }
-            } else if (shape.type === 'reactComponent') {
-                // Handle custom React component shapes
-                const hit = x >= shape.x && x <= shape.x + shape.width &&
-                           y >= shape.y && y <= shape.y + shape.height;
-                if (hit) {
                     return { type: 'shape', index: i };
                 }
             }
@@ -5645,10 +5830,16 @@ class CanvasMaker {
             const isPreviewSelected = previewSelectedElements && previewSelectedElements.some(sel => 
                               sel.type === 'shape' && sel.index === index);
             
+            // Skip HTML components - they'll be rendered separately
+            if (shape.type === 'reactComponent') {
+                this.renderHTMLComponent(ctx, shape, isSelected);
+                return; // Skip the rest of the rectangle rendering logic
+            }
+            
             // Draw fill for shapes that have fillColor
             if (shape.fillColor && shape.fillColor !== 'transparent') {
                 ctx.fillStyle = shape.fillColor;
-                if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
+                if (shape.type === 'rectangle') {
                     ctx.fillRect(shape.x, shape.y, shape.width, shape.height);
                 } else if (shape.type === 'circle') {
                     ctx.beginPath();
@@ -5656,11 +5847,6 @@ class CanvasMaker {
                     ctx.fill();
                 }
                 // Lines and arrows don't have fill, only stroke
-            }
-            
-            // Render React component content using HTML rendering
-            if (shape.type === 'reactComponent') {
-                this.renderReactComponentHTML(shape, camera);
             }
             
             // Draw stroke/outline for shapes (always draw stroke for visibility)
@@ -5675,7 +5861,7 @@ class CanvasMaker {
                 ctx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : 2;
                 
                 ctx.beginPath();
-                if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
+                if (shape.type === 'rectangle') {
                     ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
                 } else if (shape.type === 'circle') {
                     ctx.arc(shape.x, shape.y, shape.radius, 0, 2 * Math.PI);
@@ -5935,12 +6121,26 @@ class CanvasMaker {
                     height: shape.height
                 };
             } else if (shape.type === 'circle') {
-                bounds = {
-                    x: shape.x - shape.radius,
-                    y: shape.y - shape.radius,
-                    width: shape.radius * 2,
-                    height: shape.radius * 2
-                };
+                // Draw circle-specific resize handles - 4 handles on circumference
+                const handleSize = 8;
+                canvasContext.ctx.fillStyle = '#3b82f6'; // Blue
+                canvasContext.ctx.strokeStyle = '#ffffff'; // White border
+                canvasContext.ctx.lineWidth = 2;
+                
+                // Draw 4 handles at cardinal points on the circumference
+                const handles = [
+                    { x: shape.x, y: shape.y - shape.radius }, // top
+                    { x: shape.x + shape.radius, y: shape.y }, // right  
+                    { x: shape.x, y: shape.y + shape.radius }, // bottom
+                    { x: shape.x - shape.radius, y: shape.y }  // left
+                ];
+                
+                handles.forEach(handle => {
+                    canvasContext.ctx.fillRect(handle.x - handleSize/2, handle.y - handleSize/2, handleSize, handleSize);
+                    canvasContext.ctx.strokeRect(handle.x - handleSize/2, handle.y - handleSize/2, handleSize, handleSize);
+                });
+                
+                return; // Early return since we handled circle drawing
             } else if (shape.type === 'line' || shape.type === 'arrow') {
                 // For lines and arrows, draw endpoint handles and middle drag handle
                 const handleSize = 8;
@@ -6038,12 +6238,26 @@ class CanvasMaker {
                     height: shape.height
                 };
             } else if (shape.type === 'circle') {
-                bounds = {
-                    x: shape.x - shape.radius,
-                    y: shape.y - shape.radius,
-                    width: shape.radius * 2,
-                    height: shape.radius * 2
-                };
+                // For circles, check if click is near any of the 4 cardinal points on circumference
+                const tolerance = 10;
+                
+                const handles = [
+                    { x: shape.x, y: shape.y - shape.radius }, // top
+                    { x: shape.x + shape.radius, y: shape.y }, // right
+                    { x: shape.x, y: shape.y + shape.radius }, // bottom
+                    { x: shape.x - shape.radius, y: shape.y }  // left
+                ];
+                
+                for (const handle of handles) {
+                    const distance = Math.sqrt(
+                        Math.pow(worldX - handle.x, 2) + Math.pow(worldY - handle.y, 2)
+                    );
+                    if (distance <= tolerance) {
+                        return 'circle'; // Return special circle handle type
+                    }
+                }
+                
+                return null; // Not near any handle
             } else if (shape.type === 'reactComponent') {
                 bounds = {
                     x: shape.x,
@@ -6237,6 +6451,7 @@ class CanvasMaker {
         
         // Update HTML component size in real-time during resize for React components
         if (element.type === 'shape' && shape.type === 'reactComponent') {
+            console.log(`[RESIZE-TRIGGER] Real-time HTML update for ${shape.id} at ${Date.now()}`);
             this.updateReactComponentHTML(shape);
         }
     }
@@ -6255,6 +6470,7 @@ class CanvasMaker {
             // console.log(`[RESIZE-HTML] Element computed size:`, getComputedStyle(htmlElement).width, getComputedStyle(htmlElement).height);
         }
     }
+    
     
     // Register React component for canvas-based rendering and interaction
     registerCanvasComponent(shape) {
@@ -6704,7 +6920,8 @@ class CanvasMaker {
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
         
-        // Set base size (unscaled)
+        // Set the viewport size to match the shape size - this acts like a window
+        // The content inside stays the same size, we just show more/less of it
         element.style.width = `${shape.width}px`;
         element.style.height = `${shape.height}px`;
         
@@ -7041,6 +7258,9 @@ class CanvasMaker {
         this.isDragging = false;
         this.isResizing = false;
         this.resizeHandle = null;
+        this.resizeOffset = null;
+        this.initialCircleRadius = null;
+        this.initialCircleClickDistance = null;
         this.editingComponentId = null;
         
         // Clear preview/temporary drawing state
@@ -7559,154 +7779,330 @@ class CanvasMaker {
         return null;
     }
     
+    // Get the center position of a resize handle for a selected element
+    getResizeHandleCenter(handleType, canvasContext) {
+        if (canvasContext.selectedElements.length !== 1) return null;
+        
+        const element = canvasContext.selectedElements[0];
+        if (element.type !== 'shape') return null;
+        
+        const shape = canvasContext.shapes[element.index];
+        
+        if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
+            const bounds = {
+                x: shape.x,
+                y: shape.y,
+                width: shape.width,
+                height: shape.height
+            };
+            
+            switch (handleType) {
+                case 'nw': return { x: bounds.x, y: bounds.y };
+                case 'ne': return { x: bounds.x + bounds.width, y: bounds.y };
+                case 'sw': return { x: bounds.x, y: bounds.y + bounds.height };
+                case 'se': return { x: bounds.x + bounds.width, y: bounds.y + bounds.height };
+                case 'n': return { x: bounds.x + bounds.width / 2, y: bounds.y };
+                case 's': return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height };
+                case 'w': return { x: bounds.x, y: bounds.y + bounds.height / 2 };
+                case 'e': return { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 };
+            }
+        } else if (shape.type === 'circle') {
+            // For circles, there's no fixed handle position - the handle is wherever the user clicks
+            // We need to store the initial click position relative to the circle center
+            return null; // Circles handle offset differently
+        }
+        
+        return null;
+    }
+    
     performResizeForContext(currentX, currentY, canvasContext) {
         if (canvasContext.selectedElements.length !== 1 || !this.resizeHandle) return;
         
         const element = canvasContext.selectedElements[0];
-        const deltaX = currentX - this.dragOffset.x;
-        const deltaY = currentY - this.dragOffset.y;
+        
+        // Adjust mouse position to compensate for initial click offset
+        const adjustedX = currentX - (this.resizeOffset?.x || 0);
+        const adjustedY = currentY - (this.resizeOffset?.y || 0);
         
         if (element.type === 'shape') {
             const shape = canvasContext.shapes[element.index];
             
             if (shape.type === 'rectangle' || shape.type === 'reactComponent') {
-                // Get constraints for this shape type and individual shape
-                let constraints = this.getResizeConstraints(shape.type, shape);
-                
-                // For HTML components, apply content-aware constraints with absolute maximum limits
-                if (shape.type === 'reactComponent' && shape.overflowInfo) {
-                    const buffer = this.options.contentResizeBuffer || 10;
-                    const multiplier = this.options.maxContentMultiplier || 3;
+                if (shape.type === 'reactComponent') {
+                    // For HTML components, only resize from bottom-right to avoid moving content
+                    // Keep the top-left position fixed and only change dimensions
+                    const fixedLeft = shape.x;
+                    const fixedTop = shape.y;
                     
-                    const contentMaxWidth = shape.overflowInfo.scrollWidth + buffer;
-                    const contentMaxHeight = shape.overflowInfo.scrollHeight + buffer;
+                    switch (this.resizeHandle) {
+                        case 'nw': // top-left handle - resize from opposite corner
+                            shape.width = Math.max(10, shape.width - (adjustedX - fixedLeft));
+                            shape.height = Math.max(10, shape.height - (adjustedY - fixedTop));
+                            break;
+                        case 'ne': // top-right handle - resize width right, height up
+                            shape.width = Math.max(10, adjustedX - fixedLeft);
+                            shape.height = Math.max(10, shape.height - (adjustedY - fixedTop));
+                            break;
+                        case 'sw': // bottom-left handle - resize width left, height down
+                            shape.width = Math.max(10, shape.width - (adjustedX - fixedLeft));
+                            shape.height = Math.max(10, adjustedY - fixedTop);
+                            break;
+                        case 'se': // bottom-right handle - standard resize
+                            shape.width = Math.max(10, adjustedX - fixedLeft);
+                            shape.height = Math.max(10, adjustedY - fixedTop);
+                            break;
+                        case 'n': // top handle - resize height up
+                            shape.height = Math.max(10, shape.height - (adjustedY - fixedTop));
+                            break;
+                        case 's': // bottom handle - resize height down
+                            shape.height = Math.max(10, adjustedY - fixedTop);
+                            break;
+                        case 'w': // left handle - resize width left
+                            shape.width = Math.max(10, shape.width - (adjustedX - fixedLeft));
+                            break;
+                        case 'e': // right handle - resize width right
+                            shape.width = Math.max(10, adjustedX - fixedLeft);
+                            break;
+                    }
+                } else {
+                    // For rectangles, use the original approach that can move position
+                    const originalLeft = shape.x;
+                    const originalTop = shape.y;
+                    const originalRight = shape.x + shape.width;
+                    const originalBottom = shape.y + shape.height;
                     
-                    // Absolute maximum limits (content size * multiplier)
-                    const absoluteMaxWidth = shape.overflowInfo.scrollWidth * multiplier;
-                    const absoluteMaxHeight = shape.overflowInfo.scrollHeight * multiplier;
+                    // Calculate new bounds by positioning the dragged handle at the mouse cursor
+                    let newLeft = originalLeft;
+                    let newTop = originalTop;
+                    let newRight = originalRight;
+                    let newBottom = originalBottom;
                     
-                    // For content-aware components, only consider individual shape constraints as "manual"
-                    const hasManualMaxWidth = shape.resizeConstraints && shape.resizeConstraints.maxWidth && shape.resizeConstraints.maxWidth < Infinity;
-                    const hasManualMaxHeight = shape.resizeConstraints && shape.resizeConstraints.maxHeight && shape.resizeConstraints.maxHeight < Infinity;
-                    
-                    let effectiveMaxWidth, effectiveMaxHeight;
-                    
-                    if (hasManualMaxWidth) {
-                        // Individual manual constraint exists - cap it at absolute maximum
-                        effectiveMaxWidth = Math.min(shape.resizeConstraints.maxWidth, absoluteMaxWidth);
-                    } else {
-                        // No individual manual constraint - only allow resize if content is larger than default
-                        const defaultWidth = this.options.defaultComponentWidth; // 375
-                        const contentWidth = shape.overflowInfo.scrollWidth;
-                        
-                        if (contentWidth > defaultWidth) {
-                            // Content is larger than default - allow resizing up to content size + buffer + padding
-                            // Add extra space to account for padding, borders, etc. to ensure no scrolling
-                            const paddingBuffer = 20; // Account for padding/borders/margins
-                            effectiveMaxWidth = contentMaxWidth + paddingBuffer;
-                        } else {
-                            // Content is smaller than default - don't allow width resizing beyond initial size
-                            const initialWidth = shape.requestedWidth || defaultWidth;
-                            effectiveMaxWidth = initialWidth;
-                        }
+                    switch (this.resizeHandle) {
+                        case 'nw': // top-left handle
+                            newLeft = adjustedX;
+                            newTop = adjustedY;
+                            break;
+                        case 'ne': // top-right handle
+                            newRight = adjustedX;
+                            newTop = adjustedY;
+                            break;
+                        case 'sw': // bottom-left handle
+                            newLeft = adjustedX;
+                            newBottom = adjustedY;
+                            break;
+                        case 'se': // bottom-right handle
+                            newRight = adjustedX;
+                            newBottom = adjustedY;
+                            break;
+                        case 'n': // top handle
+                            newTop = adjustedY;
+                            break;
+                        case 's': // bottom handle
+                            newBottom = adjustedY;
+                            break;
+                        case 'w': // left handle
+                            newLeft = adjustedX;
+                            break;
+                        case 'e': // right handle
+                            newRight = adjustedX;
+                            break;
                     }
                     
-                    if (hasManualMaxHeight) {
-                        // Individual manual constraint exists - cap it at absolute maximum  
-                        effectiveMaxHeight = Math.min(shape.resizeConstraints.maxHeight, absoluteMaxHeight);
-                    } else {
-                        // No individual manual constraint - only allow resize if content is larger than default
-                        const defaultHeight = this.options.defaultComponentHeight; // 650
-                        const contentHeight = shape.overflowInfo.scrollHeight;
-                        
-                        if (contentHeight > defaultHeight) {
-                            // Content is larger than default - allow resizing up to content size + buffer + padding
-                            const paddingBuffer = 20; // Account for padding/borders/margins  
-                            effectiveMaxHeight = contentMaxHeight + paddingBuffer;
-                        } else {
-                            // Content is smaller than default - don't allow height resizing beyond initial size
-                            const initialHeight = shape.requestedHeight || defaultHeight;
-                            effectiveMaxHeight = initialHeight;
-                        }
-                    }
-                    
-                    
-                    constraints = {
-                        ...constraints,
-                        maxWidth: effectiveMaxWidth,
-                        maxHeight: effectiveMaxHeight
-                    };
+                    // Update shape bounds
+                    shape.x = newLeft;
+                    shape.y = newTop;
+                    shape.width = newRight - newLeft;
+                    shape.height = newBottom - newTop;
                 }
                 
-                // Store original values to calculate constrained values
-                const originalX = shape.x;
-                const originalY = shape.y;
-                const originalWidth = shape.width;
-                const originalHeight = shape.height;
+                // Ensure minimum dimensions
+                if (shape.width < 10) shape.width = 10;
+                if (shape.height < 10) shape.height = 10;
                 
-                // Apply resize transformation
-                switch (this.resizeHandle) {
-                    case 'nw': // top-left
-                        shape.x += deltaX;
-                        shape.y += deltaY;
-                        shape.width -= deltaX;
-                        shape.height -= deltaY;
-                        break;
-                    case 'ne': // top-right
-                        shape.y += deltaY;
-                        shape.width += deltaX;
-                        shape.height -= deltaY;
-                        break;
-                    case 'sw': // bottom-left
-                        shape.x += deltaX;
-                        shape.width -= deltaX;
-                        shape.height += deltaY;
-                        break;
-                    case 'se': // bottom-right
-                        shape.width += deltaX;
-                        shape.height += deltaY;
-                        break;
-                    case 'n': // top
-                        shape.y += deltaY;
-                        shape.height -= deltaY;
-                        break;
-                    case 's': // bottom
-                        shape.height += deltaY;
-                        break;
-                    case 'w': // left
-                        shape.x += deltaX;
-                        shape.width -= deltaX;
-                        break;
-                    case 'e': // right
-                        shape.width += deltaX;
-                        break;
+                // Apply constraints based on shape type
+                if (shape.type === 'reactComponent') {
+                    this.applyHTMLComponentConstraints(shape);
+                } else if (shape.type === 'rectangle') {
+                    this.applyRectangleConstraints(shape);
                 }
-                
-                // Apply constraints to width and height
-                const constrainedWidth = Math.max(constraints.minWidth, Math.min(constraints.maxWidth, shape.width));
-                const constrainedHeight = Math.max(constraints.minHeight, Math.min(constraints.maxHeight, shape.height));
-                
-                // If width or height was constrained, adjust position to prevent drift
-                if (shape.width !== constrainedWidth) {
-                    if (this.resizeHandle.includes('w')) {
-                        // When resizing from left, maintain right edge position
-                        shape.x = originalX + originalWidth - constrainedWidth;
-                    }
-                    shape.width = constrainedWidth;
-                }
-                
-                if (shape.height !== constrainedHeight) {
-                    if (this.resizeHandle.includes('n')) {
-                        // When resizing from top, maintain bottom edge position
-                        shape.y = originalY + originalHeight - constrainedHeight;
-                    }
-                    shape.height = constrainedHeight;
-                }
-                
             } else if (shape.type === 'circle') {
+                // For circles, set radius to distance from center to mouse (ignore offset compensation)
+                const distance = Math.sqrt(
+                    Math.pow(currentX - shape.x, 2) + Math.pow(currentY - shape.y, 2)
+                );
+                
+                shape.radius = Math.max(distance, 5); // Minimum radius of 5
+            } else {
+                // Handle other shape types (lines, arrows) - use old delta approach
+                const deltaX = currentX - this.dragOffset.x;
+                const deltaY = currentY - this.dragOffset.y;
+                this.performResizeForOtherShapes(canvasContext, element, deltaX, deltaY, currentX, currentY);
+            }
+        }
+        
+        // Update dragOffset to current position - NO MORE DELTA CALCULATION NEEDED!
+        this.dragOffset.x = currentX;
+        this.dragOffset.y = currentY;
+        
+        // Update HTML component immediately if it's a reactComponent
+        if (element.type === 'shape') {
+            const shape = canvasContext.shapes[element.index];
+            if (shape.type === 'reactComponent') {
+                console.log(`[RESIZE-TRIGGER] Real-time HTML update for ${shape.id} at ${Date.now()}`);
+                this.updateReactComponentHTML(shape);
+            }
+        }
+    }
+    
+    // Apply constraints specific to HTML components
+    applyHTMLComponentConstraints(shape) {
+        if (!shape.overflowInfo) return;
+        
+        const buffer = this.options.contentResizeBuffer || 10;
+        const multiplier = this.options.maxContentMultiplier || 3;
+        
+        const contentMaxWidth = shape.overflowInfo.scrollWidth + buffer;
+        const contentMaxHeight = shape.overflowInfo.scrollHeight + buffer;
+        
+        // Absolute maximum limits (content size * multiplier)
+        const absoluteMaxWidth = shape.overflowInfo.scrollWidth * multiplier;
+        const absoluteMaxHeight = shape.overflowInfo.scrollHeight * multiplier;
+        
+        // For content-aware components, only consider individual shape constraints as "manual"
+        const hasManualMaxWidth = shape.resizeConstraints && shape.resizeConstraints.maxWidth && shape.resizeConstraints.maxWidth < Infinity;
+        const hasManualMaxHeight = shape.resizeConstraints && shape.resizeConstraints.maxHeight && shape.resizeConstraints.maxHeight < Infinity;
+        
+        let effectiveMaxWidth, effectiveMaxHeight;
+        
+        if (hasManualMaxWidth) {
+            // Individual manual constraint exists - cap it at absolute maximum
+            effectiveMaxWidth = Math.min(shape.resizeConstraints.maxWidth, absoluteMaxWidth);
+        } else {
+            // No individual manual constraint - allow resize up to max(requestedSize, contentSize) + buffer
+            const requestedWidth = shape.requestedWidth || shape.width;
+            const requestedMaxWidth = requestedWidth + buffer;
+            const contentBasedWidth = contentMaxWidth;
+            effectiveMaxWidth = Math.max(requestedMaxWidth, contentBasedWidth);
+        }
+        
+        if (hasManualMaxHeight) {
+            // Individual manual constraint exists - cap it at absolute maximum
+            effectiveMaxHeight = Math.min(shape.resizeConstraints.maxHeight, absoluteMaxHeight);
+        } else {
+            // No individual manual constraint - allow resize up to max(requestedSize, contentSize) + buffer
+            const requestedHeight = shape.requestedHeight || shape.height;
+            const contentBasedHeight = contentMaxHeight;
+            effectiveMaxHeight = Math.max(requestedHeight + buffer, contentBasedHeight);
+        }
+        
+        if (shape.width > effectiveMaxWidth) {
+            shape.width = effectiveMaxWidth;
+        }
+        if (shape.height > effectiveMaxHeight) {
+            shape.height = effectiveMaxHeight;
+        }
+    }
+    
+    // Apply constraints specific to rectangles
+    applyRectangleConstraints(shape) {
+        // Add any rectangle-specific constraints here if needed
+        // For now, just ensure minimum dimensions (already done above)
+    }
+    
+    performRectangleResize(shape, deltaX, deltaY, constraints) {
+        // Store original values to calculate constrained values
+        const originalX = shape.x;
+        const originalY = shape.y;
+        const originalWidth = shape.width;
+        const originalHeight = shape.height;
+        
+        // Apply resize transformation
+        switch (this.resizeHandle) {
+            case 'nw': // top-left
+                shape.x += deltaX;
+                shape.y += deltaY;
+                shape.width -= deltaX;
+                shape.height -= deltaY;
+                break;
+            case 'ne': // top-right
+                shape.y += deltaY;
+                shape.width += deltaX;
+                shape.height -= deltaY;
+                break;
+            case 'sw': // bottom-left
+                shape.x += deltaX;
+                shape.width -= deltaX;
+                shape.height += deltaY;
+                break;
+            case 'se': // bottom-right
+                shape.width += deltaX;
+                shape.height += deltaY;
+                break;
+            case 'n': // top
+                shape.y += deltaY;
+                shape.height -= deltaY;
+                break;
+            case 's': // bottom
+                shape.height += deltaY;
+                break;
+            case 'w': // left
+                shape.x += deltaX;
+                shape.width -= deltaX;
+                break;
+            case 'e': // right
+                shape.width += deltaX;
+                break;
+        }
+        
+        // Apply constraints to width and height
+        const constrainedWidth = Math.max(constraints.minWidth, Math.min(constraints.maxWidth, shape.width));
+        const constrainedHeight = Math.max(constraints.minHeight, Math.min(constraints.maxHeight, shape.height));
+        
+        // If width or height was constrained, adjust position to prevent drift
+        if (shape.width !== constrainedWidth) {
+            if (this.resizeHandle.includes('w')) {
+                // When resizing from left, maintain right edge position
+                shape.x = originalX + originalWidth - constrainedWidth;
+            }
+            shape.width = constrainedWidth;
+        }
+        
+        if (shape.height !== constrainedHeight) {
+            if (this.resizeHandle.includes('n')) {
+                // When resizing from top, maintain bottom edge position
+                shape.y = originalY + originalHeight - constrainedHeight;
+            }
+            shape.height = constrainedHeight;
+        }
+    }
+    
+    performResizeForOtherShapes(canvasContext, element, deltaX, deltaY, currentX, currentY) {
+        if (element.type === 'shape') {
+            const shape = canvasContext.shapes[element.index];
+            
+            if (shape.type === 'circle') {
                 const constraints = this.getResizeConstraints('circle');
                 const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                const direction = deltaX > 0 || deltaY > 0 ? 1 : -1;
+                
+                // Determine direction based on resize handle position and mouse movement
+                let direction = 1;
+                if (this.resizeHandle) {
+                    // For corner handles, expand if moving away from circle center
+                    if (this.resizeHandle.includes('e')) {
+                        // East side handles - expand when moving right (positive deltaX)
+                        direction = deltaX > 0 ? 1 : -1;
+                    } else if (this.resizeHandle.includes('w')) {
+                        // West side handles - expand when moving left (negative deltaX)
+                        direction = deltaX < 0 ? 1 : -1;
+                    } else if (this.resizeHandle.includes('s')) {
+                        // South side handles - expand when moving down (positive deltaY)
+                        direction = deltaY > 0 ? 1 : -1;
+                    } else if (this.resizeHandle.includes('n')) {
+                        // North side handles - expand when moving up (negative deltaY)
+                        direction = deltaY < 0 ? 1 : -1;
+                    }
+                }
+                
                 const newRadius = shape.radius + direction * distance * 0.1;
                 shape.radius = Math.max(constraints.minRadius || 5, Math.min(constraints.maxRadius || 500, newRadius));
             } else if (shape.type === 'line' || shape.type === 'arrow') {
@@ -7846,6 +8242,7 @@ class CanvasMaker {
         
         // Update HTML component size in real-time during resize for React components
         if (element.type === 'shape' && canvasContext.shapes[element.index].type === 'reactComponent') {
+            console.log(`[RESIZE-TRIGGER] Real-time HTML update for ${canvasContext.shapes[element.index].id} at ${Date.now()}`);
             this.updateReactComponentHTML(canvasContext.shapes[element.index]);
         }
     }
@@ -8072,8 +8469,8 @@ if (typeof module !== 'undefined' && module.exports) {
     window.CanvasMaker = CanvasMaker;
 }
 
-// Initialize the app when the DOM is loaded (only if running standalone)
-if (typeof document !== 'undefined' && typeof module === 'undefined') {
+// Initialize the app when the DOM is loaded (only if running standalone and not in a test environment)
+if (typeof document !== 'undefined' && typeof module === 'undefined' && !document.querySelector('[data-test-page]')) {
     document.addEventListener('DOMContentLoaded', () => {
         window.canvasMaker = new CanvasMaker();
     });

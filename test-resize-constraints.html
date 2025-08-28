@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-test-page>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -106,20 +106,27 @@
             <button onclick="testAbsoluteLimit()">Test Absolute Maximum Limit</button>
             <button onclick="configureSettings()">Configure Content Settings</button>
             <button onclick="disableCaps()">Disable Content Analysis Caps</button>
+            <button onclick="testNavigationHeightFix()">Test Navigation Height Fix (v1.8.7)</button>
             <button onclick="checkConstraints()">Check Component Constraints</button>
             <button onclick="canvas.clear()">Clear Canvas</button>
             
             <div class="info">
-                <strong>v1.8.2 Features:</strong><br>
-                1. <strong>Auto-size components</strong> - Don't specify width/height, auto-sizes to content (max 375×650px)
-                2. <strong>Configurable buffer</strong> - Default 10px buffer beyond content, can be changed
-                3. <strong>Absolute maximum limits</strong> - Even manual constraints capped at content × 3
-                4. <strong>Default size cap</strong> - Auto-sized components capped at default size (375×650px)
+                <strong>v1.8.7 Features:</strong><br>
+                1. <strong>Standalone HTML Components</strong> - HTML components no longer piggyback on rectangle logic
+                2. <strong>Navigation Height Fix</strong> - Navigation bars from outer apps no longer capped at 70px
+                3. <strong>Flexible Constraints</strong> - HTML components use content-aware constraints without rigid defaults
+                4. <strong>Cleaner Architecture</strong> - Dedicated rendering and hit detection for HTML components
+                <br><br>
+                <strong>Previous Features (v1.8.2-1.8.6):</strong><br>
+                • Auto-size components with configurable caps and buffers
+                • Structural HTML analysis with smart navigation detection
+                • Content stability during resize operations
+                • Smart conditional resizing based on content vs defaults
                 <br><br>
                 <strong>Instructions:</strong><br>
+                • Click "Test Navigation Height Fix" to test the v1.8.7 improvement
                 • Try "Add Auto-Size Component" to see automatic content sizing
                 • Use "Configure Content Settings" to change buffer and limits
-                • "Test Absolute Maximum Limit" shows how manual constraints are capped
             </div>
         </div>
         
@@ -133,20 +140,58 @@
 
     <script src="canvas.js"></script>
     <script>
-        // Initialize CanvasMaker
-        const canvas = new CanvasMaker('#canvas-container', {
-            width: 1200,
-            height: 600,
-            toolbarPosition: 'top-left'
-        });
-        
-        // Switch to select tool by default
-        canvas.currentTool = 'select';
-        
+        // Initialize variables first
+        let canvas;
         let componentCount = 0;
         let mobileComponent = null;
         
+        // Initialize CanvasMaker after DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.getElementById('canvas-container');
+            if (!container) {
+                logResult('❌ Canvas container not found!');
+                return;
+            }
+            
+            logResult('✅ Container found, creating CanvasMaker...');
+            
+            try {
+                canvas = new CanvasMaker(container, {
+                    width: 1200,
+                    height: 600,
+                    toolbarPosition: 'top-left'
+                });
+                logResult('✅ CanvasMaker created successfully!');
+            } catch (error) {
+                logResult(`❌ Error creating CanvasMaker: ${error.message}`);
+                console.error('CanvasMaker creation error:', error);
+                return;
+            }
+            
+            // Switch to select tool by default
+            canvas.currentTool = 'select';
+            
+            // Monitor resize events
+            let lastLogTime = 0;
+            canvas.on('beforeResize', (data) => {
+                // Throttle logging to avoid spam during drag
+                const now = Date.now();
+                if (now - lastLogTime > 500) {
+                    logResult(`Resizing component: ${data.element?.type || 'unknown'}`);
+                    lastLogTime = now;
+                }
+            });
+            
+            // Initial instructions
+            logResult('Canvas initialized. Add HTML components and test resize constraints.');
+            logResult('Select a component and drag the resize handles to test the content size + 10px limit.');
+        });
+        
         function addSmallComponent() {
+            if (!canvas) {
+                logResult('❌ Canvas not initialized yet. Please wait...');
+                return;
+            }
             componentCount++;
             const content = `
                 <div class="test-content">
@@ -651,6 +696,108 @@
             logResult(`🧪 Now content can be any size without caps - create components to test`);
         }
         
+        function testNavigationHeightFix() {
+            if (!canvas) {
+                logResult('❌ Canvas not initialized yet. Please wait...');
+                return;
+            }
+            componentCount++;
+            logResult(`🧪 Testing Navigation Height Fix (v1.8.7)...`);
+            
+            // Create a navigation bar like one that would come from the outer app
+            // This simulates the case where outer app creates navigation with specific dimensions
+            const navHTML = `
+                <style>
+                    .nav-bar {
+                        background: #1a1a1a;
+                        padding: 12px 20px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        border-radius: 8px;
+                        width: 100%;
+                        box-sizing: border-box;
+                    }
+                    .nav-logo {
+                        color: #E50914;
+                        font-size: 24px;
+                        font-weight: bold;
+                        text-decoration: none;
+                    }
+                    .nav-links {
+                        display: flex;
+                        gap: 24px;
+                        list-style: none;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    .nav-link {
+                        color: white;
+                        text-decoration: none;
+                        font-size: 16px;
+                        transition: color 0.3s;
+                    }
+                    .nav-link:hover {
+                        color: #ccc;
+                    }
+                </style>
+                <div class="nav-bar">
+                    <a href="#" class="nav-logo">MyApp</a>
+                    <ul class="nav-links">
+                        <li><a href="#" class="nav-link">Dashboard</a></li>
+                        <li><a href="#" class="nav-link">Projects</a></li>
+                        <li><a href="#" class="nav-link">Settings</a></li>
+                        <li><a href="#" class="nav-link">Profile</a></li>
+                    </ul>
+                </div>
+            `;
+            
+            // Simulate outer app creating navigation with small initial height (like 70px)
+            // This was the problematic case where navigation got locked at 70px
+            const shape = canvas.addReactComponentWithHTML(
+                50,
+                50,
+                500, // Width: 500px 
+                70,  // Height: 70px (the problematic small height)
+                navHTML,
+                { 
+                    id: `nav-height-fix-test-${componentCount}`,
+                    backgroundColor: 'transparent'
+                }
+            );
+            
+            logResult(`✅ Created navigation component with initial size 500×70px`);
+            logResult(`📏 Component ID: ${shape.id}`);
+            logResult(`🎯 Expected behavior:`);
+            logResult(`   • Component should display at initial size (500×70px)`);
+            logResult(`   • But should be RESIZABLE beyond 70px height`);
+            logResult(`   • No more artificial height locking!`);
+            logResult(`🧪 Try manually resizing this component vertically - it should work!`);
+            
+            // Test resize constraints after content loads
+            setTimeout(() => {
+                const debugShape = canvas.activeCanvasContext.shapes.find(s => s.id === `nav-height-fix-test-${componentCount}`);
+                if (debugShape && debugShape.overflowInfo) {
+                    const contentHeight = debugShape.overflowInfo.scrollHeight;
+                    const initialHeight = debugShape.requestedHeight;
+                    const minimumAllowedHeight = Math.max(contentHeight, initialHeight);
+                    const buffer = canvas.options.contentResizeBuffer || 10;
+                    const paddingBuffer = 20;
+                    const expectedMaxHeight = minimumAllowedHeight + buffer + paddingBuffer;
+                    
+                    logResult(`🔍 Constraint Analysis:`);
+                    logResult(`   • Content height: ${contentHeight}px`);
+                    logResult(`   • Initial height: ${initialHeight}px`);
+                    logResult(`   • Minimum allowed: ${minimumAllowedHeight}px`);
+                    logResult(`   • Expected max resize: ${Math.round(expectedMaxHeight)}px`);
+                    logResult(`   • OLD v1.8.6 behavior: Would be locked at ${initialHeight}px ❌`);
+                    logResult(`   • NEW v1.8.7 behavior: Can resize to ${Math.round(expectedMaxHeight)}px ✅`);
+                } else {
+                    logResult(`⏳ Waiting for content measurement...`);
+                }
+            }, 500);
+        }
+        
         function checkConstraints() {
             const shapes = canvas.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
             
@@ -678,24 +825,9 @@
             results.scrollTop = results.scrollHeight;
         }
         
-        // Monitor resize events
-        let lastLogTime = 0;
-        canvas.on('beforeResize', (data) => {
-            // Throttle logging to avoid spam during drag
-            const now = Date.now();
-            if (now - lastLogTime > 500) {
-                logResult(`Resizing component: ${data.element?.type || 'unknown'}`);
-                lastLogTime = now;
-            }
-        });
-        
         // Ensure page scrolling is always enabled
         document.body.style.overflow = 'auto';
         document.documentElement.style.overflow = 'auto';
-        
-        // Initial instructions
-        logResult('Canvas initialized. Add HTML components and test resize constraints.');
-        logResult('Select a component and drag the resize handles to test the content size + 10px limit.');
     </script>
 </body>
 </html>

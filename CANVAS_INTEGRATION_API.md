@@ -2,7 +2,41 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Recent Updates (v1.8.6)
+## Recent Updates (v1.8.7)
+
+### ✨ Standalone HTML Component System
+
+**Complete separation of HTML components from rectangle logic** - HTML components are now treated as first-class entities rather than rectangles with HTML content.
+
+#### Key Changes
+
+- **🔧 Dedicated HTML Component Rendering**: HTML components no longer piggyback on rectangle rendering logic  
+- **🎯 Improved Navigation Height Handling**: Navigation bars from outer apps no longer get capped at 70px
+- **⚡ Cleaner Architecture**: Simplified hit detection and rendering pipeline
+- **🛠️ Flexible Resize Constraints**: HTML components use content-aware constraints instead of rigid defaults
+
+#### Navigation Bar Fix
+
+Previously, navigation bars created by outer apps were incorrectly constrained by the 650px height threshold, often getting locked at ~70px. Now they resize properly:
+
+```javascript
+// Navigation from outer app - now resizes correctly  
+const navComponent = canvas.addReactComponentWithHTML(x, y, width, height, navHTML);
+// ✅ Height can now resize beyond initial size
+// ✅ No more artificial 70px cap  
+// ✅ Proper content-aware constraints
+```
+
+#### Technical Details
+
+- **Rendering**: `renderHTMLComponent()` method handles HTML-specific rendering separate from rectangles
+- **Hit Detection**: Dedicated `isHTMLComponentHit()` method for precise interaction
+- **Constraints**: `performHTMLComponentResize()` uses content-aware logic without global thresholds
+- **Flexibility**: HTML components can resize based on content size + initial size, whichever is larger
+
+---
+
+## Previous Updates (v1.8.6)
 
 ### Enhanced Content Analysis & Resize Flexibility  
 - ✅ **Structural HTML analysis** - Intelligent sizing based on element composition (paragraphs, list items, forms) rather than hardcoded component types
