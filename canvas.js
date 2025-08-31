@@ -171,6 +171,10 @@ class CanvasMaker {
         this.currentNestedCanvasId = null;
         this.nestedCanvasData = new Map(); // Store individual nested canvas data
         
+        // Unified layering system for HTML and canvas elements
+        this.canvasLayers = null; // Map of z-index -> elements for that layer
+        this.additionalCanvasLayers = null; // Map of z-index -> {canvas, ctx} for additional layers
+        
         // React component registration system
         this.externalComponents = new Map(); // Store external React components
         this.componentCallbacks = {
@@ -858,8 +862,7 @@ class CanvasMaker {
         // Register component for canvas-based rendering and interaction
         this.registerCanvasComponent(shape);
         
-        // Trigger redraw to show the component
-        this.redrawCanvas();
+        // Component will be rendered on next redraw
         
         // Return the shape for external reference
         return shape;
@@ -1107,6 +1110,7 @@ class CanvasMaker {
         // Only auto-size if width or height was not provided
         const needsAutoSizing = width === null || height === null;
         
+        
         const shape = {
             type: 'reactComponent',
             id: options.id || Date.now() + Math.random(),
@@ -1128,15 +1132,14 @@ class CanvasMaker {
         // Add to active canvas context
         this.activeCanvasContext.shapes.push(shape);
         
-        // Trigger redraw to create and position the HTML element
-        this.redrawCanvas();
+        // Element will be positioned on next redraw
         
         // Apply constraints immediately after measurement completes
         // This ensures initial size respects content bounds even with explicit dimensions
         setTimeout(() => {
             if (shape.overflowInfo) {
                 this.applyHTMLComponentConstraints(shape);
-                this.redrawCanvas();
+                // Redraw will happen automatically
             }
         }, 100);
         
@@ -2491,6 +2494,16 @@ class CanvasMaker {
             zoom: camera.zoom,
             transform: transform
         };
+        
+        // Update additional canvas layer CSS custom properties
+        if (this.additionalCanvasLayers) {
+            this.additionalCanvasLayers.forEach((layer) => {
+                layer.canvas.style.setProperty('--camera-x', camera.x);
+                layer.canvas.style.setProperty('--camera-y', camera.y);
+                layer.canvas.style.setProperty('--camera-zoom', camera.zoom);
+                layer.canvas.style.setProperty('--camera-transform', transform);
+            });
+        }
     }
     
     // Camera Constraints API
@@ -2726,7 +2739,7 @@ class CanvasMaker {
             // If not already selected, select the element first
             if (!isAlreadySelected) {
                 this.selectedElements = [this.hoveredElement];
-                this.redrawCanvas();
+                // Redraw will happen in drag loop
             }
             
             // Start dragging immediately regardless of current tool
@@ -3379,8 +3392,7 @@ class CanvasMaker {
                     return false; // Allow HTML element to handle the click
                 } else {
                     // console.log(`[REACT-CLICK] Component ${shape.id} selected for dragging/manipulation`);
-                    // Trigger re-render to show selection
-                    this.redrawCanvas();
+                    // Selection will be shown on next redraw
                     return true; // We handled the click for selection
                 }
             }
@@ -3543,18 +3555,28 @@ class CanvasMaker {
         // Layer management shortcuts
         if (isModifierPressed && e.key === ']' && this.selectedElements.length > 0) {
             e.preventDefault();
+            let needsRedraw = false;
             this.selectedElements.forEach(element => {
-                this.bringToFront(element);
+                if (this.bringToFront(element)) {
+                    needsRedraw = true;
+                }
             });
-            this.redraw();
+            if (needsRedraw) {
+                this.redrawCanvas();
+            }
         }
         
         if (isModifierPressed && e.key === '[' && this.selectedElements.length > 0) {
             e.preventDefault();
+            let needsRedraw = false;
             this.selectedElements.forEach(element => {
-                this.sendToBack(element);
+                if (this.sendToBack(element)) {
+                    needsRedraw = true;
+                }
             });
-            this.redraw();
+            if (needsRedraw) {
+                this.redrawCanvas();
+            }
         }
         
         // Duplicate shortcut
@@ -3563,7 +3585,7 @@ class CanvasMaker {
             this.selectedElements.forEach(element => {
                 this.duplicateElement(element);
             });
-            this.redraw();
+            this.redrawCanvas();
         }
     }
     
@@ -3778,12 +3800,14 @@ class CanvasMaker {
     }
     
     handleContextMenuAction(action, element) {
+        let needsRedraw = true;
+        
         switch (action) {
             case 'bring-to-front':
-                this.bringToFront(element);
+                needsRedraw = this.bringToFront(element);
                 break;
             case 'send-to-back':
-                this.sendToBack(element);
+                needsRedraw = this.sendToBack(element);
                 break;
             case 'duplicate':
                 this.duplicateElement(element);
@@ -3792,18 +3816,28 @@ class CanvasMaker {
                 this.deleteElement(element);
                 break;
         }
-        this.redraw();
+        
+        // Only redraw if we're not dealing with just HTML component reordering
+        if (needsRedraw) {
+            this.redrawCanvas();
+        }
     }
     
     bringToFront(element) {
+        console.log('bringToFront called with:', element);
         const shapes = this.activeCanvasContext.shapes;
+        let needsCanvasRedraw = true;
         
         if (element.type === 'shape') {
             const shape = shapes[element.index];
             if (shape) {
-                // Remove from current position and add to end (front)
                 shapes.splice(element.index, 1);
                 shapes.push(shape);
+                
+                // For HTML components, avoid canvas redraw
+                if (shape.type === 'reactComponent') {
+                    needsCanvasRedraw = false;
+                }
             }
         } else if (element.type === 'text') {
             // For text elements, we need to work with the texts array
@@ -3823,19 +3857,30 @@ class CanvasMaker {
             }
         }
         
+        // Always update unified layering system after any reordering
+        this.updateHTMLComponentZIndices();
+        
         // Clear selection to avoid index issues
         this.selectedElements = [];
+        
+        // Always trigger redraw for layered rendering
+        return true;
     }
     
     sendToBack(element) {
         const shapes = this.activeCanvasContext.shapes;
+        let needsCanvasRedraw = true;
         
         if (element.type === 'shape') {
             const shape = shapes[element.index];
             if (shape) {
-                // Remove from current position and add to beginning (back)
                 shapes.splice(element.index, 1);
                 shapes.unshift(shape);
+                
+                // For HTML components, avoid canvas redraw
+                if (shape.type === 'reactComponent') {
+                    needsCanvasRedraw = false;
+                }
             }
         } else if (element.type === 'text') {
             const texts = this.activeCanvasContext.texts;
@@ -3853,8 +3898,14 @@ class CanvasMaker {
             }
         }
         
+        // Always update unified layering system after any reordering
+        this.updateHTMLComponentZIndices();
+        
         // Clear selection to avoid index issues
         this.selectedElements = [];
+        
+        // Always trigger redraw for layered rendering
+        return true;
     }
     
     duplicateElement(element) {
@@ -4021,7 +4072,7 @@ class CanvasMaker {
             // Create text input for editing
             this.createTextInput(textBox, clickedElement.index);
             
-            this.redrawCanvas();
+            // Text editor will trigger redraw when complete
         }
         // Check if user double-clicked on a nested canvas
         else if (clickedElement && clickedElement.type === 'nested-canvas') {
@@ -4910,7 +4961,7 @@ class CanvasMaker {
     }
     
     // Dedicated rendering for HTML components (no rectangle background)
-    renderHTMLComponent(ctx, htmlShape, isSelected = false, isPreviewSelected = false) {
+    renderHTMLComponent(ctx, htmlShape, isSelected = false, isPreviewSelected = false, shapeIndex = 0) {
         // HTML components are rendered via DOM elements, not canvas
         // This function handles any canvas-level decorations (selection indicators, etc.)
         
@@ -4931,6 +4982,10 @@ class CanvasMaker {
             if (isBeingResized || currentTransform !== expectedTransform) {
                 this.renderReactComponentHTML(htmlShape, this.activeCanvasContext.camera);
             }
+            
+            // Set z-index based on shape position in array
+            // Start at 100 to leave room for other UI elements
+            htmlElement.style.zIndex = (100 + shapeIndex).toString();
             
             // Update selection visual state - show orange border during preview selection
             const isInEditMode = this.editingComponentId === htmlShape.id;
@@ -5702,8 +5757,13 @@ class CanvasMaker {
         ctx.scale(camera.zoom, camera.zoom);                // Apply zoom
         ctx.translate(camera.x, camera.y);                  // Apply camera offset
         
-        // Draw paths
+        // Draw paths (only those on main layer)
         paths.forEach((path, index) => {
+            // Skip paths assigned to higher layers
+            if (path._layerZIndex && path._layerZIndex > 10) {
+                return;
+            }
+            
             const isHovered = hoveredElement && 
                              hoveredElement.type === 'path' && 
                              hoveredElement.index === index;
@@ -5740,9 +5800,7 @@ class CanvasMaker {
             ctx.stroke();
         }
         
-        // Draw shapes
-        // console.log(`[DRAW] Drawing ${shapes.length} shapes total`);
-        // console.log(`[DRAW] React components to draw:`, shapes.filter(s => s.type === 'reactComponent').map(s => s.id));
+        // Draw shapes (only those on main layer)
         shapes.forEach((shape, index) => {
             const isHovered = hoveredElement && 
                              hoveredElement.type === 'shape' && 
@@ -5752,10 +5810,15 @@ class CanvasMaker {
             const isPreviewSelected = previewSelectedElements && previewSelectedElements.some(sel => 
                               sel.type === 'shape' && sel.index === index);
             
-            // Skip HTML components - they'll be rendered separately
+            // For HTML components, just update z-index and skip canvas drawing
             if (shape.type === 'reactComponent') {
-                this.renderHTMLComponent(ctx, shape, isSelected, isPreviewSelected);
-                return; // Skip the rest of the rectangle rendering logic
+                this.renderHTMLComponent(ctx, shape, isSelected, isPreviewSelected, index);
+                return;
+            }
+            
+            // Skip canvas shapes assigned to higher layers
+            if (shape._layerZIndex && shape._layerZIndex > 10) {
+                return;
             }
             
             // Draw fill for shapes that have fillColor
@@ -5819,10 +5882,15 @@ class CanvasMaker {
             }
         });
         
-        // Draw texts
+        // Draw texts (only those on main layer)
         ctx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
         texts.forEach((textObj, index) => {
             if (textObj.isEditing) return; // Don't render text that's being edited
+            
+            // Skip texts assigned to higher layers
+            if (textObj._layerZIndex && textObj._layerZIndex > 10) {
+                return;
+            }
             
             const isHovered = hoveredElement && 
                              hoveredElement.type === 'text' && 
@@ -5920,8 +5988,7 @@ class CanvasMaker {
             ctx.restore();
         });
         
-        // Draw resize handles for selected elements (in world space)
-        this.drawResizeHandles(canvasContext);
+        // Don't draw resize handles here - they'll be drawn on the appropriate layer
         
         // Restore context before drawing UI elements
         ctx.restore();
@@ -5929,7 +5996,32 @@ class CanvasMaker {
         // Update HTML component positions and clean up removed ones
         if (canvasContext === this.activeCanvasContext) {
             this.cleanupHTMLComponents(shapes);
-            this.updateAllHTMLComponents(camera);
+            this.updateAllHTMLComponents(canvasContext.camera);
+            
+            // Render additional canvas layers for unified layering
+            if (this.canvasLayers && this.additionalCanvasLayers && !this.isRenderingLayers) {
+                this.isRenderingLayers = true;
+                try {
+                    this.canvasLayers.forEach((elements, layerZIndex) => {
+                        if (layerZIndex > 10 && this.additionalCanvasLayers.has(layerZIndex)) {
+                            const layer = this.additionalCanvasLayers.get(layerZIndex);
+                            this.renderElementsOnLayer(layer.ctx, elements, canvasContext);
+                        }
+                    });
+                } finally {
+                    this.isRenderingLayers = false;
+                }
+            }
+            
+            // Draw resize handles on main canvas after all layers
+            // Apply transform to draw handles in correct position
+            const { ctx, camera, canvas } = canvasContext;
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(camera.zoom, camera.zoom);
+            ctx.translate(camera.x, camera.y);
+            this.drawResizeHandles(canvasContext);
+            ctx.restore();
         }
     }
     
@@ -6726,6 +6818,7 @@ class CanvasMaker {
                     const contentWidth = contentWrapper.scrollWidth;
                     const contentHeight = contentWrapper.scrollHeight;
                     
+                    
                     // Calculate desired size based on content + buffer
                     const desiredWidth = contentWidth + buffer;
                     const desiredHeight = contentHeight + buffer;
@@ -6820,6 +6913,7 @@ class CanvasMaker {
                 transform-origin: top left;
                 margin: 0;
                 padding: 0;
+                box-sizing: border-box;
             `;
             stableContainer.innerHTML = shape.htmlContent;
             contentWrapper.appendChild(stableContainer);
@@ -6981,8 +7075,7 @@ class CanvasMaker {
         element.style.opacity = '1';
         
         
-        // Immediately redraw to hide resize handles
-        this.redrawCanvas();
+        // Resize handles will be hidden on next redraw
         
         // Listen for clicks outside to exit edit mode
         setTimeout(() => {
@@ -7047,8 +7140,7 @@ class CanvasMaker {
             }
         });
         
-        // Force a canvas redraw to ensure visual state is consistent
-        this.redrawCanvas();
+        // Visual state will be updated on next redraw
         
         // console.log(`[EDIT-EXIT] Forced state update and redraw`);
     }
@@ -8349,6 +8441,236 @@ class CanvasMaker {
         this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
     }
     
+    // Create additional canvas layers for unified layering
+    ensureCanvasLayers() {
+        if (!this.additionalCanvasLayers) {
+            this.additionalCanvasLayers = new Map();
+        }
+        
+        // Ensure main canvas has correct z-index
+        if (this.canvas) {
+            this.canvas.style.position = 'absolute';
+            this.canvas.style.top = '0';
+            this.canvas.style.left = '0';
+            this.canvas.style.zIndex = '10';
+        }
+        
+        // Get required z-indices from canvasLayers
+        if (this.canvasLayers) {
+            this.canvasLayers.forEach((_, zIndex) => {
+                if (zIndex > 10 && !this.additionalCanvasLayers.has(zIndex)) {
+                    // Create new canvas layer matching main canvas exactly
+                    const layerCanvas = document.createElement('canvas');
+                    
+                    // Set properties to exactly match main canvas
+                    layerCanvas.width = this.canvas.width;
+                    layerCanvas.height = this.canvas.height;
+                    
+                    // Position layer canvas exactly like main canvas
+                    const mainCanvasRect = this.canvas.getBoundingClientRect();
+                    const containerRect = this.container.getBoundingClientRect();
+                    
+                    layerCanvas.style.position = 'absolute';
+                    layerCanvas.style.top = `${mainCanvasRect.top - containerRect.top}px`;
+                    layerCanvas.style.left = `${mainCanvasRect.left - containerRect.left}px`;
+                    layerCanvas.style.width = `${mainCanvasRect.width}px`;
+                    layerCanvas.style.height = `${mainCanvasRect.height}px`;
+                    layerCanvas.style.background = 'transparent';
+                    layerCanvas.style.zIndex = zIndex.toString();
+                    layerCanvas.style.pointerEvents = 'none';
+                    layerCanvas.style.transform = 'none'; // Explicitly prevent transform inheritance
+                    layerCanvas.style.margin = '0';
+                    layerCanvas.style.padding = '0';
+                    layerCanvas.style.border = 'none';
+                    layerCanvas.className = 'additional-canvas-layer';
+                    
+                    const layerCtx = layerCanvas.getContext('2d');
+                    
+                    this.container.appendChild(layerCanvas);
+                    this.additionalCanvasLayers.set(zIndex, { canvas: layerCanvas, ctx: layerCtx });
+                    
+                }
+            });
+        }
+        
+        // Clean up unused canvas layers
+        if (this.additionalCanvasLayers) {
+            const requiredLayers = this.canvasLayers ? Array.from(this.canvasLayers.keys()) : [];
+            this.additionalCanvasLayers.forEach((layer, zIndex) => {
+                if (!requiredLayers.includes(zIndex)) {
+                    layer.canvas.remove();
+                    this.additionalCanvasLayers.delete(zIndex);
+                    console.log(`Removed unused canvas layer with z-index ${zIndex}`);
+                }
+            });
+        }
+    }
+    
+    // Update HTML component z-indices for unified layering with all canvas elements  
+    updateHTMLComponentZIndices() {
+        // Initialize canvasLayers map
+        this.canvasLayers = new Map();
+        
+        // Create unified ordering of all elements
+        const allElements = [];
+        
+        // Collect all elements in current order
+        this.activeCanvasContext.shapes.forEach((shape, index) => {
+            allElements.push({ type: 'shape', index, element: shape, isHTML: shape.type === 'reactComponent', originalIndex: index });
+        });
+        this.activeCanvasContext.texts.forEach((text, index) => {
+            allElements.push({ type: 'text', index, element: text, isHTML: false, originalIndex: index });
+        });
+        this.activeCanvasContext.paths.forEach((path, index) => {
+            allElements.push({ type: 'path', index, element: path, isHTML: false, originalIndex: index });
+        });
+        
+        // Assign z-indices and organize elements into layers
+        let zIndex = 11; // Start above main canvas (which is at 10)
+        let hasHTMLAbove = false;
+        
+        allElements.forEach((item, globalIndex) => {
+            if (item.isHTML) {
+                // HTML component gets z-index
+                const htmlElement = this.htmlComponents.get(item.element.id);
+                if (htmlElement) {
+                    htmlElement.style.zIndex = zIndex.toString();
+                }
+                hasHTMLAbove = true;
+            } else {
+                // Canvas element - check if it needs to be on a higher layer
+                if (hasHTMLAbove) {
+                    // This canvas element comes after an HTML component, needs higher layer
+                    item.element._layerZIndex = zIndex;
+                    
+                    // Add to canvasLayers map
+                    if (!this.canvasLayers.has(zIndex)) {
+                        this.canvasLayers.set(zIndex, []);
+                    }
+                    this.canvasLayers.get(zIndex).push(item);
+                } else {
+                    // This element stays on main canvas
+                    delete item.element._layerZIndex;
+                }
+            }
+            zIndex += 1;
+        });
+        
+        // Ensure main canvas stays at base level
+        if (this.canvas) {
+            this.canvas.style.zIndex = '10';
+        }
+        
+        // Ensure additional canvas layers exist for all required z-indices
+        this.ensureCanvasLayers();
+    }
+    
+    // Render canvas elements on specific layer
+    renderElementsOnLayer(layerCtx, elements, canvasContext) {
+        const { camera, selectedElements, previewSelectedElements, hoveredElement } = canvasContext;
+        
+        // Clear the layer
+        layerCtx.clearRect(0, 0, layerCtx.canvas.width, layerCtx.canvas.height);
+        
+        
+        // Apply exact same transforms as main canvas
+        layerCtx.save();
+        layerCtx.translate(layerCtx.canvas.width / 2, layerCtx.canvas.height / 2); // Center the canvas
+        layerCtx.scale(camera.zoom, camera.zoom);                                   // Apply zoom  
+        layerCtx.translate(camera.x, camera.y);                                     // Apply camera offset
+        
+        elements.forEach((item) => {
+            const element = item.element;
+            const isHovered = hoveredElement && hoveredElement.type === item.type && hoveredElement.index === item.originalIndex;
+            const isSelected = selectedElements.some(sel => sel.type === item.type && sel.index === item.originalIndex);
+            const isPreviewSelected = previewSelectedElements && previewSelectedElements.some(sel => sel.type === item.type && sel.index === item.originalIndex);
+            
+            if (item.type === 'path') {
+                // Draw path
+                layerCtx.strokeStyle = isSelected ? '#ef4444' : (isHovered ? '#3b82f6' : (isPreviewSelected ? '#f97316' : '#333'));
+                layerCtx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : 2;
+                
+                if (element.length > 0) {
+                    layerCtx.beginPath();
+                    layerCtx.moveTo(element[0].x, element[0].y);
+                    for (let i = 1; i < element.length; i++) {
+                        layerCtx.lineTo(element[i].x, element[i].y);
+                    }
+                    layerCtx.stroke();
+                }
+            } else if (item.type === 'text') {
+                if (element.isEditing) return;
+                
+                // Draw text
+                layerCtx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
+                
+                // Draw text box background if selected/hovered
+                if (isSelected || isHovered || isPreviewSelected) {
+                    layerCtx.fillStyle = isSelected ? 'rgba(239, 68, 68, 0.1)' : (isHovered ? 'rgba(59, 130, 246, 0.1)' : 'rgba(249, 115, 22, 0.1)');
+                    const metrics = layerCtx.measureText(element.text);
+                    const padding = 4;
+                    layerCtx.fillRect(element.x - padding, element.y - 20 - padding, metrics.width + 2 * padding, 24 + 2 * padding);
+                }
+                
+                layerCtx.fillStyle = isSelected ? '#ef4444' : (isHovered ? '#3b82f6' : (isPreviewSelected ? '#f97316' : (element.color || '#333')));
+                layerCtx.fillText(element.text, element.x, element.y);
+            } else if (item.type === 'shape' && element.type !== 'reactComponent') {
+                // Draw shape
+                
+                if (element.fillColor && element.fillColor !== 'transparent') {
+                    layerCtx.fillStyle = element.fillColor;
+                    if (element.type === 'rectangle') {
+                        layerCtx.fillRect(element.x, element.y, element.width, element.height);
+                    } else if (element.type === 'circle') {
+                        layerCtx.beginPath();
+                        layerCtx.arc(element.x, element.y, element.radius, 0, 2 * Math.PI);
+                        layerCtx.fill();
+                    }
+                }
+                
+                // Draw stroke
+                layerCtx.strokeStyle = isSelected ? '#ef4444' : (isHovered ? '#3b82f6' : (isPreviewSelected ? '#f97316' : (element.strokeColor || '#333')));
+                layerCtx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : 2;
+                
+                layerCtx.beginPath();
+                if (element.type === 'rectangle') {
+                    layerCtx.strokeRect(element.x, element.y, element.width, element.height);
+                } else if (element.type === 'circle') {
+                    layerCtx.arc(element.x, element.y, element.radius, 0, 2 * Math.PI);
+                    layerCtx.stroke();
+                } else if (element.type === 'line') {
+                    layerCtx.moveTo(element.x1, element.y1);
+                    layerCtx.lineTo(element.x2, element.y2);
+                    layerCtx.stroke();
+                } else if (element.type === 'arrow') {
+                    // Draw arrow line
+                    layerCtx.moveTo(element.x1, element.y1);
+                    layerCtx.lineTo(element.x2, element.y2);
+                    layerCtx.stroke();
+                    
+                    // Draw arrowhead
+                    const arrowSize = element.arrowSize || 10;
+                    const angle = Math.atan2(element.y2 - element.y1, element.x2 - element.x1);
+                    
+                    layerCtx.beginPath();
+                    layerCtx.moveTo(element.x2, element.y2);
+                    layerCtx.lineTo(
+                        element.x2 - arrowSize * Math.cos(angle - Math.PI / 6),
+                        element.y2 - arrowSize * Math.sin(angle - Math.PI / 6)
+                    );
+                    layerCtx.moveTo(element.x2, element.y2);
+                    layerCtx.lineTo(
+                        element.x2 - arrowSize * Math.cos(angle + Math.PI / 6),
+                        element.y2 - arrowSize * Math.sin(angle + Math.PI / 6)
+                    );
+                    layerCtx.stroke();
+                }
+            }
+        });
+        
+        layerCtx.restore();
+    }
+
     emit(event, data) {
         if (!this.eventListeners[event]) return;
         this.eventListeners[event].forEach(callback => {
