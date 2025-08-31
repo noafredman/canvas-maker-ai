@@ -1132,7 +1132,8 @@ class CanvasMaker {
         // Add to active canvas context
         this.activeCanvasContext.shapes.push(shape);
         
-        // Element will be positioned on next redraw
+        // Trigger immediate redraw to position element
+        this.redrawCanvas();
         
         // Apply constraints immediately after measurement completes
         // This ensures initial size respects content bounds even with explicit dimensions
@@ -5098,7 +5099,8 @@ class CanvasMaker {
             const expectedTransform = this.calculateHTMLTransform(htmlShape, this.activeCanvasContext.camera);
             
             // Only update DOM if transform actually changed or if being actively resized
-            if (isBeingResized || currentTransform !== expectedTransform) {
+            // Force render if element has no transform (newly created)
+            if (isBeingResized || currentTransform !== expectedTransform || !currentTransform) {
                 this.renderReactComponentHTML(htmlShape, this.activeCanvasContext.camera);
             }
             
@@ -6117,6 +6119,11 @@ class CanvasMaker {
             this.cleanupHTMLComponents(shapes);
             this.updateAllHTMLComponents(canvasContext.camera);
             
+            // Force HTML component visibility update
+            this.htmlComponents.forEach((element, id) => {
+                element.style.display = 'block';
+            });
+            
             // Render additional canvas layers for unified layering
             if (this.canvasLayers && this.additionalCanvasLayers && !this.isRenderingLayers) {
                 this.isRenderingLayers = true;
@@ -6847,6 +6854,16 @@ class CanvasMaker {
             element = this.createHTMLElement(shape);
             if (!element) return;
             this.htmlComponents.set(shape.id, element);
+            
+            // Update layering system to ensure proper z-indices and layers
+            this.updateHTMLComponentZIndices();
+            
+            // Force immediate positioning for new elements
+            this.updateHTMLElementTransform(element, shape, camera);
+            
+            // Force immediate call to updateAllHTMLComponents
+            this.updateAllHTMLComponents(camera);
+            return; // Skip duplicate transform call below
         }
         
         // Update element position and size based on canvas transform
@@ -7009,23 +7026,7 @@ class CanvasMaker {
             } else {
                 // Not in edit mode - make transparent so clicks go to canvas
                 contentWrapper.style.pointerEvents = 'none';  
-                
-                // Allow scrolling even when not in edit mode
-                const hasHorizontalOverflow = contentWrapper.scrollWidth > contentWrapper.clientWidth;
-                const hasVerticalOverflow = contentWrapper.scrollHeight > contentWrapper.clientHeight;
-                
-                if (hasHorizontalOverflow || hasVerticalOverflow) {
-                    let overflowStyle = 'auto';
-                    if (hasHorizontalOverflow && !hasVerticalOverflow) {
-                        overflowStyle = 'auto hidden';
-                    } else if (!hasHorizontalOverflow && hasVerticalOverflow) {
-                        overflowStyle = 'hidden auto';
-                    }
-                    contentWrapper.style.overflow = overflowStyle;
-                } else {
-                    contentWrapper.style.overflow = 'hidden';
-                }
-                
+                contentWrapper.style.overflow = 'auto'; // Always allow scrolling
                 contentWrapper.style.border = 'none';
                 element.style.opacity = '0.95'; // Slightly transparent when not in edit mode
                 
@@ -7154,6 +7155,7 @@ class CanvasMaker {
         
         // Ensure element is visible
         element.style.display = 'block';
+        
         
         // Only allow pointer events if in edit mode
         if (this.editingComponentId === shape.id) {

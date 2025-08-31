@@ -2,7 +2,7 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Current Version: v1.8.10
+## Current Version: v1.8.11
 
 ### HTML Component Features
 
