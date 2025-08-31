@@ -2,7 +2,7 @@
 
 This document provides a complete guide for integrating the Canvas Maker system into other applications as a tldraw replacement.
 
-## Current Version: v1.8.9
+## Current Version: v1.8.10
 
 ### HTML Component Features
 
@@ -12,6 +12,9 @@ This document provides a complete guide for integrating the Canvas Maker system 
 - **Selection**: Components show immediate visual feedback during selection
 - **Resizing**: Viewport-style resizing where content stays fixed
 - **Constraints**: Pixel-perfect sizing with zero buffer by default
+- **Content Overflow**: Automatic scrollbars when content exceeds component bounds
+  - Works in both edit and selection modes
+  - Maintains proper component boundaries
 - **Unified Layering**: HTML components and canvas elements can be layered together
   - Bring to front/back operations work across both types
   - Canvas elements can appear above HTML components when brought to front

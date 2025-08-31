@@ -3579,6 +3579,33 @@ class CanvasMaker {
             }
         }
         
+        // Single-step layer management shortcuts
+        if (isModifierPressed && e.shiftKey && e.key === ']' && this.selectedElements.length > 0) {
+            e.preventDefault();
+            let needsRedraw = false;
+            this.selectedElements.forEach(element => {
+                if (this.bringForward(element)) {
+                    needsRedraw = true;
+                }
+            });
+            if (needsRedraw) {
+                this.redrawCanvas();
+            }
+        }
+        
+        if (isModifierPressed && e.shiftKey && e.key === '[' && this.selectedElements.length > 0) {
+            e.preventDefault();
+            let needsRedraw = false;
+            this.selectedElements.forEach(element => {
+                if (this.sendBackward(element)) {
+                    needsRedraw = true;
+                }
+            });
+            if (needsRedraw) {
+                this.redrawCanvas();
+            }
+        }
+        
         // Duplicate shortcut
         if (isModifierPressed && e.key === 'd' && this.selectedElements.length > 0) {
             e.preventDefault();
@@ -3752,6 +3779,14 @@ class CanvasMaker {
                 <span>Bring to Front</span>
                 <span class="context-menu-shortcut">Ctrl+]</span>
             </div>
+            <div class="context-menu-item" data-action="bring-forward">
+                <span>Bring Forward</span>
+                <span class="context-menu-shortcut">Ctrl+Shift+]</span>
+            </div>
+            <div class="context-menu-item" data-action="send-backward">
+                <span>Send Backward</span>
+                <span class="context-menu-shortcut">Ctrl+Shift+[</span>
+            </div>
             <div class="context-menu-item" data-action="send-to-back">
                 <span>Send to Back</span>
                 <span class="context-menu-shortcut">Ctrl+[</span>
@@ -3805,6 +3840,12 @@ class CanvasMaker {
         switch (action) {
             case 'bring-to-front':
                 needsRedraw = this.bringToFront(element);
+                break;
+            case 'bring-forward':
+                needsRedraw = this.bringForward(element);
+                break;
+            case 'send-backward':
+                needsRedraw = this.sendBackward(element);
                 break;
             case 'send-to-back':
                 needsRedraw = this.sendToBack(element);
@@ -3895,6 +3936,84 @@ class CanvasMaker {
             if (path) {
                 paths.splice(element.index, 1);
                 paths.unshift(path);
+            }
+        }
+        
+        // Always update unified layering system after any reordering
+        this.updateHTMLComponentZIndices();
+        
+        // Clear selection to avoid index issues
+        this.selectedElements = [];
+        
+        // Always trigger redraw for layered rendering
+        return true;
+    }
+    
+    bringForward(element) {
+        const shapes = this.activeCanvasContext.shapes;
+        let needsCanvasRedraw = true;
+        
+        if (element.type === 'shape') {
+            const shape = shapes[element.index];
+            if (shape && element.index < shapes.length - 1) {
+                // Swap with next element (move forward by 1)
+                [shapes[element.index], shapes[element.index + 1]] = [shapes[element.index + 1], shapes[element.index]];
+                
+                // For HTML components, avoid canvas redraw
+                if (shape.type === 'reactComponent') {
+                    needsCanvasRedraw = false;
+                }
+            }
+        } else if (element.type === 'text') {
+            const texts = this.activeCanvasContext.texts;
+            const text = texts[element.index];
+            if (text && element.index < texts.length - 1) {
+                [texts[element.index], texts[element.index + 1]] = [texts[element.index + 1], texts[element.index]];
+            }
+        } else if (element.type === 'path') {
+            const paths = this.activeCanvasContext.paths;
+            const path = paths[element.index];
+            if (path && element.index < paths.length - 1) {
+                [paths[element.index], paths[element.index + 1]] = [paths[element.index + 1], paths[element.index]];
+            }
+        }
+        
+        // Always update unified layering system after any reordering
+        this.updateHTMLComponentZIndices();
+        
+        // Clear selection to avoid index issues
+        this.selectedElements = [];
+        
+        // Always trigger redraw for layered rendering
+        return true;
+    }
+    
+    sendBackward(element) {
+        const shapes = this.activeCanvasContext.shapes;
+        let needsCanvasRedraw = true;
+        
+        if (element.type === 'shape') {
+            const shape = shapes[element.index];
+            if (shape && element.index > 0) {
+                // Swap with previous element (move backward by 1)
+                [shapes[element.index], shapes[element.index - 1]] = [shapes[element.index - 1], shapes[element.index]];
+                
+                // For HTML components, avoid canvas redraw
+                if (shape.type === 'reactComponent') {
+                    needsCanvasRedraw = false;
+                }
+            }
+        } else if (element.type === 'text') {
+            const texts = this.activeCanvasContext.texts;
+            const text = texts[element.index];
+            if (text && element.index > 0) {
+                [texts[element.index], texts[element.index - 1]] = [texts[element.index - 1], texts[element.index]];
+            }
+        } else if (element.type === 'path') {
+            const paths = this.activeCanvasContext.paths;
+            const path = paths[element.index];
+            if (path && element.index > 0) {
+                [paths[element.index], paths[element.index - 1]] = [paths[element.index - 1], paths[element.index]];
             }
         }
         
@@ -6862,6 +6981,9 @@ class CanvasMaker {
                 contentWrapper.style.pointerEvents = 'auto';
                 element.style.opacity = '1';
                 
+                // Remove overflow hidden from outer element in edit mode
+                element.style.overflow = 'visible';
+                
                 // Enable scrolling if content overflows
                 const hasHorizontalOverflow = contentWrapper.scrollWidth > contentWrapper.clientWidth;
                 const hasVerticalOverflow = contentWrapper.scrollHeight > contentWrapper.clientHeight;
@@ -6887,9 +7009,29 @@ class CanvasMaker {
             } else {
                 // Not in edit mode - make transparent so clicks go to canvas
                 contentWrapper.style.pointerEvents = 'none';  
-                contentWrapper.style.overflow = 'hidden';
+                
+                // Allow scrolling even when not in edit mode
+                const hasHorizontalOverflow = contentWrapper.scrollWidth > contentWrapper.clientWidth;
+                const hasVerticalOverflow = contentWrapper.scrollHeight > contentWrapper.clientHeight;
+                
+                if (hasHorizontalOverflow || hasVerticalOverflow) {
+                    let overflowStyle = 'auto';
+                    if (hasHorizontalOverflow && !hasVerticalOverflow) {
+                        overflowStyle = 'auto hidden';
+                    } else if (!hasHorizontalOverflow && hasVerticalOverflow) {
+                        overflowStyle = 'hidden auto';
+                    }
+                    contentWrapper.style.overflow = overflowStyle;
+                } else {
+                    contentWrapper.style.overflow = 'hidden';
+                }
+                
                 contentWrapper.style.border = 'none';
                 element.style.opacity = '0.95'; // Slightly transparent when not in edit mode
+                
+                // Keep outer element overflow hidden to prevent content from extending beyond component bounds
+                element.style.overflow = 'hidden';
+                
                 // console.log(`[HTML-MODE] Component ${shape.id} set to SELECTION mode - clicks pass through`);
             }
         };
