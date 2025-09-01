@@ -100,6 +100,63 @@ canvas.on('beforeResize', (data) => {
 });
 ```
 
+### Element Styling API
+
+```javascript
+// Style text elements
+canvas.setTextStyle(textId, {
+    fontSize: 18,
+    fontFamily: 'Arial',
+    color: '#ff0000',
+    backgroundColor: '#f0f0f0',
+    borderColor: '#333',
+    borderWidth: 2,
+    borderStyle: 'solid', // 'solid', 'dashed', 'dotted'
+    textAlign: 'center',  // 'left', 'center', 'right'
+    fontWeight: 'bold',   // 'normal', 'bold'
+    fontStyle: 'italic'   // 'normal', 'italic'
+});
+
+// Style shape elements (rectangles, circles, lines, arrows)
+canvas.setShapeStyle(shapeId, {
+    fillColor: '#ff0000',
+    strokeColor: '#333333',
+    strokeWidth: 3,
+    strokeStyle: 'dashed', // 'solid', 'dashed', 'dotted'
+    opacity: 0.8,
+    borderRadius: 5 // For rectangles
+});
+
+// Style pen drawing paths
+canvas.setPathStyle(pathId, {
+    strokeColor: '#00ff00',
+    strokeWidth: 4,
+    strokeStyle: 'dotted',
+    opacity: 0.9
+});
+
+// Style nested canvas elements
+canvas.setNestedCanvasStyle(canvasId, {
+    backgroundColor: '#f8f9fa',
+    borderColor: '#dee2e6',
+    borderWidth: 2,
+    borderStyle: 'solid',
+    opacity: 1.0
+});
+
+// Get current styles
+const textStyle = canvas.getTextStyle(textId);
+const shapeStyle = canvas.getShapeStyle(shapeId);
+
+// Get selected elements for styling
+const selected = canvas.getSelectedElements();
+selected.forEach(element => {
+    if (element.type === 'text') {
+        canvas.setTextStyle(element.id, { color: '#ff0000' });
+    }
+});
+```
+
 ### Advanced Features
 
 #### Scaling Modes

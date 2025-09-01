@@ -3136,7 +3136,12 @@ class CanvasMaker {
         this.isDrawing = false;
         
         if (this.currentTool === 'pen' && !this.isDragging && !this.isResizing) {
-            this.paths.push([...this.currentPath]);
+            this.paths.push({
+                points: [...this.currentPath],
+                id: Date.now() + Math.random(),
+                strokeColor: '#333333',
+                strokeWidth: 2
+            });
             this.currentPath = [];
             
             // Auto-switch to select mode after drawing
@@ -3155,7 +3160,8 @@ class CanvasMaker {
                 x: this.startX,
                 y: this.startY,
                 width,
-                height
+                height,
+                id: Date.now() + Math.random()
             });
             // Clear preview coordinates
             this.previewStartX = undefined;
@@ -3184,7 +3190,8 @@ class CanvasMaker {
                 type: 'circle',
                 x: centerX,
                 y: centerY,
-                radius
+                radius,
+                id: Date.now() + Math.random()
             });
             // Clear preview coordinates
             this.previewStartX = undefined;
@@ -3210,7 +3217,8 @@ class CanvasMaker {
                 x2: pos.x,
                 y2: pos.y,
                 strokeColor: '#333333',
-                lineWidth: 2
+                lineWidth: 2,
+                id: Date.now() + Math.random()
             });
             // Clear preview coordinates
             this.previewStartX = undefined;
@@ -3237,7 +3245,8 @@ class CanvasMaker {
                 y2: pos.y,
                 strokeColor: '#333333',
                 lineWidth: 2,
-                arrowSize: 10
+                arrowSize: 10,
+                id: Date.now() + Math.random()
             });
             // Clear preview coordinates
             this.previewStartX = undefined;
@@ -5761,7 +5770,8 @@ class CanvasMaker {
         
         // Check paths
         paths.forEach((path, index) => {
-            const inSelection = path.some(point => 
+            const points = path.points || path; // Support both new object format and legacy array format
+            const inSelection = points.some(point => 
                 point.x >= minX && point.x <= maxX && 
                 point.y >= minY && point.y <= maxY
             );
@@ -5919,20 +5929,37 @@ class CanvasMaker {
             const isPreviewSelected = previewSelectedElements && previewSelectedElements.some(sel => 
                               sel.type === 'path' && sel.index === index);
             
-            // Priority: Selected (red) > Hovered (blue) > Preview Selected (orange) > Default (gray)
+            // Support both new object format and legacy array format
+            const points = path.points || path;
+            const pathStrokeColor = path.strokeColor || '#333';
+            const pathStrokeWidth = path.strokeWidth || 2;
+            
+            // Priority: Selected (red) > Hovered (blue) > Preview Selected (orange) > Path's strokeColor > Default (gray)
             ctx.strokeStyle = isSelected ? '#ef4444' : 
                              (isHovered ? '#3b82f6' : 
-                             (isPreviewSelected ? '#f97316' : '#333'));
-            ctx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : 2;
+                             (isPreviewSelected ? '#f97316' : pathStrokeColor));
+            ctx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : pathStrokeWidth;
             
-            if (path.length > 0) {
+            // Apply stroke style if specified
+            if (path.strokeStyle === 'dashed') {
+                ctx.setLineDash([10, 5]);
+            } else if (path.strokeStyle === 'dotted') {
+                ctx.setLineDash([3, 3]);
+            } else {
+                ctx.setLineDash([]);
+            }
+            
+            if (points.length > 0) {
                 ctx.beginPath();
-                ctx.moveTo(path[0].x, path[0].y);
-                for (let i = 1; i < path.length; i++) {
-                    ctx.lineTo(path[i].x, path[i].y);
+                ctx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].y);
                 }
                 ctx.stroke();
             }
+            
+            // Reset line dash for next paths
+            ctx.setLineDash([]);
         });
         
         // Draw current path being drawn
@@ -5990,7 +6017,16 @@ class CanvasMaker {
                                  (isHovered ? '#3b82f6' : 
                                  (isPreviewSelected ? '#f97316' : 
                                  (shape.strokeColor || '#333')));
-                ctx.lineWidth = (isSelected || isHovered || isPreviewSelected) ? 3 : 2;
+                ctx.lineWidth = isSelected || isHovered || isPreviewSelected ? 3 : (shape.strokeWidth || 2);
+                
+                // Apply stroke style if specified
+                if (shape.strokeStyle === 'dashed') {
+                    ctx.setLineDash([10, 5]);
+                } else if (shape.strokeStyle === 'dotted') {
+                    ctx.setLineDash([3, 3]);
+                } else {
+                    ctx.setLineDash([]);
+                }
                 
                 ctx.beginPath();
                 if (shape.type === 'rectangle') {
@@ -6026,6 +6062,9 @@ class CanvasMaker {
                     );
                     ctx.stroke();
                 }
+                
+                // Reset line dash for next shapes
+                ctx.setLineDash([]);
             }
         });
         
@@ -6061,19 +6100,41 @@ class CanvasMaker {
                 ctx.strokeRect(textObj.x, textObj.y, textObj.width, textObj.height);
             }
             
+            // Draw custom border if specified
+            if (textObj.borderColor && textObj.borderWidth > 0) {
+                ctx.strokeStyle = textObj.borderColor;
+                ctx.lineWidth = textObj.borderWidth;
+                if (textObj.borderStyle === 'dashed') {
+                    ctx.setLineDash([5, 5]);
+                } else if (textObj.borderStyle === 'dotted') {
+                    ctx.setLineDash([2, 2]);
+                } else {
+                    ctx.setLineDash([]);
+                }
+                ctx.strokeRect(textObj.x, textObj.y, textObj.width, textObj.height);
+                ctx.setLineDash([]); // Reset
+            }
+            
             // Draw text
             if (textObj.text) {
                 ctx.fillStyle = textObj.color || '#333';
-                ctx.font = `${textObj.fontSize}px ${textObj.fontFamily}`;
+                const fontWeight = textObj.fontWeight || 'normal';
+                const fontStyle = textObj.fontStyle || 'normal';
+                ctx.font = `${fontStyle} ${fontWeight} ${textObj.fontSize}px ${textObj.fontFamily}`;
+                ctx.textAlign = textObj.textAlign || 'left';
                 
                 // Multi-line text rendering
                 const lines = textObj.text.split('\n');
                 const lineHeight = textObj.fontSize * 1.2;
                 
                 lines.forEach((line, lineIndex) => {
+                    const textX = textObj.textAlign === 'center' ? textObj.x + textObj.width/2 : 
+                                 textObj.textAlign === 'right' ? textObj.x + textObj.width - 6 : 
+                                 textObj.x + 6; // Default left alignment with padding
+                    
                     ctx.fillText(
                         line, 
-                        textObj.x + 6, // Small padding
+                        textX,
                         textObj.y + textObj.fontSize + (lineIndex * lineHeight) + 6
                     );
                 });
@@ -7953,8 +8014,9 @@ class CanvasMaker {
         
         // Include pen paths in bounds
         paths.forEach(path => {
-            if (path && path.length > 0) {
-                path.forEach(point => {
+            const points = path.points || path; // Support both new object format and legacy array format
+            if (points && points.length > 0) {
+                points.forEach(point => {
                     minX = Math.min(minX, point.x);
                     maxX = Math.max(maxX, point.x);
                     minY = Math.min(minY, point.y);
@@ -8067,11 +8129,12 @@ class CanvasMaker {
         
         // Draw pen paths
         paths.forEach(path => {
-            if (path && path.length > 0) {
-                ctx.strokeStyle = '#f97316';
+            const points = path.points || path; // Support both new object format and legacy array format
+            if (points && points.length > 0) {
+                ctx.strokeStyle = path.strokeColor || '#f97316';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                path.forEach((point, i) => {
+                points.forEach((point, i) => {
                     const x = ((point.x - minX) / worldWidth) * 184;
                     const y = ((point.y - minY) / worldHeight) * 120;
                     if (i === 0) ctx.moveTo(x, y);
@@ -8129,6 +8192,126 @@ class CanvasMaker {
         this.redrawCanvas();
         this.updateRecenterButton();
         this.notifyCameraChange();
+    }
+    
+    // External styling API for elements
+    setTextStyle(textId, styles) {
+        const text = this.activeCanvasContext.texts.find(t => t.id === textId);
+        if (!text) return false;
+        
+        if (styles.fontSize !== undefined) text.fontSize = styles.fontSize;
+        if (styles.fontFamily !== undefined) text.fontFamily = styles.fontFamily;
+        if (styles.color !== undefined) text.color = styles.color;
+        if (styles.backgroundColor !== undefined) text.backgroundColor = styles.backgroundColor;
+        if (styles.borderColor !== undefined) text.borderColor = styles.borderColor;
+        if (styles.borderWidth !== undefined) text.borderWidth = styles.borderWidth;
+        if (styles.borderStyle !== undefined) text.borderStyle = styles.borderStyle;
+        if (styles.textAlign !== undefined) text.textAlign = styles.textAlign;
+        if (styles.fontWeight !== undefined) text.fontWeight = styles.fontWeight;
+        if (styles.fontStyle !== undefined) text.fontStyle = styles.fontStyle;
+        
+        this.redrawCanvas();
+        return true;
+    }
+    
+    setShapeStyle(shapeId, styles) {
+        const shape = this.activeCanvasContext.shapes.find(s => s.id === shapeId);
+        if (!shape) return false;
+        
+        if (styles.fillColor !== undefined) shape.fillColor = styles.fillColor;
+        if (styles.strokeColor !== undefined) shape.strokeColor = styles.strokeColor;
+        if (styles.strokeWidth !== undefined) shape.strokeWidth = styles.strokeWidth;
+        if (styles.strokeStyle !== undefined) shape.strokeStyle = styles.strokeStyle;
+        if (styles.opacity !== undefined) shape.opacity = styles.opacity;
+        if (styles.borderRadius !== undefined) shape.borderRadius = styles.borderRadius;
+        
+        // Update HTML component if it's a reactComponent
+        if (shape.type === 'reactComponent') {
+            this.updateReactComponentHTML(shape);
+        }
+        
+        this.redrawCanvas();
+        return true;
+    }
+    
+    setNestedCanvasStyle(canvasId, styles) {
+        const nestedCanvas = this.activeCanvasContext.nestedCanvases.find(nc => nc.id === canvasId);
+        if (!nestedCanvas) return false;
+        
+        if (styles.backgroundColor !== undefined) nestedCanvas.backgroundColor = styles.backgroundColor;
+        if (styles.borderColor !== undefined) nestedCanvas.borderColor = styles.borderColor;
+        if (styles.borderWidth !== undefined) nestedCanvas.borderWidth = styles.borderWidth;
+        if (styles.borderStyle !== undefined) nestedCanvas.borderStyle = styles.borderStyle;
+        if (styles.opacity !== undefined) nestedCanvas.opacity = styles.opacity;
+        
+        this.redrawCanvas();
+        return true;
+    }
+    
+    setPathStyle(pathId, styles) {
+        const path = this.activeCanvasContext.paths.find(p => p.id === pathId);
+        if (!path) return false;
+        
+        if (styles.strokeColor !== undefined) path.strokeColor = styles.strokeColor;
+        if (styles.strokeWidth !== undefined) path.strokeWidth = styles.strokeWidth;
+        if (styles.strokeStyle !== undefined) path.strokeStyle = styles.strokeStyle;
+        if (styles.opacity !== undefined) path.opacity = styles.opacity;
+        
+        this.redrawCanvas();
+        return true;
+    }
+    
+    // Get element styling
+    getTextStyle(textId) {
+        const text = this.activeCanvasContext.texts.find(t => t.id === textId);
+        if (!text) return null;
+        
+        return {
+            fontSize: text.fontSize,
+            fontFamily: text.fontFamily,
+            color: text.color,
+            backgroundColor: text.backgroundColor,
+            borderColor: text.borderColor,
+            borderWidth: text.borderWidth,
+            borderStyle: text.borderStyle,
+            textAlign: text.textAlign,
+            fontWeight: text.fontWeight,
+            fontStyle: text.fontStyle
+        };
+    }
+    
+    getShapeStyle(shapeId) {
+        const shape = this.activeCanvasContext.shapes.find(s => s.id === shapeId);
+        if (!shape) return null;
+        
+        return {
+            fillColor: shape.fillColor,
+            strokeColor: shape.strokeColor,
+            strokeWidth: shape.strokeWidth,
+            strokeStyle: shape.strokeStyle,
+            opacity: shape.opacity,
+            borderRadius: shape.borderRadius
+        };
+    }
+    
+    // Get selected elements for external styling
+    getSelectedElements() {
+        return this.activeCanvasContext.selectedElements.map(element => {
+            if (element.type === 'shape') {
+                const shape = this.activeCanvasContext.shapes[element.index];
+                return { type: 'shape', id: shape.id, element: shape };
+            } else if (element.type === 'text') {
+                const text = this.activeCanvasContext.texts[element.index];
+                return { type: 'text', id: text.id, element: text };
+            } else if (element.type === 'nested-canvas') {
+                const nestedCanvas = this.activeCanvasContext.nestedCanvases[element.index];
+                return { type: 'nested-canvas', id: nestedCanvas.id, element: nestedCanvas };
+            } else if (element.type === 'path') {
+                const path = this.activeCanvasContext.paths[element.index];
+                return { type: 'path', id: path.id, element: path };
+            }
+            return null;
+        }).filter(Boolean);
     }
     
     resetZoom() {
