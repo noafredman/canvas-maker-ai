@@ -66,6 +66,7 @@ class CanvasMaker {
         this.isSelecting = false;
         this.isDragging = false;
         this.isResizing = false;
+        this.minimapVisible = false;
         this.resizeHandle = null;
         this.justFinishedResize = false;
         this.startX = 0;
@@ -150,6 +151,7 @@ class CanvasMaker {
         this.selectionBox = document.getElementById('selection-box');
         this.zoomIndicator = document.getElementById('zoom-indicator');
         this.recenterBtn = document.getElementById('recenter-btn');
+        this.minimapToggleBtn = document.getElementById('minimap-toggle-btn');
         
         // Nested canvas elements
         this.nestedCanvasOverlay = document.getElementById('nested-canvas-overlay');
@@ -342,6 +344,15 @@ class CanvasMaker {
                 <button id="zoom-in-btn" class="zoom-btn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                    </svg>
+                </button>
+                <button id="minimap-toggle-btn" class="zoom-btn" title="Toggle Minimap">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="3" y="3" width="18" height="12" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <rect x="5" y="5" width="4" height="3" fill="currentColor"/>
+                        <rect x="10" y="6" width="3" height="2" fill="currentColor"/>
+                        <rect x="14" y="5" width="4" height="4" fill="currentColor"/>
+                        <text x="12" y="21" text-anchor="middle" font-size="6" font-weight="bold" fill="currentColor">MAP</text>
                     </svg>
                 </button>
             </div>
@@ -667,6 +678,10 @@ class CanvasMaker {
         
         if (zoomOutBtn) {
             zoomOutBtn.addEventListener('click', this.zoomOut.bind(this));
+        }
+        
+        if (this.minimapToggleBtn) {
+            this.minimapToggleBtn.addEventListener('click', this.toggleMinimap.bind(this));
         }
         
         // Nested canvas event listeners
@@ -3472,8 +3487,20 @@ class CanvasMaker {
     removeTextInput() {
         if (this.currentTextInput) {
             // Safety check: only remove if element is still connected to DOM
-            if (this.currentTextInput.isConnected) {
-                this.currentTextInput.remove();
+            try {
+                if (this.currentTextInput.parentNode) {
+                    this.currentTextInput.parentNode.removeChild(this.currentTextInput);
+                }
+            } catch (e) {
+                console.warn('Error removing text input:', e);
+                // Try alternative removal method
+                try {
+                    if (this.currentTextInput.remove) {
+                        this.currentTextInput.remove();
+                    }
+                } catch (e2) {
+                    console.warn('Alternative removal also failed:', e2);
+                }
             }
             this.currentTextInput = null;
             this.currentTextIndex = -1;
@@ -3866,7 +3893,6 @@ class CanvasMaker {
     }
     
     bringToFront(element) {
-        console.log('bringToFront called with:', element);
         const shapes = this.activeCanvasContext.shapes;
         let needsCanvasRedraw = true;
         
@@ -7512,11 +7538,6 @@ class CanvasMaker {
             rootCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         }
         
-        console.log('[CLEAR-CANVAS] Cleared visual canvas layers:', {
-            activeCanvas: canvas.width + 'x' + canvas.height,
-            mainCanvas: this.mainCanvasContext ? this.mainCanvasContext.canvas.width + 'x' + this.mainCanvasContext.canvas.height : 'none',
-            rootCanvas: this.canvas ? this.canvas.width + 'x' + this.canvas.height : 'none'
-        });
         
         // Clear any visual state CSS classes from canvas container
         const canvasContainer = canvas.parentElement;
@@ -7531,7 +7552,6 @@ class CanvasMaker {
         this.updateCanvasCursor();
         
         // Force multiple aggressive visual clears before redraw
-        console.log('[CLEAR-CANVAS] Forcing aggressive visual clearing...');
         
         // Clear all possible canvas contexts multiple times
         const allCanvases = [
@@ -7554,7 +7574,6 @@ class CanvasMaker {
         }
         
         // Force complete visual clear to ensure canvas matches empty state
-        console.log('[CLEAR-CANVAS] Starting redraw with cleared state...');
         this.forceVisualClear();
     }
     
@@ -7792,6 +7811,307 @@ class CanvasMaker {
         const nestedResetZoomBtn = document.getElementById('nested-reset-zoom-btn');
         if (nestedResetZoomBtn && this.activeCanvasContext === this.nestedCanvasContext) {
             nestedResetZoomBtn.style.display = isAt100Zoom ? 'none' : 'flex';
+        }
+    }
+    
+    toggleMinimap() {
+        this.minimapVisible = !this.minimapVisible;
+        
+        const minimap = document.getElementById('minimap');
+        if (minimap) {
+            minimap.style.display = this.minimapVisible ? 'block' : 'none';
+        }
+        
+        if (this.minimapToggleBtn) {
+            this.minimapToggleBtn.style.opacity = this.minimapVisible ? '1' : '0.7';
+            this.minimapToggleBtn.style.background = this.minimapVisible ? 'rgba(255, 255, 255, 0.2)' : 'transparent';
+        }
+        
+        if (this.minimapVisible) {
+            this.setupMinimap();
+        }
+    }
+    
+    setupMinimap() {
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        if (!minimapCanvas || minimapCanvas._setupDone) return;
+        
+        let isDragging = false;
+        
+        const updateCameraFromMinimap = (e) => {
+            const rect = minimapCanvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            const bounds = minimapCanvas._worldBounds;
+            if (!bounds) return;
+            
+            const worldX = bounds.minX + (clickX / 184) * bounds.worldWidth;
+            const worldY = bounds.minY + (clickY / 120) * bounds.worldHeight;
+            
+            this.activeCanvasContext.camera.x = -worldX;
+            this.activeCanvasContext.camera.y = -worldY;
+            
+            this.applyCameraConstraints();
+            this.redrawCanvas();
+            this.updateMinimap(); // Update minimap immediately to show viewport movement
+            this.updateRecenterButton();
+            this.notifyCameraChange();
+        };
+        
+        minimapCanvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            updateCameraFromMinimap(e);
+            e.preventDefault();
+        });
+        
+        minimapCanvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                // Throttle mousemove events for smoother performance
+                if (!minimapCanvas._throttleTimer) {
+                    minimapCanvas._throttleTimer = setTimeout(() => {
+                        updateCameraFromMinimap(e);
+                        minimapCanvas._throttleTimer = null;
+                    }, 16); // ~60fps
+                }
+            }
+        });
+        
+        minimapCanvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+        
+        minimapCanvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+        });
+        
+        minimapCanvas._setupDone = true;
+        
+        // Start periodic updates (less frequent when not dragging)
+        if (!this.minimapUpdateInterval) {
+            this.minimapUpdateInterval = setInterval(() => {
+                if (this.minimapVisible && !isDragging) {
+                    this.updateMinimap();
+                }
+            }, 200);
+        }
+        
+        this.updateMinimap();
+    }
+    
+    updateMinimap() {
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        if (!minimapCanvas) return;
+        
+        const ctx = minimapCanvas.getContext('2d');
+        const camera = this.activeCanvasContext.camera;
+        const shapes = this.activeCanvasContext.shapes;
+        const paths = this.activeCanvasContext.paths || [];
+        const texts = this.activeCanvasContext.texts || [];
+        const nestedCanvases = this.activeCanvasContext.nestedCanvases || [];
+        
+        
+        ctx.clearRect(0, 0, 184, 120);
+        
+        // Calculate viewport bounds
+        const viewportWorldWidth = this.activeCanvasContext.canvas.width / camera.zoom;
+        const viewportWorldHeight = this.activeCanvasContext.canvas.height / camera.zoom;
+        const viewportCenterX = -camera.x;
+        const viewportCenterY = -camera.y;
+        
+        let minX = viewportCenterX - viewportWorldWidth / 2;
+        let maxX = viewportCenterX + viewportWorldWidth / 2;
+        let minY = viewportCenterY - viewportWorldHeight / 2;
+        let maxY = viewportCenterY + viewportWorldHeight / 2;
+        
+        // Expand bounds to include all shapes
+        shapes.forEach(shape => {
+            if (shape.type === 'pen' && shape.points) {
+                shape.points.forEach(point => {
+                    minX = Math.min(minX, point.x);
+                    maxX = Math.max(maxX, point.x);
+                    minY = Math.min(minY, point.y);
+                    maxY = Math.max(maxY, point.y);
+                });
+            } else if (shape.type === 'line' || shape.type === 'arrow') {
+                minX = Math.min(minX, shape.x1, shape.x2);
+                maxX = Math.max(maxX, shape.x1, shape.x2);
+                minY = Math.min(minY, shape.y1, shape.y2);
+                maxY = Math.max(maxY, shape.y1, shape.y2);
+            } else if (shape.type === 'circle') {
+                minX = Math.min(minX, shape.x - shape.radius);
+                maxX = Math.max(maxX, shape.x + shape.radius);
+                minY = Math.min(minY, shape.y - shape.radius);
+                maxY = Math.max(maxY, shape.y + shape.radius);
+            } else if (shape.x !== undefined && shape.y !== undefined) {
+                minX = Math.min(minX, shape.x);
+                maxX = Math.max(maxX, shape.x + (shape.width || 0));
+                minY = Math.min(minY, shape.y);
+                maxY = Math.max(maxY, shape.y + (shape.height || 0));
+            }
+        });
+        
+        // Include pen paths in bounds
+        paths.forEach(path => {
+            if (path && path.length > 0) {
+                path.forEach(point => {
+                    minX = Math.min(minX, point.x);
+                    maxX = Math.max(maxX, point.x);
+                    minY = Math.min(minY, point.y);
+                    maxY = Math.max(maxY, point.y);
+                });
+            }
+        });
+        
+        // Include text shapes in bounds
+        texts.forEach(text => {
+            minX = Math.min(minX, text.x);
+            maxX = Math.max(maxX, text.x + (text.width || 50));
+            minY = Math.min(minY, text.y);
+            maxY = Math.max(maxY, text.y + (text.height || 20));
+        });
+        
+        // Include nested canvases in bounds
+        nestedCanvases.forEach(nested => {
+            minX = Math.min(minX, nested.x);
+            maxX = Math.max(maxX, nested.x + nested.width);
+            minY = Math.min(minY, nested.y);
+            maxY = Math.max(maxY, nested.y + nested.height);
+        });
+        
+        const padding = 200;
+        minX -= padding;
+        maxX += padding;
+        minY -= padding;
+        maxY += padding;
+        
+        const worldWidth = maxX - minX;
+        const worldHeight = maxY - minY;
+        
+        // Draw viewport rectangle
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([2, 2]);
+        
+        const viewportX = ((viewportCenterX - viewportWorldWidth / 2 - minX) / worldWidth) * 184;
+        const viewportY = ((viewportCenterY - viewportWorldHeight / 2 - minY) / worldHeight) * 120;
+        const viewportWidth = (viewportWorldWidth / worldWidth) * 184;
+        const viewportHeight = (viewportWorldHeight / worldHeight) * 120;
+        
+        ctx.strokeRect(viewportX, viewportY, viewportWidth, viewportHeight);
+        
+        // Draw shapes
+        shapes.forEach(shape => {
+            if (shape.type === 'pen' && shape.points && shape.points.length > 0) {
+                ctx.strokeStyle = '#f97316';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                shape.points.forEach((point, i) => {
+                    const x = ((point.x - minX) / worldWidth) * 184;
+                    const y = ((point.y - minY) / worldHeight) * 120;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            } else if (shape.type === 'line' || shape.type === 'arrow') {
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                const startX = ((shape.x1 - minX) / worldWidth) * 184;
+                const startY = ((shape.y1 - minY) / worldHeight) * 120;
+                const endX = ((shape.x2 - minX) / worldWidth) * 184;
+                const endY = ((shape.y2 - minY) / worldHeight) * 120;
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            } else if (shape.type === 'circle') {
+                ctx.strokeStyle = '#a855f7';
+                ctx.fillStyle = 'rgba(168, 85, 247, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                const centerX = ((shape.x - minX) / worldWidth) * 184;
+                const centerY = ((shape.y - minY) / worldHeight) * 120;
+                const radius = Math.max(((shape.radius) / Math.max(worldWidth, worldHeight)) * Math.max(184, 120), 2);
+                ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+            } else if (shape.type === 'text') {
+                ctx.fillStyle = '#eab308';
+                const x = ((shape.x - minX) / worldWidth) * 184;
+                const y = ((shape.y - minY) / worldHeight) * 120;
+                const w = Math.max(((shape.width || 50) / worldWidth) * 184, 8);
+                const h = Math.max(((shape.height || 20) / worldHeight) * 120, 6);
+                ctx.fillRect(x, y, w, h);
+                ctx.fillStyle = 'white';
+                ctx.font = '6px Arial';
+                ctx.fillText('T', x + w/2 - 2, y + h/2 + 2);
+            } else if (shape.type === 'nestedCanvas') {
+                ctx.fillStyle = '#ec4899';
+                const x = ((shape.x - minX) / worldWidth) * 184;
+                const y = ((shape.y - minY) / worldHeight) * 120;
+                const w = Math.max(((shape.width || 100) / worldWidth) * 184, 6);
+                const h = Math.max(((shape.height || 100) / worldHeight) * 120, 6);
+                ctx.fillRect(x, y, w, h);
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+            } else if (shape.x !== undefined && shape.y !== undefined) {
+                ctx.fillStyle = shape.type === 'reactComponent' ? '#f97316' : '#60a5fa';
+                const x = ((shape.x - minX) / worldWidth) * 184;
+                const y = ((shape.y - minY) / worldHeight) * 120;
+                const w = Math.max(((shape.width || 10) / worldWidth) * 184, 3);
+                const h = Math.max(((shape.height || 10) / worldHeight) * 120, 3);
+                ctx.fillRect(x, y, w, h);
+            }
+        });
+        
+        // Draw pen paths
+        paths.forEach(path => {
+            if (path && path.length > 0) {
+                ctx.strokeStyle = '#f97316';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                path.forEach((point, i) => {
+                    const x = ((point.x - minX) / worldWidth) * 184;
+                    const y = ((point.y - minY) / worldHeight) * 120;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            }
+        });
+        
+        // Draw text shapes
+        texts.forEach(text => {
+            ctx.fillStyle = '#eab308';
+            const x = ((text.x - minX) / worldWidth) * 184;
+            const y = ((text.y - minY) / worldHeight) * 120;
+            const w = Math.max(((text.width || 50) / worldWidth) * 184, 8);
+            const h = Math.max(((text.height || 20) / worldHeight) * 120, 6);
+            ctx.fillRect(x, y, w, h);
+            ctx.fillStyle = 'white';
+            ctx.font = '6px Arial';
+            ctx.fillText('T', x + w/2 - 2, y + h/2 + 2);
+        });
+        
+        // Draw nested canvases
+        nestedCanvases.forEach(nested => {
+            ctx.fillStyle = '#ec4899';
+            const x = ((nested.x - minX) / worldWidth) * 184;
+            const y = ((nested.y - minY) / worldHeight) * 120;
+            const w = Math.max(((nested.width) / worldWidth) * 184, 6);
+            const h = Math.max(((nested.height) / worldHeight) * 120, 6);
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+        });
+        
+        minimapCanvas._worldBounds = { minX, maxX, minY, maxY, worldWidth, worldHeight };
+        
+        const minimapInfo = document.getElementById('minimap-info');
+        if (minimapInfo) {
+            minimapInfo.textContent = `Camera: (${Math.round(camera.x)}, ${Math.round(camera.y)}) Zoom: ${Math.round(camera.zoom * 100)}%`;
         }
     }
     
@@ -8212,6 +8532,102 @@ class CanvasMaker {
                 const deltaY = currentY - this.dragOffset.y;
                 this.performResizeForOtherShapes(canvasContext, element, deltaX, deltaY, currentX, currentY);
             }
+        } else if (element.type === 'text') {
+            const text = canvasContext.texts[element.index];
+            const originalLeft = text.x;
+            const originalTop = text.y;
+            const originalRight = text.x + text.width;
+            const originalBottom = text.y + text.height;
+            
+            let newLeft = originalLeft;
+            let newTop = originalTop;
+            let newRight = originalRight;
+            let newBottom = originalBottom;
+            
+            switch (this.resizeHandle) {
+                case 'nw': // top-left handle
+                    newLeft = adjustedX;
+                    newTop = adjustedY;
+                    break;
+                case 'ne': // top-right handle
+                    newRight = adjustedX;
+                    newTop = adjustedY;
+                    break;
+                case 'sw': // bottom-left handle
+                    newLeft = adjustedX;
+                    newBottom = adjustedY;
+                    break;
+                case 'se': // bottom-right handle
+                    newRight = adjustedX;
+                    newBottom = adjustedY;
+                    break;
+                case 'n': // top handle
+                    newTop = adjustedY;
+                    break;
+                case 's': // bottom handle
+                    newBottom = adjustedY;
+                    break;
+                case 'w': // left handle
+                    newLeft = adjustedX;
+                    break;
+                case 'e': // right handle
+                    newRight = adjustedX;
+                    break;
+            }
+            
+            // Update text bounds
+            text.x = newLeft;
+            text.y = newTop;
+            text.width = Math.max(50, newRight - newLeft); // Minimum width
+            text.height = Math.max(20, newBottom - newTop); // Minimum height
+        } else if (element.type === 'nested-canvas') {
+            const nestedCanvas = canvasContext.nestedCanvases[element.index];
+            const originalLeft = nestedCanvas.x;
+            const originalTop = nestedCanvas.y;
+            const originalRight = nestedCanvas.x + nestedCanvas.width;
+            const originalBottom = nestedCanvas.y + nestedCanvas.height;
+            
+            let newLeft = originalLeft;
+            let newTop = originalTop;
+            let newRight = originalRight;
+            let newBottom = originalBottom;
+            
+            switch (this.resizeHandle) {
+                case 'nw': // top-left handle
+                    newLeft = adjustedX;
+                    newTop = adjustedY;
+                    break;
+                case 'ne': // top-right handle
+                    newRight = adjustedX;
+                    newTop = adjustedY;
+                    break;
+                case 'sw': // bottom-left handle
+                    newLeft = adjustedX;
+                    newBottom = adjustedY;
+                    break;
+                case 'se': // bottom-right handle
+                    newRight = adjustedX;
+                    newBottom = adjustedY;
+                    break;
+                case 'n': // top handle
+                    newTop = adjustedY;
+                    break;
+                case 's': // bottom handle
+                    newBottom = adjustedY;
+                    break;
+                case 'w': // left handle
+                    newLeft = adjustedX;
+                    break;
+                case 'e': // right handle
+                    newRight = adjustedX;
+                    break;
+            }
+            
+            // Update nested canvas bounds
+            nestedCanvas.x = newLeft;
+            nestedCanvas.y = newTop;
+            nestedCanvas.width = Math.max(100, newRight - newLeft); // Minimum width
+            nestedCanvas.height = Math.max(100, newBottom - newTop); // Minimum height
         }
         
         // Update dragOffset to current position - NO MORE DELTA CALCULATION NEEDED!
@@ -8644,7 +9060,6 @@ class CanvasMaker {
                 if (!requiredLayers.includes(zIndex)) {
                     layer.canvas.remove();
                     this.additionalCanvasLayers.delete(zIndex);
-                    console.log(`Removed unused canvas layer with z-index ${zIndex}`);
                 }
             });
         }

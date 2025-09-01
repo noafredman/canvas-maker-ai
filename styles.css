@@ -186,6 +186,7 @@ h1 {
     width: 100%;
     height: 100%;
     touch-action: none; /* Prevent default touch behaviors */
+    z-index: 1; /* Lower than HTML components */
 }
 
 .selection-box {
@@ -246,6 +247,27 @@ h1 {
     pointer-events: none;
     min-width: 65px;
     text-align: center;
+}
+
+.minimap {
+    position: absolute;
+    bottom: 60px;
+    right: 0;
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.minimap canvas {
+    border: 1px solid #444;
+    cursor: pointer;
+}
+
+.minimap-viewport {
+    position: absolute;
+    border: 2px solid #3b82f6;
+    background: rgba(59, 130, 246, 0.2);
+    pointer-events: none;
 }
 
 .recenter-btn {
@@ -581,7 +603,7 @@ body > #nested-canvas {
     width: 100% !important;
     height: 100% !important;
     pointer-events: none !important;
-    z-index: 10 !important;
+    z-index: 20 !important;
     overflow: hidden !important;
     transform-origin: top left !important;
 }
