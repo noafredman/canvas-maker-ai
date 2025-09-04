@@ -194,13 +194,142 @@ function calculateBounds(element, type, container, currentPosition) {
 - **Cause**: Not reading existing transform matrix
 - **Solution**: Parse transform matrix to get current translation values
 
+## Final Implementation
+
+The final implementation uses a unified transform-based approach that handles all element types effectively:
+
+```javascript
+window.dragElement = function(event, element) {
+    event.stopPropagation();
+    
+    // Handle granulated text spans - drag their parent container
+    let targetElement = element;
+    if (element.tagName === 'SPAN') {
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0 && !selection.isCollapsed) {
+            return; // Don't drag if text is selected
+        }
+        targetElement = element.parentElement;
+    }
+    
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let hasMoved = false;
+    
+    // Parse existing transform values
+    const computedStyle = window.getComputedStyle(targetElement);
+    const transform = computedStyle.transform;
+    let currentX = 0, currentY = 0;
+    
+    if (transform && transform !== 'none') {
+        const matrix = transform.match(/matrix\((.+)\)/);
+        if (matrix) {
+            const values = matrix[1].split(',').map(v => parseFloat(v.trim()));
+            currentX = values[4] || 0;
+            currentY = values[5] || 0;
+        }
+    }
+    
+    // Find immediate positioned parent for bounds
+    let container = targetElement.parentElement;
+    while (container) {
+        const computedStyle = getComputedStyle(container);
+        if ((computedStyle.position === 'absolute' || computedStyle.position === 'relative') && 
+            container.offsetWidth > 50 && container.offsetHeight > 50) {
+            break;
+        }
+        container = container.parentElement;
+        if (container === document.body) {
+            container = null;
+            break;
+        }
+    }
+    
+    // Cache bounds calculation for performance
+    let boundsCache = null;
+    if (container) {
+        const elementWidth = targetElement.offsetWidth;
+        const elementHeight = targetElement.offsetHeight;
+        
+        targetElement.style.transform = 'none';
+        const elementRect = targetElement.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        targetElement.style.transform = `translate(${currentX}px, ${currentY}px)`;
+        
+        boundsCache = {
+            minX: -(elementRect.left - containerRect.left),
+            maxX: (containerRect.width - elementWidth) - (elementRect.left - containerRect.left),
+            minY: -(elementRect.top - containerRect.top),
+            maxY: (containerRect.height - elementHeight) - (elementRect.top - containerRect.top)
+        };
+    }
+    
+    const handleMouseMove = (e) => {
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+        
+        // Movement threshold to avoid conflicts with text selection
+        if (!hasMoved && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+            hasMoved = true;
+        }
+        if (!hasMoved) return;
+        
+        let newX = currentX + deltaX;
+        let newY = currentY + deltaY;
+        
+        // Apply bounds constraints
+        if (boundsCache) {
+            newX = Math.max(boundsCache.minX, Math.min(boundsCache.maxX, newX));
+            newY = Math.max(boundsCache.minY, Math.min(boundsCache.maxY, newY));
+        }
+        
+        targetElement.style.transform = `translate(${newX}px, ${newY}px)`;
+        e.preventDefault();
+    };
+    
+    const handleMouseUp = (e) => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    event.preventDefault();
+};
+```
+
+## Key Features Implemented
+
+### Granulated Component Support
+- Text spans are detected and their parent container is dragged instead
+- Text selection vs drag detection with movement threshold
+- Unified movement for word-level granulated text
+
+### Parent Bounds Detection
+- Finds immediate positioned parent (not outermost container)
+- Skips containers smaller than 50x50px
+- All elements respect their immediate parent's bounds
+
+### Performance Optimizations
+- Bounds calculation cached at drag start
+- Container detection done once per drag
+- Transform matrix parsing for position accumulation
+
+### Cross-Element Compatibility
+- Works with nested complex UI (cards, buttons, text containers)
+- Handles event propagation correctly
+- Prevents browser native drag for images
+
 ## Testing Checklist
 
-- [ ] Absolutely positioned elements drag smoothly
-- [ ] Relatively positioned elements respect natural flow
-- [ ] Inline text spans stay within bounds
-- [ ] Images don't trigger browser drag
-- [ ] Nested containers handle event propagation
-- [ ] Multiple drags on same element don't jump
-- [ ] Elements can't escape container bounds
-- [ ] Transform values accumulate correctly
+- [x] Absolutely positioned elements drag smoothly
+- [x] Relatively positioned elements respect natural flow  
+- [x] Inline text spans stay within bounds
+- [x] Images don't trigger browser drag
+- [x] Nested containers handle event propagation
+- [x] Multiple drags on same element don't jump
+- [x] Elements can't escape container bounds
+- [x] Transform values accumulate correctly
+- [x] Granulated text moves as unified component
+- [x] Text selection vs drag conflict resolved
+- [x] Parent bounds correctly detected for nested elements

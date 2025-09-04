@@ -132,6 +132,7 @@
         <button id="test-add-component">Add React Component</button>
         <button id="test-add-button">Add Button Component</button>
         <button id="test-html-drag">Add HTML Drag Test</button>
+        <button id="test-nested-drag">Add Nested Elements Test</button>
         <button id="test-zoom-in">Zoom In</button>
         <button id="test-zoom-out">Zoom Out</button>
         <button id="test-pan-right">Pan Right</button>
@@ -333,6 +334,10 @@
                 log('Button clicked: Add HTML Drag Test', 'interaction');
                 addHTMLDragTest();
             });
+            document.getElementById('test-nested-drag').addEventListener('click', () => {
+                log('Button clicked: Add Nested Elements Test', 'interaction');
+                addNestedElementsTest();
+            });
             document.getElementById('test-zoom-in').addEventListener('click', () => {
                 log('Button clicked: Zoom In', 'interaction');
                 canvasMaker.zoomIn();
@@ -475,19 +480,58 @@
                     log('Added HTML component using addReactComponent fallback', 'component');
                 }
                 
+                // Add event listeners after DOM is created
+                setTimeout(() => {
+                    const htmlElement = canvasMaker.htmlComponents.get(shape.id);
+                    if (htmlElement) {
+                        log('Setting up drag handlers for basic HTML component', 'component');
+                        const draggableElements = htmlElement.querySelectorAll('[style*="cursor: move"]');
+                        log(`Found ${draggableElements.length} draggable elements`, 'component');
+                        
+                        draggableElements.forEach((el, index) => {
+                            el.addEventListener('mousedown', (event) => {
+                                log(`Event listener triggered for element ${index}: ${el.tagName}`, 'interaction');
+                                window.dragElement(event, el);
+                            });
+                            // Prevent browser drag for images
+                            if (el.tagName === 'IMG') {
+                                el.addEventListener('dragstart', (e) => e.preventDefault());
+                            }
+                        });
+                    }
+                }, 100);
+                
                 testComponents.push({ shape, element: null });
                 
-                // Simple drag function - use transform for all elements
-                if (!window.dragElement) {
+            } catch (error) {
+                log(`Error adding HTML drag test: ${error.message}`, 'error');
+            }
+        }
+        
+        // Global drag function - use transform for all elements
+        if (!window.dragElement) {
                     window.dragElement = function(event, element) {
                         event.stopPropagation();
-                        log(`Started dragging: ${element.tagName} ${element.className}`, 'interaction');
+                        
+                        // Check if this is a granulated text span
+                        let targetElement = element;
+                        if (element.tagName === 'SPAN') {
+                            // For spans, check if user is trying to select text
+                            const selection = window.getSelection();
+                            if (selection.rangeCount > 0 && !selection.isCollapsed) {
+                                return; // Don't drag if text is selected
+                            }
+                            
+                            // Find the text container
+                            targetElement = element.parentElement;
+                        }
                         
                         const startX = event.clientX;
                         const startY = event.clientY;
+                        let hasMoved = false;
                         
-                        // Get current transform values
-                        const computedStyle = window.getComputedStyle(element);
+                        // Get current transform values for the target element
+                        const computedStyle = window.getComputedStyle(targetElement);
                         const transform = computedStyle.transform;
                         let currentX = 0, currentY = 0;
                         
@@ -500,62 +544,64 @@
                             }
                         }
                         
-                        log(`Current transform: (${currentX}, ${currentY})`, 'interaction');
+                        // Find immediate positioned parent (not the outermost component)
+                        let container = targetElement.parentElement;
+                        while (container) {
+                            const computedStyle = getComputedStyle(container);
+                            
+                            // Stop at first positioned parent that's not tiny
+                            if ((computedStyle.position === 'absolute' || computedStyle.position === 'relative') && 
+                                container.offsetWidth > 50 && 
+                                container.offsetHeight > 50) {
+                                break;
+                            }
+                            container = container.parentElement;
+                            if (container === document.body) {
+                                container = null;
+                                break;
+                            }
+                        }
+                        
+                        let boundsCache = null;
+                        if (container) {
+                            // Calculate bounds once for the target element
+                            const elementWidth = targetElement.offsetWidth;
+                            const elementHeight = targetElement.offsetHeight;
+                            
+                            targetElement.style.transform = 'none';
+                            const elementRect = targetElement.getBoundingClientRect();
+                            const containerRect = container.getBoundingClientRect();
+                            targetElement.style.transform = `translate(${currentX}px, ${currentY}px)`;
+                            
+                            boundsCache = {
+                                minX: -(elementRect.left - containerRect.left),
+                                maxX: (containerRect.width - elementWidth) - (elementRect.left - containerRect.left),
+                                minY: -(elementRect.top - containerRect.top),
+                                maxY: (containerRect.height - elementHeight) - (elementRect.top - containerRect.top)
+                            };
+                            
                         
                         const handleMouseMove = (e) => {
                             const deltaX = e.clientX - startX;
                             const deltaY = e.clientY - startY;
                             
+                            // Only start dragging after small movement threshold
+                            if (!hasMoved && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+                                hasMoved = true;
+                            }
+                            
+                            if (!hasMoved) return;
+                            
                             let newX = currentX + deltaX;
                             let newY = currentY + deltaY;
                             
-                            // Find container dynamically - look for the main component div
-                            let container = element.parentElement;
-                            while (container) {
-                                const computedStyle = getComputedStyle(container);
-                                
-                                // Look for container with significant size and positioning context
-                                if (computedStyle.position === 'relative' && 
-                                    container.offsetWidth > 200 && 
-                                    container.offsetHeight > 150) {
-                                    log(`Found container: ${container.tagName} (${container.offsetWidth}x${container.offsetHeight})`, 'interaction');
-                                    break;
-                                }
-                                container = container.parentElement;
-                                
-                                // Stop at body to avoid infinite loop
-                                if (container === document.body) {
-                                    container = null;
-                                    break;
-                                }
+                            // Apply cached bounds if available
+                            if (boundsCache) {
+                                newX = Math.max(boundsCache.minX, Math.min(boundsCache.maxX, newX));
+                                newY = Math.max(boundsCache.minY, Math.min(boundsCache.maxY, newY));
                             }
                             
-                            if (container) {
-                                // Simple bounds: keep element inside container 
-                                const containerPadding = 0; // No padding constraint
-                                const elementWidth = element.offsetWidth;
-                                const elementHeight = element.offsetHeight;
-                                
-                                // Get element's position without current transform
-                                element.style.transform = 'none';
-                                const elementRect = element.getBoundingClientRect();
-                                const containerRect = container.getBoundingClientRect();
-                                element.style.transform = `translate(${currentX}px, ${currentY}px)`;
-                                
-                                // Calculate max transform values
-                                const maxLeft = containerPadding - (elementRect.left - containerRect.left);
-                                const maxRight = (containerRect.width - elementWidth - containerPadding) - (elementRect.left - containerRect.left);
-                                const maxUp = containerPadding - (elementRect.top - containerRect.top);
-                                const maxDown = (containerRect.height - elementHeight - containerPadding) - (elementRect.top - containerRect.top);
-                                
-                                // Constrain movement
-                                newX = Math.max(maxLeft, Math.min(maxRight, newX));
-                                newY = Math.max(maxUp, Math.min(maxDown, newY));
-                            } else {
-                                log('Container not found for bounds checking', 'interaction');
-                            }
-                            
-                            element.style.transform = `translate(${newX}px, ${newY}px)`;
+                            targetElement.style.transform = `translate(${newX}px, ${newY}px)`;
                             e.preventDefault();
                         };
                         
@@ -573,9 +619,129 @@
                         event.preventDefault();
                     };
                 }
+        
+        function addNestedElementsTest() {
+            try {
+                const nestedHTML = `
+                    <div style="width: 500px; height: 400px; background: #34495e; padding: 25px; position: relative; color: white; border-radius: 10px;">
+                        <h2 style="margin: 0 0 20px 0; text-align: center;">Complex Nested Drag Test</h2>
+                        
+                        <!-- Level 1: Main card -->
+                        <div class="main-card" style="position: absolute; top: 60px; left: 25px; width: 200px; height: 120px; background: #3498db; border-radius: 8px; padding: 15px; cursor: move;"
+                             onmousedown="dragElement(event, this)">
+                            <h4 style="margin: 0 0 10px 0;">Card Title</h4>
+                            
+                            <!-- Level 2: Nested button inside card -->
+                            <button style="position: absolute; top: 40px; right: 10px; background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: move;"
+                                    onmousedown="dragElement(event, this)"
+                                    onclick="event.stopPropagation()">
+                                Nested Btn
+                            </button>
+                            
+                            <!-- Level 2: Text content with granulated spans -->
+                            <div style="margin-top: 35px; border: 2px solid red; padding: 5px; cursor: move; user-select: text;"
+                                 onmousedown="dragElement(event, this)">
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">Nested</span>
+                                <span style="cursor: move; display: inline; user-select: text;"  
+                                      onmousedown="dragElement(event, this)">text</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">spans</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Level 1: Side panel -->
+                        <div class="side-panel" style="position: absolute; top: 60px; right: 25px; width: 180px; height: 280px; background: #9b59b6; border-radius: 8px; padding: 15px; cursor: move;"
+                             onmousedown="dragElement(event, this)">
+                            <h4 style="margin: 0 0 15px 0;">Side Panel</h4>
+                            
+                            <!-- Level 2: Icon grid inside panel -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                                <div style="background: #8e44ad; padding: 8px; border-radius: 4px; text-align: center; cursor: move; font-size: 12px;"
+                                     onmousedown="dragElement(event, this)">📊</div>
+                                <div style="background: #8e44ad; padding: 8px; border-radius: 4px; text-align: center; cursor: move; font-size: 12px;"
+                                     onmousedown="dragElement(event, this)">⚙️</div>
+                                <div style="background: #8e44ad; padding: 8px; border-radius: 4px; text-align: center; cursor: move; font-size: 12px;"
+                                     onmousedown="dragElement(event, this)">📁</div>
+                                <div style="background: #8e44ad; padding: 8px; border-radius: 4px; text-align: center; cursor: move; font-size: 12px;"
+                                     onmousedown="dragElement(event, this)">🔍</div>
+                            </div>
+                            
+                            <!-- Level 2: Complex granulated paragraph -->
+                            <div style="font-size: 11px; line-height: 1.6; border: 2px solid red; padding: 5px; cursor: move; user-select: text;"
+                                 onmousedown="dragElement(event, this)">
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">This</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">is</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">highly</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">granulated</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">text</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">that</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">should</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">stay</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">within</span>
+                                <span style="cursor: move; display: inline; user-select: text;"
+                                      onmousedown="dragElement(event, this)">bounds.</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Instructions -->
+                        <div style="position: absolute; bottom: 15px; left: 25px; right: 25px; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; font-size: 12px; text-align: center;">
+                            <strong>Test nested dragging:</strong> Try dragging containers, then their children. Each level should respect its parent's bounds.
+                        </div>
+                    </div>
+                `;
+                
+                let shape;
+                if (canvasMaker.addReactComponentWithHTML) {
+                    shape = canvasMaker.addReactComponentWithHTML(100, 100, 500, 400, nestedHTML);
+                    log('Added nested elements test component', 'component');
+                } else {
+                    const div = document.createElement('div');
+                    div.innerHTML = nestedHTML;
+                    shape = canvasMaker.addReactComponent(div.firstElementChild, 100, 100, 500, 400, {
+                        label: 'Nested Drag Test',
+                        interactive: true,
+                        strokeColor: '#34495e'
+                    });
+                    log('Added nested elements test using fallback', 'component');
+                }
+                
+                // Add event listeners after DOM is created
+                setTimeout(() => {
+                    const htmlElement = canvasMaker.htmlComponents.get(shape.id);
+                    if (htmlElement) {
+                        log('Setting up drag handlers for nested component', 'component');
+                        const draggableElements = htmlElement.querySelectorAll('[style*="cursor: move"]');
+                        log(`Found ${draggableElements.length} draggable elements`, 'component');
+                        
+                        draggableElements.forEach((el, index) => {
+                            el.addEventListener('mousedown', (event) => {
+                                log(`Event listener triggered for element ${index}: ${el.tagName}`, 'interaction');
+                                window.dragElement(event, el);
+                            });
+                            // Prevent browser drag for images
+                            if (el.tagName === 'IMG') {
+                                el.addEventListener('dragstart', (e) => e.preventDefault());
+                            }
+                        });
+                    } else {
+                        log('HTML element not found for event setup', 'component');
+                    }
+                }, 100);
+                
+                testComponents.push({ shape, element: null });
                 
             } catch (error) {
-                log(`Error adding HTML drag test: ${error.message}`, 'error');
+                log(`Error adding nested elements test: ${error.message}`, 'error');
             }
         }
         
