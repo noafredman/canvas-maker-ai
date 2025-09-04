@@ -131,6 +131,7 @@
         <h4 style="margin: 0 0 12px 0;">Test Controls</h4>
         <button id="test-add-component">Add React Component</button>
         <button id="test-add-button">Add Button Component</button>
+        <button id="test-html-drag">Add HTML Drag Test</button>
         <button id="test-zoom-in">Zoom In</button>
         <button id="test-zoom-out">Zoom Out</button>
         <button id="test-pan-right">Pan Right</button>
@@ -328,6 +329,10 @@
                 log('Button clicked: Add Button Component', 'interaction');
                 addTestButton();
             });
+            document.getElementById('test-html-drag').addEventListener('click', () => {
+                log('Button clicked: Add HTML Drag Test', 'interaction');
+                addHTMLDragTest();
+            });
             document.getElementById('test-zoom-in').addEventListener('click', () => {
                 log('Button clicked: Zoom In', 'interaction');
                 canvasMaker.zoomIn();
@@ -412,6 +417,165 @@
                 
             } catch (error) {
                 log(`Error adding button: ${error.message}`);
+            }
+        }
+        
+        function addHTMLDragTest() {
+            try {
+                const htmlContent = `
+                    <div style="width: 400px; height: 300px; background: #9b59b6; padding: 20px; position: relative; color: white; border-radius: 8px;">
+                        <h3 style="margin: 0 0 15px 0;">HTML Drag Test Component</h3>
+                        
+                        <!-- Draggable status indicator (positioned element) -->
+                        <div class="status-indicator" style="position: absolute; top: 20px; right: 20px; background: #2ecc71; padding: 5px 10px; border-radius: 3px; cursor: move;"
+                             onmousedown="dragElement(event, this)">
+                            Status Badge
+                        </div>
+                        
+                        <!-- Draggable image -->
+                        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect width='60' height='60' fill='%23e74c3c' rx='5'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='white' font-size='12'%3EDrag%3C/text%3E%3C/svg%3E" 
+                             style="position: absolute; left: 20px; top: 80px; cursor: move;"
+                             onmousedown="dragElement(event, this)"
+                             ondragstart="return false">
+                        
+                        <!-- Draggable granulated text -->
+                        <div style="position: absolute; top: 160px; left: 20px; right: 20px;">
+                            <p style="margin: 0;">
+                                <span style="background: rgba(255,255,255,0.2); padding: 2px 4px; margin: 2px; display: inline-block; cursor: move;"
+                                      onmousedown="dragElement(event, this)">Drag</span>
+                                <span style="background: rgba(255,255,255,0.2); padding: 2px 4px; margin: 2px; display: inline-block; cursor: move;"
+                                      onmousedown="dragElement(event, this)">these</span>
+                                <span style="background: rgba(255,255,255,0.2); padding: 2px 4px; margin: 2px; display: inline-block; cursor: move;"
+                                      onmousedown="dragElement(event, this)">text</span>
+                                <span style="background: rgba(255,255,255,0.2); padding: 2px 4px; margin: 2px; display: inline-block; cursor: move;"
+                                      onmousedown="dragElement(event, this)">spans</span>
+                            </p>
+                        </div>
+                        
+                        <div style="position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; font-size: 12px;">
+                            Double-click component → Enter edit mode → Drag sub-elements
+                        </div>
+                    </div>
+                `;
+                
+                // Use addReactComponentWithHTML if available, otherwise create DOM element
+                let shape;
+                if (canvasMaker.addReactComponentWithHTML) {
+                    shape = canvasMaker.addReactComponentWithHTML(0, 0, 400, 300, htmlContent);
+                    log('Added HTML component using addReactComponentWithHTML', 'component');
+                } else {
+                    // Fallback: create DOM element
+                    const div = document.createElement('div');
+                    div.innerHTML = htmlContent;
+                    shape = canvasMaker.addReactComponent(div.firstElementChild, 0, 0, 400, 300, {
+                        label: 'HTML Drag Test',
+                        interactive: true,
+                        strokeColor: '#9b59b6'
+                    });
+                    log('Added HTML component using addReactComponent fallback', 'component');
+                }
+                
+                testComponents.push({ shape, element: null });
+                
+                // Simple drag function - use transform for all elements
+                if (!window.dragElement) {
+                    window.dragElement = function(event, element) {
+                        event.stopPropagation();
+                        log(`Started dragging: ${element.tagName} ${element.className}`, 'interaction');
+                        
+                        const startX = event.clientX;
+                        const startY = event.clientY;
+                        
+                        // Get current transform values
+                        const computedStyle = window.getComputedStyle(element);
+                        const transform = computedStyle.transform;
+                        let currentX = 0, currentY = 0;
+                        
+                        if (transform && transform !== 'none') {
+                            const matrix = transform.match(/matrix\((.+)\)/);
+                            if (matrix) {
+                                const values = matrix[1].split(',').map(v => parseFloat(v.trim()));
+                                currentX = values[4] || 0;
+                                currentY = values[5] || 0;
+                            }
+                        }
+                        
+                        log(`Current transform: (${currentX}, ${currentY})`, 'interaction');
+                        
+                        const handleMouseMove = (e) => {
+                            const deltaX = e.clientX - startX;
+                            const deltaY = e.clientY - startY;
+                            
+                            let newX = currentX + deltaX;
+                            let newY = currentY + deltaY;
+                            
+                            // Find container dynamically - look for the main component div
+                            let container = element.parentElement;
+                            while (container) {
+                                const computedStyle = getComputedStyle(container);
+                                
+                                // Look for container with significant size and positioning context
+                                if (computedStyle.position === 'relative' && 
+                                    container.offsetWidth > 200 && 
+                                    container.offsetHeight > 150) {
+                                    log(`Found container: ${container.tagName} (${container.offsetWidth}x${container.offsetHeight})`, 'interaction');
+                                    break;
+                                }
+                                container = container.parentElement;
+                                
+                                // Stop at body to avoid infinite loop
+                                if (container === document.body) {
+                                    container = null;
+                                    break;
+                                }
+                            }
+                            
+                            if (container) {
+                                // Simple bounds: keep element inside container 
+                                const containerPadding = 0; // No padding constraint
+                                const elementWidth = element.offsetWidth;
+                                const elementHeight = element.offsetHeight;
+                                
+                                // Get element's position without current transform
+                                element.style.transform = 'none';
+                                const elementRect = element.getBoundingClientRect();
+                                const containerRect = container.getBoundingClientRect();
+                                element.style.transform = `translate(${currentX}px, ${currentY}px)`;
+                                
+                                // Calculate max transform values
+                                const maxLeft = containerPadding - (elementRect.left - containerRect.left);
+                                const maxRight = (containerRect.width - elementWidth - containerPadding) - (elementRect.left - containerRect.left);
+                                const maxUp = containerPadding - (elementRect.top - containerRect.top);
+                                const maxDown = (containerRect.height - elementHeight - containerPadding) - (elementRect.top - containerRect.top);
+                                
+                                // Constrain movement
+                                newX = Math.max(maxLeft, Math.min(maxRight, newX));
+                                newY = Math.max(maxUp, Math.min(maxDown, newY));
+                            } else {
+                                log('Container not found for bounds checking', 'interaction');
+                            }
+                            
+                            element.style.transform = `translate(${newX}px, ${newY}px)`;
+                            e.preventDefault();
+                        };
+                        
+                        const handleMouseUp = (e) => {
+                            const finalDeltaX = e.clientX - startX;
+                            const finalDeltaY = e.clientY - startY;
+                            log(`Finished dragging: ${element.tagName}, movement: (${finalDeltaX}, ${finalDeltaY})`, 'interaction');
+                            
+                            document.removeEventListener('mousemove', handleMouseMove);
+                            document.removeEventListener('mouseup', handleMouseUp);
+                        };
+                        
+                        document.addEventListener('mousemove', handleMouseMove);
+                        document.addEventListener('mouseup', handleMouseUp);
+                        event.preventDefault();
+                    };
+                }
+                
+            } catch (error) {
+                log(`Error adding HTML drag test: ${error.message}`, 'error');
             }
         }
         
