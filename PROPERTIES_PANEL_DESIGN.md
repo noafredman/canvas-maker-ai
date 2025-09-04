@@ -49,10 +49,10 @@ A modern, Figma-style properties panel for the Canvas Maker that provides compre
 - Selected sub-element gets highlighted border
 
 ### Sub-element Selection in Edit Mode
-- Click any element inside the HTML component
+- **Single-click** any element inside the HTML component to select it
 - Properties panel updates to show that element's styles
 - Breadcrumb: "Card Component > Button"
-- Can navigate up to parent via breadcrumb
+- Navigation handled via properties panel controls (not double-clicking)
 
 ### Visual Indicators
 - Edit mode indicator in panel header
@@ -60,14 +60,37 @@ A modern, Figma-style properties panel for the Canvas Maker that provides compre
 - ESC to exit reminder
 - Different panel background color/border in edit mode
 
+## Selection System
+
+### Element Selection Model
+**Canvas Elements (Direct Selection):**
+- Rectangles, circles, text, lines → Single-click to select and style immediately
+- No edit mode required
+
+**HTML Components (Edit Mode Required):**
+- Single-click → Select entire component (basic properties only)
+- Double-click → Enter edit mode for sub-element access
+- In edit mode: Single-click any sub-element → Select for styling
+- ESC or click outside → Exit edit mode
+
+### Why Edit Mode for HTML Components?
+- ✅ **Clear intent** - Makes it obvious you're styling component internals
+- ✅ **No conflicts** - Canvas tools work normally (double-click for text creation, etc.)
+- ✅ **Safety** - Prevents accidental modification of deeply nested elements
+- ✅ **Visual clarity** - Edit mode provides different visual feedback
+
 ## Navigation System
 
-### Breadcrumb Navigation (Refined)
+### Breadcrumb Navigation (Properties Panel)
 
-**Current Selection Display:**
+Instead of complex double-click drilling like Figma, navigation is handled through the properties panel:
+
+**Properties Panel Header:**
 ```
-Component Name > Parent Div > Selected Element
-[Card Component] > [Content Area] > [Submit Button]
+┌─ Editing: Card Component ─────────────────────────────┐
+│ [Component] > [Content Div] > [Button] ↓              │
+│  ↑ click up     ↑ click up       ↑ go down           │
+└───────────────────────────────────────────────────────┘
 ```
 
 **Navigation Options:**
@@ -75,39 +98,36 @@ Component Name > Parent Div > Selected Element
 **1. Navigate UP (via breadcrumb)** ✓
 - Click any parent in the breadcrumb to select it
 - Always available since we know the path
+- Immediately updates properties panel to show parent's styles
 
 **2. Navigate DOWN (contextual)** 
-- **Single Child**: Show a down arrow (↓) button when element has exactly 1 child
+- **Single Child**: Show down arrow (↓) button when element has exactly 1 child
   ```
   Selected: Container [↓]  ← Click to select the only child
   ```
+- **Multiple Children**: Skip for now (keep interface simple)
 
-- **Multiple Children**: Could show either:
-  - Option A: Nothing (too complex)
-  - Option B: Dropdown with child count: "3 children ▼"
-  - Option C: Small expandable tree just for immediate children
+**Benefits of Panel-Based Navigation:**
+- ✅ **Precise control** - Clear navigation options always visible
+- ✅ **No interaction conflicts** - Canvas behavior stays consistent  
+- ✅ **Visual feedback** - Breadcrumb shows exact selection path
+- ✅ **Power user friendly** - Quick navigation without clicking around canvas
 
-**Proposed Approach:**
-1. **Keep it simple initially**: 
-   - Breadcrumb for going up ✓
-   - Down arrow only when 1 child ✓
-   - Skip multi-child navigation for now
-
-2. **Visual Example:**
-   ```
-   [Card] > [Body] > [Content Div] ↓
-                                   └─ Has 1 child (paragraph)
-   ```
-
-3. **Later Enhancement** (if needed):
-   - Add a small "children" section in properties panel
-   - Shows immediate children as clickable items
-   - But only if users request this complexity
+**Visual Example:**
+```
+[Card] > [Body] > [Content Div] ↓
+                                └─ Has 1 child (paragraph)
+```
 
 **Common Use Cases:**
 - Wrapper div → single content element  
 - Button → single text span
 - Link → single text node
+
+**Later Enhancement** (if needed):
+- Add small "children" section in properties panel
+- Show immediate children as clickable items
+- Only if users request this complexity
 
 ## Panel Sections (When Element Selected)
 
@@ -134,16 +154,89 @@ Component Name > Parent Div > Selected Element
 
 ### D. Layout (for HTML components)
 - Display type
-- Padding/Margin controls
+- **Visual Margin/Padding Controls** (Figma/XCode style)
 - Position type (absolute/relative)
 - Z-index
+
+#### Visual Margin/Padding Controls
+Interactive box model visualization similar to Figma/XCode:
+
+```
+┌─ Margin ─────────────────────────────┐
+│  ┌─ 20px ─┐                         │
+│  │ ┌─ Border ─────────────────────┐ │ │
+│  │ │ ┌─ Padding ─────────────────┐ │ │
+│  │ │ │  ┌─ 15px ─┐               │ │ │
+│20px │ │ │ │ Content │            │ │ │
+│  │ │ │  └─ 15px ─┘               │ │ │
+│  │ │ └───────────────────────────┘ │ │
+│  │ └─────────────────────────────────┘ │
+│  └─ 20px ─┘                         │
+└─────────────────────────────────────────┘
+```
+
+**Interactive Features:**
+- **Click to edit**: Click any margin/padding value to edit directly
+- **Dual input method**: 
+  - Click the **number** (e.g., "20" in "20px") to edit value directly
+  - Click the **unit** (e.g., "px" in "20px") to change unit type
+- **Visual feedback**: Hover highlights the corresponding area on both panel and canvas
+- **Linked values**: Chain icon to link all sides (like CSS shorthand: `margin: 20px`)
+- **Individual control**: Edit top, right, bottom, left independently
+- **Unit selection**: px, %, em, rem dropdown for each value
+- **Live preview**: Changes reflect immediately on canvas element
+- **Color coding**: 
+  - Margin areas: Light blue tint
+  - Padding areas: Light green tint
+  - Border areas: Light orange tint
+  - Content area: White/transparent
+
+**Layout Examples:**
+
+**Compact View** (with dual input):
+```
+Margin:  [🔗] [20|px ▼] [15|px ▼] [20|px ▼] [10|px ▼]
+         Link  Top      Right     Bottom    Left
+              ↑  ↑      ↑  ↑       ↑  ↑      ↑  ↑
+           number unit number unit number unit number unit
+```
+
+**Interaction Details:**
+- **Number click**: `20|px` → Select "20" for direct typing
+- **Unit click**: `20|px` → Dropdown with px, %, em, rem, auto
+- **Keyboard shortcuts**: 
+  - Arrow up/down to increment/decrement numbers
+  - Tab to move to next field
+  - Enter to confirm, Escape to cancel
+
+**Visual View** (when expanded):
+```
+       ┌── 20px ──┐
+       │  ┌───────────────┐
+  20px │  │   ┌───────┐   │ 20px  
+       │  │15px Content 15px │
+       │  │   └───────┘   │
+       │  └───────────────┘
+       └── 20px ──┘
+```
+
+**Canvas Integration:**
+- When editing margin/padding, show overlay on selected element
+- Highlight the specific area being modified (top margin, left padding, etc.)
+- Color-coded borders around the element showing current spacing values
 
 ## Behavior & Interactions
 
 ### Real-time Updates
 - Changes apply instantly as you type/drag
-- Number inputs have increment/decrement buttons
-- Sliders for opacity, border radius
+- **Dual input for all numeric fields**:
+  - Click number portion to edit directly: `16|px`, `100|%`, `1.5|em`
+  - Click unit portion to change units: `16|px ▼` → px, %, em, rem
+- **Input methods**:
+  - Direct typing: Click number and type new value
+  - Increment/decrement: Arrow keys or +/- buttons
+  - Sliders: For opacity, border radius, rotation
+  - Scrubbing: Click and drag on number to adjust (like Adobe/Figma)
 - Color picker with hex/rgba support
 
 ### Drag Feedback
