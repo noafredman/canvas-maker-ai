@@ -126,6 +126,12 @@
 <body>
     <div id="app-container"></div>
     
+    <!-- Canvas Container -->
+    <div class="canvas-container">
+        <canvas id="canvas" width="1200" height="800"></canvas>
+        <div id="selection-box" class="selection-box"></div>
+    </div>
+    
     <!-- Test Controls -->
     <div class="test-controls">
         <h4 style="margin: 0 0 12px 0;">Test Controls</h4>
@@ -579,7 +585,7 @@
                                 minY: -(elementRect.top - containerRect.top),
                                 maxY: (containerRect.height - elementHeight) - (elementRect.top - containerRect.top)
                             };
-                            
+                        }
                         
                         const handleMouseMove = (e) => {
                             const deltaX = e.clientX - startX;
