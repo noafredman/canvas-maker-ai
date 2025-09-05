@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sub-Element Drag Issues Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .test-info {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 8px;
+        }
+        #myCanvas {
+            border: 1px solid #ccc;
+            display: block;
+            margin: 20px 0;
+        }
+        .status-indicator {
+            cursor: move;
+        }
+        .button-text {
+            cursor: move;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-info">
+        <h2>Sub-Element Dragging Issues Test</h2>
+        <p><strong>Issue 1:</strong> Container (.status-indicator) jumps when drag starts - positioned element at top: 8px, right: 199.852px</p>
+        <p><strong>Issue 2:</strong> Ghost element trace - after dragging text, clicking original position still shows selection bounds</p>
+        <p><strong>To test:</strong> Double-click the button component to enter edit mode, then try dragging the green status indicator or the button text</p>
+    </div>
+    
+    <!-- Required UI elements -->
+    <div id="selection-box"></div>
+    <div id="zoom-indicator"></div>
+    <div id="recenter-button"></div>
+    <div id="nested-canvas-overlay"></div>
+    
+    <canvas id="myCanvas" width="1200" height="600"></canvas>
+
+    <script src="canvas.js"></script>
+    <script>
+        // Initialize canvas
+        const canvasElement = document.getElementById('myCanvas');
+        const canvas = new CanvasMaker(canvasElement.parentElement, {
+            width: 1200,
+            height: 600,
+            toolbarPosition: 'top-left',
+            features: {
+                deepSelection: true,  // Enable sub-element selection
+                advancedStyling: true
+            }
+        });
+
+        // Create the exact component from test-drag-functionality.html
+        setTimeout(() => {
+            const buttonHTML = `
+                <div style="
+                    position: relative; 
+                    width: 250px; 
+                    height: 100px; 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    border-radius: 12px; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    overflow: visible;
+                    cursor: pointer;
+                ">
+                    <button class="test-button" style="
+                        background: white;
+                        border: none;
+                        padding: 16px 32px;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        cursor: pointer;
+                        position: relative;
+                        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                    ">
+                        <span class="button-text" style="font-weight: 600; color: #4f46e5; font-size: 16px;">
+                            Drag Me Around
+                        </span>
+                        <div class="status-indicator" style="
+                            width: 12px; 
+                            height: 12px; 
+                            background: #10b981; 
+                            border-radius: 50%;
+                            position: absolute;
+                            top: 8px;
+                            right: 199.852px;
+                            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+                        "></div>
+                    </button>
+                </div>
+            `;
+            
+            // Add the component
+            canvas.addReactComponentWithHTML(200, 150, null, null, buttonHTML);
+            
+            // Add an image for comparison (images work correctly)
+            const imgHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%234CAF50'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='white' font-size='20'%3EImage%3C/text%3E%3C/svg%3E" alt="Test Image" style="cursor: move;">`;
+            canvas.addReactComponentWithHTML(500, 150, 100, 100, imgHTML);
+            
+            console.log('✅ Test component added');
+            console.log('📝 Instructions:');
+            console.log('1. Double-click the button to enter edit mode');
+            console.log('2. Try dragging the green status indicator - it should jump (Issue 1)');
+            console.log('3. Try dragging the "Drag Me Around" text - it will leave a ghost trace (Issue 2)');
+            console.log('4. Compare with the green image - it drags correctly');
+            
+            // Log when edit mode is entered
+            const originalEnterEditMode = canvas.enterComponentEditMode.bind(canvas);
+            canvas.enterComponentEditMode = function(shape) {
+                console.log('🔧 Entered edit mode for component:', shape.id);
+                originalEnterEditMode(shape);
+            };
+            
+            // Log drag events
+            const originalHandleDragMouseDown = canvas.handleDragMouseDown.bind(canvas);
+            canvas.handleDragMouseDown = function(e, element) {
+                console.log('🎯 Drag started on:', {
+                    tag: element.tagName,
+                    className: element.className,
+                    position: window.getComputedStyle(element).position,
+                    left: window.getComputedStyle(element).left,
+                    top: window.getComputedStyle(element).top
+                });
+                return originalHandleDragMouseDown(e, element);
+            };
+            
+        }, 500);
+    </script>
+</body>
+</html>

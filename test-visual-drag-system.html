@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Drag System Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 2px solid #ccc; }
+        .test-button { background: #007bff; color: white; border: none; padding: 10px 20px; margin: 5px; cursor: pointer; border-radius: 5px; }
+        .test-button:hover { background: #0056b3; }
+        .result-box { background: #f8f9fa; padding: 10px; border-radius: 5px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Visual Drag System Test</h1>
+    
+    <div class="test-section">
+        <h3>Test Instructions</h3>
+        <p>This test verifies the visual drag system works correctly for sub-elements:</p>
+        <ol>
+            <li>Add HTML components to canvas using buttons below</li>
+            <li>Double-click components to enter edit mode</li>
+            <li>Try dragging different types of elements:
+                <ul>
+                    <li><strong>Positioned elements</strong> (.status-indicator) - should drag smoothly without jumping</li>
+                    <li><strong>Granulated text</strong> - should drag individual words/spans without ghost traces</li>
+                </ul>
+            </li>
+            <li>Verify dragging respects container bounds</li>
+            <li>Verify no jumping on initial click or double-click</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Components</h3>
+        
+        <button class="test-button" onclick="addPositionedElementComponent()">
+            Add Component with Positioned Elements
+        </button>
+        
+        <button class="test-button" onclick="addGranulatedTextComponent()">
+            Add Component with Granulated Text
+        </button>
+        
+        <button class="test-button" onclick="addMixedComponent()">
+            Add Mixed Component (Both Types)
+        </button>
+        
+        <button class="test-button" onclick="clearCanvas()">
+            Clear Canvas
+        </button>
+    </div>
+
+    <div class="test-section">
+        <h3>Canvas</h3>
+        <div class="canvas-container">
+            <canvas id="canvas" width="1200" height="600"></canvas>
+            <div id="selection-box" class="selection-box"></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Results</h3>
+        <div class="result-box" id="results">
+            No tests run yet.
+        </div>
+    </div>
+
+    <script src="canvas.js"></script>
+    <script>
+        // Initialize canvas
+        const canvasElement = document.getElementById('canvas');
+        const canvas = new CanvasMaker(canvasElement.parentElement, {
+            width: 1200,
+            height: 600,
+            toolbarPosition: 'top-left'
+        });
+
+        function updateResults(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`;
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        function addPositionedElementComponent() {
+            const htmlContent = `
+                <div style="width: 300px; height: 200px; border: 2px solid #333; position: relative; background: #f0f0f0;">
+                    <div class="status-indicator" style="position: absolute; top: 10px; right: 10px; background: #28a745; color: white; padding: 5px 10px; border-radius: 3px;">
+                        Active
+                    </div>
+                    <div class="title" style="position: absolute; top: 50px; left: 20px; font-size: 18px; font-weight: bold;">
+                        Container Title
+                    </div>
+                    <div class="button" style="position: absolute; bottom: 20px; left: 20px; background: #007bff; color: white; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                        Action Button
+                    </div>
+                </div>
+            `;
+            
+            canvas.addReactComponentWithHTML(100, 100, null, null, htmlContent);
+            updateResults("Added component with positioned elements (.status-indicator, .title, .button)");
+        }
+
+        function addGranulatedTextComponent() {
+            const htmlContent = `
+                <div style="width: 400px; height: 150px; border: 2px solid #333; position: relative; background: #fff;">
+                    <p style="padding: 20px; line-height: 1.6;">
+                        <span class="granulated-text">This</span>
+                        <span class="granulated-text">is</span>
+                        <span class="granulated-text">granulated</span>
+                        <span class="granulated-text">text</span>
+                        <span class="granulated-text">where</span>
+                        <span class="granulated-text">each</span>
+                        <span class="granulated-text">word</span>
+                        <span class="granulated-text">can</span>
+                        <span class="granulated-text">be</span>
+                        <span class="granulated-text">dragged</span>
+                        <span class="granulated-text">individually.</span>
+                    </p>
+                </div>
+            `;
+            
+            canvas.addReactComponentWithHTML(550, 100, null, null, htmlContent);
+            updateResults("Added component with granulated text spans");
+        }
+
+        function addMixedComponent() {
+            const htmlContent = `
+                <div style="width: 350px; height: 250px; border: 2px solid #333; position: relative; background: #f8f9fa;">
+                    <div class="header" style="position: absolute; top: 10px; left: 10px; right: 10px; background: #6c757d; color: white; padding: 10px; text-align: center;">
+                        Mixed Component Header
+                    </div>
+                    <div style="position: absolute; top: 70px; left: 20px; right: 20px;">
+                        <p style="margin: 0 0 15px 0;">
+                            <span class="granulated-text">Granulated</span>
+                            <span class="granulated-text">text</span>
+                            <span class="granulated-text">mixed</span>
+                            <span class="granulated-text">with</span>
+                            <span class="granulated-text">positioned</span>
+                            <span class="granulated-text">elements.</span>
+                        </p>
+                    </div>
+                    <div class="floating-badge" style="position: absolute; top: 120px; right: 20px; background: #dc3545; color: white; padding: 5px 10px; border-radius: 20px; font-size: 12px;">
+                        Badge
+                    </div>
+                    <div class="bottom-controls" style="position: absolute; bottom: 15px; left: 20px; right: 20px; display: flex; gap: 10px;">
+                        <div style="background: #28a745; color: white; padding: 5px 10px; border-radius: 3px; flex: 1; text-align: center;">Save</div>
+                        <div style="background: #6c757d; color: white; padding: 5px 10px; border-radius: 3px; flex: 1; text-align: center;">Cancel</div>
+                    </div>
+                </div>
+            `;
+            
+            canvas.addReactComponentWithHTML(200, 300, null, null, htmlContent);
+            updateResults("Added mixed component with both positioned elements and granulated text");
+        }
+
+        function clearCanvas() {
+            canvas.clearCanvas();
+            updateResults("Canvas cleared");
+        }
+
+        // Add event listeners to track canvas interactions
+        canvas.on('selectionChange', (data) => {
+            if (data.selectedElements.length > 0) {
+                updateResults(`Selected: ${data.selectedElements.length} element(s)`);
+            }
+        });
+
+        updateResults("Test environment loaded. Add components and test visual drag system.");
+    </script>
+</body>
+</html>

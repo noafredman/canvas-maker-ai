@@ -170,6 +170,11 @@ class CanvasMaker {
         this.htmlRenderingLayer = null;
         this.htmlComponents = new Map(); // Map of shape.id -> DOM element
         this.editingComponentId = null; // Track which component is in edit mode
+        
+        // Properties panel
+        this.propertiesPanel = null;
+        this.selectedElement = null; // Currently selected element for styling
+        this.currentPlatform = 'web'; // Current platform view: web, ios, android, etc.
         this.currentNestedCanvasId = null;
         this.nestedCanvasData = new Map(); // Store individual nested canvas data
         
@@ -247,6 +252,7 @@ class CanvasMaker {
         this.ensureHTMLRenderingLayer();
         
         this.setupCanvas();
+        this.createPropertiesPanel();
         this.setupEventListeners();
         // Always setup toolbar event listeners for existing HTML elements
         this.setupToolbar();
@@ -877,6 +883,11 @@ class CanvasMaker {
         // Register component for canvas-based rendering and interaction
         this.registerCanvasComponent(shape);
         
+        // Update properties panel if it exists
+        if (this.propertiesPanel) {
+                this.updateSimplePropertiesPanel();
+        }
+        
         // Component will be rendered on next redraw
         
         // Return the shape for external reference
@@ -1146,6 +1157,11 @@ class CanvasMaker {
         
         // Add to active canvas context
         this.activeCanvasContext.shapes.push(shape);
+        
+        // Update properties panel if it exists
+        if (this.propertiesPanel) {
+                this.updateSimplePropertiesPanel();
+        }
         
         // Trigger immediate redraw to position element
         this.redrawCanvas();
@@ -2892,10 +2908,25 @@ class CanvasMaker {
                         const shape = this.shapes[element.index];
                         shape.x += deltaX;
                         shape.y += deltaY;
+                        
+                        // Update properties panel if this element is selected
+                        if (this.selectedElement && shape.id === this.selectedElement.id) {
+                            this.updatePropertiesPanelTransform(shape.x, shape.y);
+                            
+                            // For HTML components, also update DOM element
+                            if (shape.type === 'reactComponent') {
+                                this.updateElementTransform(shape);
+                            }
+                        }
                     } else if (element.type === 'text') {
                         const text = this.texts[element.index];
                         text.x += deltaX;
                         text.y += deltaY;
+                        
+                        // Update properties panel if this element is selected
+                        if (this.selectedElement && text.id === this.selectedElement.id) {
+                            this.updatePropertiesPanelTransform(text.x, text.y);
+                        }
                     } else if (element.type === 'path') {
                         const path = this.paths[element.index];
                         path.forEach(point => {
@@ -2972,14 +3003,34 @@ class CanvasMaker {
                         shape.y1 += deltaY;
                         shape.x2 += deltaX;
                         shape.y2 += deltaY;
+                        
+                        // Update properties panel if this element is selected
+                        if (this.selectedElement && shape.id === this.selectedElement.id) {
+                            this.updatePropertiesPanelTransform(Math.min(shape.x1, shape.x2), Math.min(shape.y1, shape.y2));
+                        }
                     } else {
                         shape.x += deltaX;
                         shape.y += deltaY;
+                        
+                        // Update properties panel if this element is selected
+                        if (this.selectedElement && shape.id === this.selectedElement.id) {
+                            this.updatePropertiesPanelTransform(shape.x, shape.y);
+                            
+                            // For HTML components, also update DOM element
+                            if (shape.type === 'reactComponent') {
+                                this.updateElementTransform(shape);
+                            }
+                        }
                     }
                 } else if (element.type === 'text') {
                     const text = this.texts[element.index];
                     text.x += deltaX;
                     text.y += deltaY;
+                    
+                    // Update properties panel if this element is selected
+                    if (this.selectedElement && text.id === this.selectedElement.id) {
+                        this.updatePropertiesPanelTransform(text.x, text.y);
+                    }
                 } else if (element.type === 'path') {
                     const path = this.paths[element.index];
                     path.forEach(point => {
@@ -3375,10 +3426,19 @@ class CanvasMaker {
                 // Select the clicked element
                 this.selectedElements = [clickedElement];
                 // console.log(`[CLICK] Selected element:`, clickedElement);
+                
+                // Update properties panel with selected element
+                this.updatePropertiesPanelSelection(clickedElement);
             } else {
                 // If clicking on empty space, deselect all
                 this.selectedElements = [];
+                this.selectedElement = null;
                 // console.log(`[CLICK] Deselected all - no element at click position`);
+                
+                // Update properties panel to show no selection
+                if (this.propertiesPanel) {
+                    this.updatePropertiesPanel();
+                }
             }
             
             this.redrawCanvas();
@@ -9554,6 +9614,1460 @@ class CanvasMaker {
         }
 
         return integration;
+    }
+    
+    // === PROPERTIES PANEL ===
+    
+    createPropertiesPanel() {
+        // Check if panel already exists
+        const existingPanel = document.querySelector('.properties-panel');
+        if (existingPanel) {
+            this.propertiesPanel = existingPanel;
+            this.updateSimplePropertiesPanel();
+            return;
+        }
+        
+        // Create properties panel container
+        this.propertiesPanel = document.createElement('div');
+        this.propertiesPanel.className = 'properties-panel';
+        this.propertiesPanel.innerHTML = `
+            <div class="properties-panel-header">
+                <div class="properties-title">Properties</div>
+                <div class="platform-selector">
+                    <select class="platform-dropdown">
+                        <option value="web">Web</option>
+                        <option value="ios-swiftui">iOS (SwiftUI)</option>
+                        <option value="ios-uikit">iOS (UIKit)</option>
+                        <option value="android-compose">Android (Compose)</option>
+                        <option value="android-views">Android (Views)</option>
+                        <option value="react-native">React Native</option>
+                        <option value="flutter">Flutter</option>
+                    </select>
+                </div>
+            </div>
+            <div class="properties-panel-content">
+                <div class="no-selection-state">
+                    <div class="no-selection-message">No element selected</div>
+                    <div class="component-list">
+                        <div class="component-list-title">Recent components</div>
+                        <div class="component-list-items"></div>
+                    </div>
+                </div>
+                <div class="selection-state" style="display: none;">
+                    <div class="breadcrumb-nav"></div>
+                    <div class="property-sections"></div>
+                </div>
+            </div>
+            <div class="properties-panel-footer">
+                <button class="export-code-btn">
+                    <span>Export as Code</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+        
+        document.body.appendChild(this.propertiesPanel);
+        
+        // Apply CSS class for styling
+        this.propertiesPanel.className = 'properties-panel';
+        
+        
+        // Simple, working properties panel
+        this.propertiesPanel.style.cssText = `
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 250px;
+            height: 100vh;
+            background: white;
+            border-left: 1px solid #ccc;
+            z-index: 1000;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            overflow-y: auto;
+            padding: 16px;
+        `;
+        
+        this.updateSimplePropertiesPanel();
+        
+        this.setupPropertiesPanelEvents();
+    }
+    
+    updateSimplePropertiesPanel() {
+        if (!this.propertiesPanel) {
+            return;
+        }
+        
+        // Find the current panel in the DOM
+        const currentPanel = document.querySelector('.properties-panel');
+        if (currentPanel && currentPanel !== this.propertiesPanel) {
+            this.propertiesPanel = currentPanel;
+        }
+        
+        const components = this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+        const totalShapes = this.activeCanvasContext.shapes.length;
+        const totalTexts = this.activeCanvasContext.texts.length;
+        
+        
+        this.propertiesPanel.innerHTML = `
+            <h3 style="margin: 0 0 16px 0; font-size: 16px; color: #333;">Properties</h3>
+            
+            <div style="margin-bottom: 20px; padding: 12px; background: #f5f5f5; border-radius: 4px;">
+                <strong>Canvas Status:</strong><br>
+                HTML Components: ${components.length}<br>
+                Total Shapes: ${totalShapes}<br>
+                Total Texts: ${totalTexts}
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <strong>HTML Components:</strong>
+                ${components.length === 0 ? 
+                    '<div style="color: #666; font-style: italic;">No components created</div>' :
+                    components.map(comp => `
+                        <div style="padding: 8px; margin: 4px 0; background: #e8f4f8; border-radius: 3px; cursor: pointer;" onclick="console.log('Component:', '${comp.id}')">
+                            📱 Component ${comp.id.toString().slice(-4)}
+                            <div style="font-size: 11px; color: #666;">Size: ${Math.round(comp.width)}×${Math.round(comp.height)}</div>
+                        </div>
+                    `).join('')
+                }
+            </div>
+            
+            <div style="padding: 8px; background: #f0f0f0; border-radius: 4px; font-size: 11px; color: #666;">
+                <strong>Debug:</strong> Panel working correctly!
+            </div>
+        `;
+    }
+    
+    setupPropertiesPanelEvents() {
+        // Simple setup - no complex events needed for now
+    }
+    
+    updatePropertiesPanel() {
+        if (!this.selectedElement) {
+            this.showNoSelectionState();
+        } else {
+            this.showSelectionState();
+        }
+    }
+    
+    showNoSelectionState() {
+        const noSelectionState = this.propertiesPanel.querySelector('.no-selection-state');
+        const selectionState = this.propertiesPanel.querySelector('.selection-state');
+        
+        noSelectionState.style.display = 'block';
+        selectionState.style.display = 'none';
+        
+        // DEBUG: Add visible test elements at each level to find where the issue is
+        // Level 1: Properties panel root
+        const testPanel = document.createElement('div');
+        testPanel.innerHTML = '1. PANEL ROOT TEST';
+        testPanel.style.cssText = 'background: lime; padding: 5px; margin: 2px; border: 2px solid black;';
+        this.propertiesPanel.appendChild(testPanel);
+        
+        // Level 2: Properties panel content
+        const content = this.propertiesPanel.querySelector('.properties-panel-content');
+        if (content) {
+            const testContent = document.createElement('div');
+            testContent.innerHTML = '2. CONTENT TEST';
+            testContent.style.cssText = 'background: orange; padding: 5px; margin: 2px; border: 2px solid black;';
+            content.appendChild(testContent);
+        }
+        
+        // Level 3: No selection state
+        if (noSelectionState) {
+            const testNoSelection = document.createElement('div');
+            testNoSelection.innerHTML = '3. NO-SELECTION TEST';
+            testNoSelection.style.cssText = 'background: yellow; padding: 5px; margin: 2px; border: 2px solid black;';
+            noSelectionState.appendChild(testNoSelection);
+        }
+        
+        // Level 4: Component list
+        const componentList = this.propertiesPanel.querySelector('.component-list');
+        if (componentList) {
+            const testComponentList = document.createElement('div');
+            testComponentList.innerHTML = '4. COMPONENT-LIST TEST';
+            testComponentList.style.cssText = 'background: pink; padding: 5px; margin: 2px; border: 2px solid black;';
+            componentList.appendChild(testComponentList);
+        }
+        
+        // Level 5: Component list items
+        const componentListItems = this.propertiesPanel.querySelector('.component-list-items');
+        if (componentListItems) {
+            const testItems = document.createElement('div');
+            testItems.innerHTML = '5. COMPONENT-LIST-ITEMS TEST';
+            testItems.style.cssText = 'background: cyan; padding: 5px; margin: 2px; border: 2px solid black;';
+            componentListItems.appendChild(testItems);
+        }
+        
+        // Debug overall panel visibility
+        const panelRect = this.propertiesPanel.getBoundingClientRect();
+        const panelStyle = getComputedStyle(this.propertiesPanel);
+        console.log(`[Properties Panel] Panel position and visibility:`, {
+            position: panelStyle.position,
+            right: panelStyle.right,
+            top: panelStyle.top,
+            width: panelStyle.width,
+            height: panelStyle.height,
+            zIndex: panelStyle.zIndex,
+            display: panelStyle.display,
+            visibility: panelStyle.visibility,
+            rect: {
+                left: panelRect.left,
+                top: panelRect.top,
+                width: panelRect.width,
+                height: panelRect.height
+            },
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            isInViewport: panelRect.left < window.innerWidth && panelRect.right > 0
+        });
+        
+        this.updateComponentList();
+    }
+    
+    showSelectionState() {
+        const noSelectionState = this.propertiesPanel.querySelector('.no-selection-state');
+        const selectionState = this.propertiesPanel.querySelector('.selection-state');
+        
+        noSelectionState.style.display = 'none';
+        selectionState.style.display = 'block';
+        
+        this.updateBreadcrumbNav();
+        this.updatePropertySections();
+    }
+    
+    updateComponentList() {
+        const componentListItems = this.propertiesPanel.querySelector('.component-list-items');
+        
+        if (!componentListItems) {
+            console.error('Could not find .component-list-items element');
+            return;
+        }
+        
+        // Get up to 5 recent components
+        const allComponents = [
+            ...this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent'),
+            ...this.activeCanvasContext.shapes.filter(s => s.type !== 'reactComponent')
+        ].slice(0, 5);
+        
+        console.log(`[Properties Panel] Found ${allComponents.length} components for list (${this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent').length} HTML, ${this.activeCanvasContext.shapes.filter(s => s.type !== 'reactComponent').length} other)`);
+        
+        try {
+            const htmlString = allComponents.map(component => {
+                const componentName = this.getComponentName(component);
+                const componentType = this.getPlatformElementName(component.type);
+                const componentIcon = this.getComponentIcon(component.type);
+                
+                
+                return `
+                <div class="component-item" data-component-id="${component.id}">
+                    <div class="component-icon">${componentIcon}</div>
+                    <div class="component-info">
+                        <div class="component-name">${componentName}</div>
+                        <div class="component-type">${componentType}</div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+            
+            componentListItems.innerHTML = htmlString;
+            console.log(`[Properties Panel] Set innerHTML, result:`, componentListItems.children.length, 'child elements');
+            
+            if (componentListItems.children.length > 0) {
+                console.log(`[Properties Panel] First child:`, componentListItems.children[0].outerHTML.substring(0, 100) + '...');
+                
+                // Debug visibility
+                const computedStyle = getComputedStyle(componentListItems);
+                const parentStyle = getComputedStyle(componentListItems.parentElement);
+                console.log(`[Properties Panel] componentListItems styles:`, {
+                    display: computedStyle.display,
+                    visibility: computedStyle.visibility,
+                    height: computedStyle.height,
+                    overflow: computedStyle.overflow
+                });
+                console.log(`[Properties Panel] parent (.component-list) styles:`, {
+                    display: parentStyle.display,
+                    visibility: parentStyle.visibility,
+                    height: parentStyle.height
+                });
+            }
+            
+        } catch (error) {
+            console.error('Error generating component list HTML:', error);
+            componentListItems.innerHTML = '<div style="color: red; padding: 10px;">Error loading components</div>';
+        }
+        
+        // Add click handlers (only add once to avoid duplicates)
+        if (!componentListItems.hasAttribute('data-handlers-added')) {
+            componentListItems.addEventListener('click', (e) => {
+                const componentItem = e.target.closest('.component-item');
+                if (componentItem) {
+                    const componentId = componentItem.dataset.componentId;
+                    const component = this.findShapeById(componentId);
+                    if (component) {
+                        this.selectElement(component);
+                    }
+                }
+            });
+            componentListItems.setAttribute('data-handlers-added', 'true');
+        }
+    }
+    
+    updateBreadcrumbNav() {
+        // TODO: Implement breadcrumb navigation
+    }
+    
+    updatePropertySections() {
+        const propertySections = this.propertiesPanel.querySelector('.property-sections');
+        if (!propertySections || !this.selectedElement) return;
+        
+        const element = this.selectedElement;
+        console.log('Updating property sections for element:', element);
+        
+        // Generate property sections based on element type
+        const sections = this.generatePropertySections(element);
+        propertySections.innerHTML = sections;
+        
+        // Add event listeners to property inputs
+        this.attachPropertyEventListeners(propertySections);
+    }
+    
+    generatePropertySections(element) {
+        let sections = '';
+        
+        // Transform section - for all elements
+        sections += this.generateTransformSection(element);
+        
+        // Appearance section - for all elements
+        sections += this.generateAppearanceSection(element);
+        
+        // Typography section - for text elements
+        if (element.type === 'text') {
+            sections += this.generateTypographySection(element);
+        }
+        
+        // Layout section - for HTML components
+        if (element.type === 'reactComponent') {
+            sections += this.generateLayoutSection(element);
+        }
+        
+        return sections;
+    }
+    
+    generateTransformSection(element) {
+        const x = element.x || 0;
+        const y = element.y || 0;
+        const width = element.width || 100;
+        const height = element.height || 100;
+        
+        return `
+            <div class="property-section">
+                <div class="section-header">Transform</div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>X</label>
+                        <div class="dual-input">
+                            <input type="number" class="property-input" data-property="x" value="${x}" step="1">
+                            <span class="unit">px</span>
+                        </div>
+                    </div>
+                    <div class="property-group">
+                        <label>Y</label>
+                        <div class="dual-input">
+                            <input type="number" class="property-input" data-property="y" value="${y}" step="1">
+                            <span class="unit">px</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>Width</label>
+                        <div class="dual-input">
+                            <input type="number" class="property-input" data-property="width" value="${width}" step="1">
+                            <span class="unit">px</span>
+                        </div>
+                    </div>
+                    <div class="property-group">
+                        <label>Height</label>
+                        <div class="dual-input">
+                            <input type="number" class="property-input" data-property="height" value="${height}" step="1">
+                            <span class="unit">px</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    generateAppearanceSection(element) {
+        const fillColor = element.fillColor || element.color || '#ffffff';
+        const strokeColor = element.strokeColor || '#000000';
+        const strokeWidth = element.strokeWidth || 1;
+        const opacity = element.opacity || 1;
+        
+        return `
+            <div class="property-section">
+                <div class="section-header">Appearance</div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>Fill</label>
+                        <div class="color-input">
+                            <input type="color" class="property-input color-picker" data-property="fillColor" value="${fillColor}">
+                            <input type="text" class="property-input hex-input" data-property="fillColor" value="${fillColor}">
+                        </div>
+                    </div>
+                </div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>Stroke</label>
+                        <div class="color-input">
+                            <input type="color" class="property-input color-picker" data-property="strokeColor" value="${strokeColor}">
+                            <input type="text" class="property-input hex-input" data-property="strokeColor" value="${strokeColor}">
+                        </div>
+                    </div>
+                    <div class="property-group">
+                        <label>Width</label>
+                        <div class="dual-input">
+                            <input type="number" class="property-input" data-property="strokeWidth" value="${strokeWidth}" min="0" step="1">
+                            <span class="unit">px</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>Opacity</label>
+                        <input type="range" class="property-input slider" data-property="opacity" value="${opacity}" min="0" max="1" step="0.01">
+                        <span class="slider-value">${Math.round(opacity * 100)}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    generateTypographySection(element) {
+        const fontSize = element.fontSize || 16;
+        const fontFamily = element.fontFamily || 'Arial';
+        const fontWeight = element.fontWeight || 'normal';
+        const textAlign = element.textAlign || 'left';
+        
+        return `
+            <div class="property-section">
+                <div class="section-header">Typography</div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>Font Family</label>
+                        <select class="property-input" data-property="fontFamily">
+                            <option value="Arial" ${fontFamily === 'Arial' ? 'selected' : ''}>Arial</option>
+                            <option value="Helvetica" ${fontFamily === 'Helvetica' ? 'selected' : ''}>Helvetica</option>
+                            <option value="Times New Roman" ${fontFamily === 'Times New Roman' ? 'selected' : ''}>Times New Roman</option>
+                            <option value="Georgia" ${fontFamily === 'Georgia' ? 'selected' : ''}>Georgia</option>
+                            <option value="Verdana" ${fontFamily === 'Verdana' ? 'selected' : ''}>Verdana</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>Size</label>
+                        <div class="dual-input">
+                            <input type="number" class="property-input" data-property="fontSize" value="${fontSize}" min="1" step="1">
+                            <span class="unit">px</span>
+                        </div>
+                    </div>
+                    <div class="property-group">
+                        <label>Weight</label>
+                        <select class="property-input" data-property="fontWeight">
+                            <option value="normal" ${fontWeight === 'normal' ? 'selected' : ''}>Normal</option>
+                            <option value="bold" ${fontWeight === 'bold' ? 'selected' : ''}>Bold</option>
+                            <option value="lighter" ${fontWeight === 'lighter' ? 'selected' : ''}>Lighter</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>Alignment</label>
+                        <select class="property-input" data-property="textAlign">
+                            <option value="left" ${textAlign === 'left' ? 'selected' : ''}>Left</option>
+                            <option value="center" ${textAlign === 'center' ? 'selected' : ''}>Center</option>
+                            <option value="right" ${textAlign === 'right' ? 'selected' : ''}>Right</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    generateLayoutSection(element) {
+        return `
+            <div class="property-section">
+                <div class="section-header">Layout</div>
+                <div class="property-row">
+                    <div class="property-group">
+                        <label>Display</label>
+                        <select class="property-input" data-property="display">
+                            <option value="block">Block</option>
+                            <option value="flex">Flex</option>
+                            <option value="inline-block">Inline Block</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="margin-padding-controls">
+                    <div class="spacing-section">
+                        <div class="spacing-label">Margin</div>
+                        <div class="spacing-visual">
+                            <div class="spacing-box margin-box">
+                                <input type="number" class="spacing-input top" data-property="marginTop" value="0" placeholder="0">
+                                <input type="number" class="spacing-input right" data-property="marginRight" value="0" placeholder="0">
+                                <input type="number" class="spacing-input bottom" data-property="marginBottom" value="0" placeholder="0">
+                                <input type="number" class="spacing-input left" data-property="marginLeft" value="0" placeholder="0">
+                                <div class="content-area">Content</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="spacing-section">
+                        <div class="spacing-label">Padding</div>
+                        <div class="spacing-visual">
+                            <div class="spacing-box padding-box">
+                                <input type="number" class="spacing-input top" data-property="paddingTop" value="0" placeholder="0">
+                                <input type="number" class="spacing-input right" data-property="paddingRight" value="0" placeholder="0">
+                                <input type="number" class="spacing-input bottom" data-property="paddingBottom" value="0" placeholder="0">
+                                <input type="number" class="spacing-input left" data-property="paddingLeft" value="0" placeholder="0">
+                                <div class="content-area">Content</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    attachPropertyEventListeners(container) {
+        // Handle all property input changes
+        const inputs = container.querySelectorAll('.property-input');
+        inputs.forEach(input => {
+            const property = input.dataset.property;
+            
+            // Real-time updates for most inputs
+            input.addEventListener('input', (e) => {
+                this.updateElementProperty(property, e.target.value, e.target.type);
+            });
+            
+            // Handle color picker changes
+            if (input.type === 'color') {
+                input.addEventListener('change', (e) => {
+                    // Also update the corresponding hex input
+                    const hexInput = container.querySelector(`input.hex-input[data-property="${property}"]`);
+                    if (hexInput) {
+                        hexInput.value = e.target.value;
+                    }
+                });
+            }
+            
+            // Handle hex input changes
+            if (input.classList.contains('hex-input')) {
+                input.addEventListener('change', (e) => {
+                    // Also update the corresponding color picker
+                    const colorPicker = container.querySelector(`input.color-picker[data-property="${property}"]`);
+                    if (colorPicker && e.target.value.match(/^#[0-9A-Fa-f]{6}$/)) {
+                        colorPicker.value = e.target.value;
+                    }
+                });
+            }
+            
+            // Handle range slider updates
+            if (input.type === 'range') {
+                const updateSliderValue = () => {
+                    const valueSpan = input.parentElement.querySelector('.slider-value');
+                    if (valueSpan && property === 'opacity') {
+                        valueSpan.textContent = `${Math.round(input.value * 100)}%`;
+                    }
+                };
+                
+                input.addEventListener('input', updateSliderValue);
+                updateSliderValue(); // Initial update
+            }
+        });
+    }
+    
+    updateElementProperty(property, value, inputType) {
+        if (!this.selectedElement) return;
+        
+        console.log('Updating element property:', property, '=', value);
+        
+        // Convert string values to appropriate types
+        let convertedValue = value;
+        if (inputType === 'number' || inputType === 'range') {
+            convertedValue = parseFloat(value) || 0;
+        }
+        
+        // Update the element
+        this.selectedElement[property] = convertedValue;
+        
+        // Apply changes based on element type
+        if (this.selectedElement.type === 'reactComponent') {
+            // For HTML components, update the DOM element
+            this.updateHTMLComponentStyle(this.selectedElement, property, convertedValue);
+        } else {
+            // For canvas elements, trigger a redraw
+            this.redrawCanvas();
+        }
+        
+        // Update position/size if transform properties changed
+        if (['x', 'y', 'width', 'height'].includes(property)) {
+            this.updateElementTransform(this.selectedElement);
+        }
+    }
+    
+    updateHTMLComponentStyle(component, property, value) {
+        const element = document.querySelector(`[data-component-id="${component.id}"]`);
+        if (!element) return;
+        
+        // Map properties to CSS styles
+        const styleMap = {
+            'x': () => element.style.left = value + 'px',
+            'y': () => element.style.top = value + 'px',
+            'width': () => element.style.width = value + 'px',
+            'height': () => element.style.height = value + 'px',
+            'fillColor': () => element.style.backgroundColor = value,
+            'strokeColor': () => element.style.borderColor = value,
+            'strokeWidth': () => element.style.borderWidth = value + 'px',
+            'opacity': () => element.style.opacity = value,
+            'fontSize': () => element.style.fontSize = value + 'px',
+            'fontFamily': () => element.style.fontFamily = value,
+            'fontWeight': () => element.style.fontWeight = value,
+            'textAlign': () => element.style.textAlign = value,
+            'marginTop': () => element.style.marginTop = value + 'px',
+            'marginRight': () => element.style.marginRight = value + 'px',
+            'marginBottom': () => element.style.marginBottom = value + 'px',
+            'marginLeft': () => element.style.marginLeft = value + 'px',
+            'paddingTop': () => element.style.paddingTop = value + 'px',
+            'paddingRight': () => element.style.paddingRight = value + 'px',
+            'paddingBottom': () => element.style.paddingBottom = value + 'px',
+            'paddingLeft': () => element.style.paddingLeft = value + 'px',
+        };
+        
+        if (styleMap[property]) {
+            styleMap[property]();
+        }
+    }
+    
+    updateElementTransform(element) {
+        if (element.type === 'reactComponent') {
+            const domElement = document.querySelector(`[data-component-id="${element.id}"]`);
+            if (domElement) {
+                domElement.style.left = element.x + 'px';
+                domElement.style.top = element.y + 'px';
+                domElement.style.width = element.width + 'px';
+                domElement.style.height = element.height + 'px';
+            }
+        } else {
+            // For canvas elements, just redraw
+            this.redrawCanvas();
+        }
+    }
+    
+    exportSelectedElementCode() {
+        if (!this.selectedElement) {
+            alert('Please select an element to export');
+            return;
+        }
+        
+        console.log('Exporting code for platform:', this.currentPlatform, 'element:', this.selectedElement);
+        
+        try {
+            const code = this.generateCodeForElement(this.selectedElement, this.currentPlatform);
+            
+            // Create a modal to show the generated code
+            this.showCodeExportModal(code, this.currentPlatform);
+            
+        } catch (error) {
+            console.error('Error generating code:', error);
+            alert('Error generating code. Please check the console for details.');
+        }
+    }
+    
+    generateCodeForElement(element, platform) {
+        switch (platform) {
+            case 'web':
+                return this.generateHTMLCode(element);
+            case 'ios-swiftui':
+                return this.generateSwiftUICode(element);
+            case 'ios-uikit':
+                return this.generateUIKitCode(element);
+            case 'android-compose':
+                return this.generateComposeCode(element);
+            case 'android-views':
+                return this.generateAndroidViewsCode(element);
+            case 'react-native':
+                return this.generateReactNativeCode(element);
+            case 'flutter':
+                return this.generateFlutterCode(element);
+            default:
+                return this.generateHTMLCode(element);
+        }
+    }
+    
+    generateHTMLCode(element) {
+        const styles = this.getElementStyles(element);
+        const tagName = this.getHTMLTagName(element);
+        
+        let html = `<${tagName}`;
+        
+        // Add common attributes
+        if (element.id) {
+            html += ` id="${element.id}"`;
+        }
+        
+        // Add inline styles
+        const styleString = Object.entries(styles)
+            .map(([key, value]) => `${this.camelToKebabCase(key)}: ${value}`)
+            .join('; ');
+            
+        if (styleString) {
+            html += ` style="${styleString}"`;
+        }
+        
+        html += '>';
+        
+        // Add content
+        const content = this.getElementContent(element);
+        if (content) {
+            html += content;
+        }
+        
+        html += `</${tagName}>`;
+        
+        return this.formatCode(html, 'html');
+    }
+    
+    generateSwiftUICode(element) {
+        const styles = this.getElementStyles(element);
+        const viewType = this.getSwiftUIViewType(element);
+        
+        let code = '';
+        
+        if (element.type === 'text') {
+            code = `Text("${this.getElementContent(element) || 'Text'}")`;
+        } else if (element.type === 'reactComponent') {
+            code = `VStack {\n    // TODO: Add your content here\n}`;
+        } else {
+            code = `${viewType}()`;
+        }
+        
+        // Add modifiers
+        const modifiers = this.getSwiftUIModifiers(styles);
+        modifiers.forEach(modifier => {
+            code += `\n    ${modifier}`;
+        });
+        
+        return this.formatCode(code, 'swift');
+    }
+    
+    generateComposeCode(element) {
+        const styles = this.getElementStyles(element);
+        const componentType = this.getComposeComponentType(element);
+        
+        let code = '';
+        
+        if (element.type === 'text') {
+            code = `Text(\n    text = "${this.getElementContent(element) || 'Text'}",`;
+        } else {
+            code = `${componentType}(`;
+        }
+        
+        // Add modifiers
+        const modifiers = this.getComposeModifiers(styles);
+        if (modifiers.length > 0) {
+            code += `\n    modifier = Modifier`;
+            modifiers.forEach(modifier => {
+                code += `\n        ${modifier}`;
+            });
+        }
+        
+        code += '\n)';
+        
+        return this.formatCode(code, 'kotlin');
+    }
+    
+    generateReactNativeCode(element) {
+        const styles = this.getElementStyles(element);
+        const componentType = this.getReactNativeComponentType(element);
+        
+        let code = `<${componentType}`;
+        
+        // Add style prop
+        const styleObj = this.convertToReactNativeStyles(styles);
+        if (Object.keys(styleObj).length > 0) {
+            code += ` style={${JSON.stringify(styleObj, null, 2)}}`;
+        }
+        
+        code += '>';
+        
+        // Add content
+        const content = this.getElementContent(element);
+        if (content && element.type === 'text') {
+            code += `\n  ${content}\n`;
+        } else if (element.type === 'reactComponent') {
+            code += '\n  {/* TODO: Add your content here */}\n';
+        }
+        
+        code += `</${componentType}>`;
+        
+        return this.formatCode(code, 'javascript');
+    }
+    
+    generateFlutterCode(element) {
+        const styles = this.getElementStyles(element);
+        const widgetType = this.getFlutterWidgetType(element);
+        
+        let code = '';
+        
+        if (element.type === 'text') {
+            code = `Text(\n  '${this.getElementContent(element) || 'Text'}',`;
+        } else {
+            code = `${widgetType}(`;
+        }
+        
+        // Add properties
+        const properties = this.getFlutterProperties(styles);
+        if (properties.length > 0) {
+            properties.forEach((prop, index) => {
+                code += `\n  ${prop}${index < properties.length - 1 ? ',' : ''}`;
+            });
+        }
+        
+        code += '\n)';
+        
+        return this.formatCode(code, 'dart');
+    }
+    
+    generateUIKitCode(element) {
+        const styles = this.getElementStyles(element);
+        const className = this.getUIKitClassName(element);
+        
+        let code = `let ${this.getVariableName(element)} = ${className}()\n`;
+        
+        // Add properties
+        const properties = this.getUIKitProperties(styles);
+        properties.forEach(prop => {
+            code += `${this.getVariableName(element)}.${prop}\n`;
+        });
+        
+        return this.formatCode(code, 'swift');
+    }
+    
+    generateAndroidViewsCode(element) {
+        const styles = this.getElementStyles(element);
+        
+        // Generate XML layout
+        let code = `<${this.getAndroidViewType(element)}\n`;
+        code += `    android:layout_width="${this.getAndroidDimension(styles.width)}"\n`;
+        code += `    android:layout_height="${this.getAndroidDimension(styles.height)}"`;
+        
+        // Add other attributes
+        const attributes = this.getAndroidAttributes(styles);
+        attributes.forEach(attr => {
+            code += `\n    ${attr}`;
+        });
+        
+        if (element.type === 'text') {
+            code += `\n    android:text="${this.getElementContent(element) || 'Text'}"`;
+        }
+        
+        code += ' />';
+        
+        return this.formatCode(code, 'xml');
+    }
+    
+    // Helper methods for code generation
+    getElementStyles(element) {
+        const styles = {};
+        
+        // Position and size
+        if (element.x !== undefined) styles.left = `${element.x}px`;
+        if (element.y !== undefined) styles.top = `${element.y}px`;
+        if (element.width !== undefined) styles.width = `${element.width}px`;
+        if (element.height !== undefined) styles.height = `${element.height}px`;
+        
+        // Colors
+        if (element.fillColor || element.color) styles.backgroundColor = element.fillColor || element.color;
+        if (element.strokeColor) styles.borderColor = element.strokeColor;
+        if (element.strokeWidth) styles.borderWidth = `${element.strokeWidth}px`;
+        
+        // Typography
+        if (element.fontSize) styles.fontSize = `${element.fontSize}px`;
+        if (element.fontFamily) styles.fontFamily = element.fontFamily;
+        if (element.fontWeight) styles.fontWeight = element.fontWeight;
+        if (element.textAlign) styles.textAlign = element.textAlign;
+        
+        // Opacity
+        if (element.opacity !== undefined) styles.opacity = element.opacity;
+        
+        // Border radius for rectangles
+        if (element.type === 'rectangle' && element.cornerRadius) {
+            styles.borderRadius = `${element.cornerRadius}px`;
+        }
+        
+        return styles;
+    }
+    
+    getElementContent(element) {
+        if (element.type === 'text') {
+            return element.text || 'Text';
+        }
+        return '';
+    }
+    
+    getHTMLTagName(element) {
+        const tagMap = {
+            'text': 'span',
+            'rectangle': 'div',
+            'circle': 'div',
+            'reactComponent': 'div'
+        };
+        return tagMap[element.type] || 'div';
+    }
+    
+    getSwiftUIViewType(element) {
+        const typeMap = {
+            'rectangle': 'Rectangle',
+            'circle': 'Circle',
+            'text': 'Text',
+            'reactComponent': 'VStack'
+        };
+        return typeMap[element.type] || 'VStack';
+    }
+    
+    getComposeComponentType(element) {
+        const typeMap = {
+            'rectangle': 'Box',
+            'circle': 'Box',
+            'text': 'Text',
+            'reactComponent': 'Column'
+        };
+        return typeMap[element.type] || 'Box';
+    }
+    
+    getReactNativeComponentType(element) {
+        const typeMap = {
+            'rectangle': 'View',
+            'circle': 'View',
+            'text': 'Text',
+            'reactComponent': 'View'
+        };
+        return typeMap[element.type] || 'View';
+    }
+    
+    getFlutterWidgetType(element) {
+        const typeMap = {
+            'rectangle': 'Container',
+            'circle': 'Container',
+            'text': 'Text',
+            'reactComponent': 'Column'
+        };
+        return typeMap[element.type] || 'Container';
+    }
+    
+    getUIKitClassName(element) {
+        const typeMap = {
+            'rectangle': 'UIView',
+            'circle': 'UIView',
+            'text': 'UILabel',
+            'reactComponent': 'UIView'
+        };
+        return typeMap[element.type] || 'UIView';
+    }
+    
+    getAndroidViewType(element) {
+        const typeMap = {
+            'rectangle': 'View',
+            'circle': 'View',
+            'text': 'TextView',
+            'reactComponent': 'LinearLayout'
+        };
+        return typeMap[element.type] || 'View';
+    }
+    
+    getSwiftUIModifiers(styles) {
+        const modifiers = [];
+        
+        if (styles.width) modifiers.push(`.frame(width: ${parseInt(styles.width)})`);
+        if (styles.height) modifiers.push(`.frame(height: ${parseInt(styles.height)})`);
+        if (styles.backgroundColor) modifiers.push(`.background(Color("${styles.backgroundColor}"))`);
+        if (styles.borderColor && styles.borderWidth) {
+            modifiers.push(`.border(Color("${styles.borderColor}"), width: ${parseInt(styles.borderWidth)})`);
+        }
+        if (styles.borderRadius) modifiers.push(`.cornerRadius(${parseInt(styles.borderRadius)})`);
+        if (styles.fontSize) modifiers.push(`.font(.system(size: ${parseInt(styles.fontSize)}))`);
+        if (styles.fontWeight === 'bold') modifiers.push(`.fontWeight(.bold)`);
+        
+        return modifiers;
+    }
+    
+    getComposeModifiers(styles) {
+        const modifiers = [];
+        
+        if (styles.width && styles.height) {
+            modifiers.push(`.size(${parseInt(styles.width)}.dp, ${parseInt(styles.height)}.dp)`);
+        } else {
+            if (styles.width) modifiers.push(`.width(${parseInt(styles.width)}.dp)`);
+            if (styles.height) modifiers.push(`.height(${parseInt(styles.height)}.dp)`);
+        }
+        
+        if (styles.backgroundColor) modifiers.push(`.background(Color(0x${this.hexToArgb(styles.backgroundColor)}))`);
+        if (styles.borderColor && styles.borderWidth) {
+            modifiers.push(`.border(${parseInt(styles.borderWidth)}.dp, Color(0x${this.hexToArgb(styles.borderColor)}))`);
+        }
+        if (styles.borderRadius) modifiers.push(`.clip(RoundedCornerShape(${parseInt(styles.borderRadius)}.dp))`);
+        
+        return modifiers;
+    }
+    
+    convertToReactNativeStyles(styles) {
+        const rnStyles = {};
+        
+        if (styles.width) rnStyles.width = parseInt(styles.width);
+        if (styles.height) rnStyles.height = parseInt(styles.height);
+        if (styles.backgroundColor) rnStyles.backgroundColor = styles.backgroundColor;
+        if (styles.borderColor) rnStyles.borderColor = styles.borderColor;
+        if (styles.borderWidth) rnStyles.borderWidth = parseInt(styles.borderWidth);
+        if (styles.borderRadius) rnStyles.borderRadius = parseInt(styles.borderRadius);
+        if (styles.fontSize) rnStyles.fontSize = parseInt(styles.fontSize);
+        if (styles.fontFamily) rnStyles.fontFamily = styles.fontFamily;
+        if (styles.fontWeight) rnStyles.fontWeight = styles.fontWeight;
+        if (styles.textAlign) rnStyles.textAlign = styles.textAlign;
+        
+        return rnStyles;
+    }
+    
+    getFlutterProperties(styles) {
+        const properties = [];
+        
+        if (styles.width && styles.height) {
+            properties.push(`width: ${parseInt(styles.width)}`);
+            properties.push(`height: ${parseInt(styles.height)}`);
+        }
+        
+        if (styles.backgroundColor || styles.borderColor) {
+            let decoration = 'decoration: BoxDecoration(';
+            if (styles.backgroundColor) {
+                decoration += `color: Color(0x${this.hexToArgb(styles.backgroundColor)})`;
+            }
+            if (styles.borderColor && styles.borderWidth) {
+                decoration += `, border: Border.all(color: Color(0x${this.hexToArgb(styles.borderColor)}), width: ${parseInt(styles.borderWidth)})`;
+            }
+            if (styles.borderRadius) {
+                decoration += `, borderRadius: BorderRadius.circular(${parseInt(styles.borderRadius)})`;
+            }
+            decoration += ')';
+            properties.push(decoration);
+        }
+        
+        if (styles.fontSize || styles.fontWeight || styles.color) {
+            let textStyle = 'style: TextStyle(';
+            if (styles.fontSize) textStyle += `fontSize: ${parseInt(styles.fontSize)}`;
+            if (styles.fontWeight === 'bold') textStyle += ', fontWeight: FontWeight.bold';
+            if (styles.color) textStyle += `, color: Color(0x${this.hexToArgb(styles.color)})`;
+            textStyle += ')';
+            properties.push(textStyle);
+        }
+        
+        return properties;
+    }
+    
+    getUIKitProperties(styles) {
+        const properties = [];
+        
+        if (styles.backgroundColor) {
+            properties.push(`backgroundColor = UIColor(hexString: "${styles.backgroundColor}")`);
+        }
+        if (styles.width && styles.height) {
+            properties.push(`frame = CGRect(x: 0, y: 0, width: ${parseInt(styles.width)}, height: ${parseInt(styles.height)})`);
+        }
+        if (styles.borderRadius) {
+            properties.push(`layer.cornerRadius = ${parseInt(styles.borderRadius)}`);
+        }
+        if (styles.borderColor && styles.borderWidth) {
+            properties.push(`layer.borderColor = UIColor(hexString: "${styles.borderColor}").cgColor`);
+            properties.push(`layer.borderWidth = ${parseInt(styles.borderWidth)}`);
+        }
+        
+        return properties;
+    }
+    
+    getAndroidDimension(dimension) {
+        if (dimension && typeof dimension === 'string' && dimension.includes('px')) {
+            return `${parseInt(dimension)}dp`;
+        }
+        return 'wrap_content';
+    }
+    
+    getAndroidAttributes(styles) {
+        const attributes = [];
+        
+        if (styles.backgroundColor) {
+            attributes.push(`android:background="${styles.backgroundColor}"`);
+        }
+        if (styles.fontSize) {
+            attributes.push(`android:textSize="${parseInt(styles.fontSize)}sp"`);
+        }
+        if (styles.color) {
+            attributes.push(`android:textColor="${styles.color}"`);
+        }
+        if (styles.textAlign) {
+            const alignment = styles.textAlign === 'center' ? 'center' : styles.textAlign === 'right' ? 'end' : 'start';
+            attributes.push(`android:gravity="${alignment}"`);
+        }
+        
+        return attributes;
+    }
+    
+    getVariableName(element) {
+        const prefix = element.type === 'text' ? 'label' : 'view';
+        const id = element.id ? String(element.id).slice(0, 8) : 'element';
+        return `${prefix}${id}`;
+    }
+    
+    camelToKebabCase(str) {
+        return str.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
+    }
+    
+    hexToArgb(hex) {
+        // Convert #FFFFFF to ARGB format for Android/Flutter
+        if (hex.startsWith('#')) {
+            const rgb = hex.slice(1);
+            return `FF${rgb.toUpperCase()}`;
+        }
+        return 'FFFFFFFF';
+    }
+    
+    formatCode(code, language) {
+        // Add TODO comment for interactive functionality
+        const todoComment = this.getTodoComment(language);
+        
+        return `${todoComment}\n\n${code}`;
+    }
+    
+    getTodoComment(language) {
+        const comments = {
+            'html': '<!-- TODO: Add interactive functionality -->',
+            'swift': '// TODO: Add button actions and interaction logic',
+            'kotlin': '// TODO: Add click handlers and business logic',
+            'javascript': '// TODO: Add event handlers and state management',
+            'dart': '// TODO: Add onPressed callbacks and state management',
+            'xml': '<!-- TODO: Add click handlers and business logic -->'
+        };
+        
+        return comments[language] || '// TODO: Add interactive functionality';
+    }
+    
+    showCodeExportModal(code, platform) {
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.className = 'code-export-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        `;
+        
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+        `;
+        
+        // Modal header
+        const header = document.createElement('div');
+        header.style.cssText = `
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        `;
+        
+        const title = document.createElement('h3');
+        title.textContent = `Export Code - ${this.getPlatformDisplayName(platform)}`;
+        title.style.cssText = `
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+        `;
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '×';
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #666;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background 0.2s ease;
+        `;
+        
+        // Code container
+        const codeContainer = document.createElement('div');
+        codeContainer.style.cssText = `
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        `;
+        
+        const codeBlock = document.createElement('pre');
+        codeBlock.style.cssText = `
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 16px;
+            border-radius: 8px;
+            overflow: auto;
+            margin: 0;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        `;
+        codeBlock.textContent = code;
+        
+        // Copy button
+        const copyBtn = document.createElement('button');
+        copyBtn.textContent = 'Copy to Clipboard';
+        copyBtn.style.cssText = `
+            margin-top: 16px;
+            padding: 10px 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.15s ease;
+        `;
+        
+        // Event listeners
+        closeBtn.addEventListener('click', () => document.body.removeChild(modal));
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) document.body.removeChild(modal);
+        });
+        
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Copied!';
+                copyBtn.style.background = '#10b981';
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.style.background = '#3b82f6';
+                }, 2000);
+            });
+        });
+        
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.background = '#e5e7eb';
+        });
+        
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.background = 'none';
+        });
+        
+        copyBtn.addEventListener('mouseenter', () => {
+            copyBtn.style.background = '#2563eb';
+        });
+        
+        copyBtn.addEventListener('mouseleave', () => {
+            copyBtn.style.background = '#3b82f6';
+        });
+        
+        // Assemble modal
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        codeContainer.appendChild(codeBlock);
+        codeContainer.appendChild(copyBtn);
+        modalContent.appendChild(header);
+        modalContent.appendChild(codeContainer);
+        modal.appendChild(modalContent);
+        
+        // Add to DOM
+        document.body.appendChild(modal);
+    }
+    
+    getPlatformDisplayName(platform) {
+        const names = {
+            'web': 'HTML/CSS',
+            'ios-swiftui': 'iOS (SwiftUI)',
+            'ios-uikit': 'iOS (UIKit)',
+            'android-compose': 'Android (Compose)',
+            'android-views': 'Android (Views)',
+            'react-native': 'React Native',
+            'flutter': 'Flutter'
+        };
+        return names[platform] || platform;
+    }
+    
+    getComponentIcon(type) {
+        const icons = {
+            'reactComponent': '📱',
+            'rectangle': '▭',
+            'circle': '●',
+            'text': 'T',
+            'line': '━',
+            'path': '✏️'
+        };
+        return icons[type] || '◻️';
+    }
+    
+    getComponentName(component) {
+        if (component.type === 'reactComponent' && component.label) {
+            return component.label;
+        }
+        const idString = String(component.id);
+        return `${this.getPlatformElementName(component.type)} ${idString.slice(0, 8)}`;
+    }
+    
+    getPlatformElementName(type) {
+        const mappings = {
+            'web': {
+                'reactComponent': 'Component',
+                'rectangle': 'div',
+                'circle': 'div',
+                'text': 'span',
+                'line': 'hr',
+                'path': 'svg'
+            },
+            'ios-swiftui': {
+                'reactComponent': 'View',
+                'rectangle': 'Rectangle',
+                'circle': 'Circle',
+                'text': 'Text',
+                'line': 'Divider',
+                'path': 'Path'
+            },
+            'android-compose': {
+                'reactComponent': 'Composable',
+                'rectangle': 'Box',
+                'circle': 'Canvas',
+                'text': 'Text',
+                'line': 'Divider',
+                'path': 'Canvas'
+            }
+        };
+        
+        const platformMapping = mappings[this.currentPlatform] || mappings['web'];
+        return platformMapping[type] || type;
+    }
+    
+    selectElement(element) {
+        this.selectedElement = element;
+        this.updatePropertiesPanel();
+    }
+    
+    updatePropertiesPanelSelection(clickedElement) {
+        if (!this.propertiesPanel) return;
+        
+        // Convert clicked element to actual element object
+        let actualElement = null;
+        
+        if (clickedElement.type === 'shape' && clickedElement.index !== undefined) {
+            // Canvas shape element
+            if (this.activeCanvasContext.shapes[clickedElement.index]) {
+                actualElement = this.activeCanvasContext.shapes[clickedElement.index];
+            }
+        } else if (clickedElement.type === 'text' && clickedElement.index !== undefined) {
+            // Text element
+            if (this.activeCanvasContext.texts[clickedElement.index]) {
+                actualElement = this.activeCanvasContext.texts[clickedElement.index];
+                actualElement.type = 'text'; // Ensure type is set
+            }
+        } else if (clickedElement.type === 'path' && clickedElement.index !== undefined) {
+            // Path element
+            if (this.activeCanvasContext.paths[clickedElement.index]) {
+                actualElement = {
+                    type: 'path',
+                    path: this.activeCanvasContext.paths[clickedElement.index],
+                    x: 0,
+                    y: 0,
+                    width: 100,
+                    height: 100
+                };
+            }
+        } else if (clickedElement.type === 'reactComponent') {
+            // HTML component - element is already the component object
+            actualElement = clickedElement;
+        }
+        
+        if (actualElement) {
+            console.log('Selecting element for properties panel:', actualElement);
+            this.selectedElement = actualElement;
+            this.updatePropertiesPanel();
+        } else {
+            console.log('Could not find actual element for clicked element:', clickedElement);
+        }
+    }
+    
+    findShapeById(id) {
+        return this.activeCanvasContext.shapes.find(shape => shape.id === id);
+    }
+    
+    updatePropertiesPanelTransform(x, y, width, height) {
+        if (!this.propertiesPanel || !this.selectedElement) return;
+        
+        // Update X input
+        const xInput = this.propertiesPanel.querySelector('[data-property="x"]');
+        if (xInput) {
+            xInput.value = Math.round(x * 10) / 10; // Round to 1 decimal place
+        }
+        
+        // Update Y input
+        const yInput = this.propertiesPanel.querySelector('[data-property="y"]');
+        if (yInput) {
+            yInput.value = Math.round(y * 10) / 10;
+        }
+        
+        // Update width and height if provided
+        if (width !== undefined) {
+            const widthInput = this.propertiesPanel.querySelector('[data-property="width"]');
+            if (widthInput) {
+                widthInput.value = Math.round(width * 10) / 10;
+            }
+        }
+        
+        if (height !== undefined) {
+            const heightInput = this.propertiesPanel.querySelector('[data-property="height"]');
+            if (heightInput) {
+                heightInput.value = Math.round(height * 10) / 10;
+            }
+        }
+        
+        // Also update the selected element's properties to keep them in sync
+        if (this.selectedElement) {
+            this.selectedElement.x = x;
+            this.selectedElement.y = y;
+            if (width !== undefined) this.selectedElement.width = width;
+            if (height !== undefined) this.selectedElement.height = height;
+        }
     }
 }
 
