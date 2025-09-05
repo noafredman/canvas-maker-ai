@@ -9865,6 +9865,114 @@ ${components.map(comp => `        Positioned(
     }
 }
 
+// Global drag function for HTML sub-elements
+if (typeof window !== 'undefined' && !window.dragElement) {
+    window.dragElement = function(event, element) {
+        event.stopPropagation();
+        
+        // Check if this is a granulated text span
+        let targetElement = element;
+        if (element.tagName === 'SPAN') {
+            // For spans, check if user is trying to select text
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0 && !selection.isCollapsed) {
+                return; // Don't drag if text is selected
+            }
+            
+            // Find the text container
+            targetElement = element.parentElement;
+        }
+        
+        const startX = event.clientX;
+        const startY = event.clientY;
+        let hasMoved = false;
+        
+        // Get current transform values for the target element
+        const computedStyle = window.getComputedStyle(targetElement);
+        const transform = computedStyle.transform;
+        let currentX = 0, currentY = 0;
+        
+        if (transform && transform !== 'none') {
+            const matrix = transform.match(/matrix\((.+)\)/);
+            if (matrix) {
+                const values = matrix[1].split(',').map(v => parseFloat(v.trim()));
+                currentX = values[4] || 0;
+                currentY = values[5] || 0;
+            }
+        }
+        
+        // Find immediate positioned parent (not the outermost component)
+        let container = targetElement.parentElement;
+        while (container) {
+            const computedStyle = getComputedStyle(container);
+            
+            // Stop at first positioned parent that's not tiny
+            if ((computedStyle.position === 'absolute' || computedStyle.position === 'relative') && 
+                container.offsetWidth > 50 && 
+                container.offsetHeight > 50) {
+                break;
+            }
+            container = container.parentElement;
+            if (container === document.body) {
+                container = null;
+                break;
+            }
+        }
+        
+        let boundsCache = null;
+        if (container) {
+            // Calculate bounds once for the target element
+            const elementWidth = targetElement.offsetWidth;
+            const elementHeight = targetElement.offsetHeight;
+            
+            targetElement.style.transform = 'none';
+            const elementRect = targetElement.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+            targetElement.style.transform = `translate(${currentX}px, ${currentY}px)`;
+            
+            boundsCache = {
+                minX: -(elementRect.left - containerRect.left),
+                maxX: (containerRect.width - elementWidth) - (elementRect.left - containerRect.left),
+                minY: -(elementRect.top - containerRect.top),
+                maxY: (containerRect.height - elementHeight) - (elementRect.top - containerRect.top)
+            };
+        }
+        
+        const handleMouseMove = (e) => {
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+            
+            // Only start dragging after small movement threshold
+            if (!hasMoved && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+                hasMoved = true;
+            }
+            
+            if (!hasMoved) return;
+            
+            let newX = currentX + deltaX;
+            let newY = currentY + deltaY;
+            
+            // Apply cached bounds if available
+            if (boundsCache) {
+                newX = Math.max(boundsCache.minX, Math.min(boundsCache.maxX, newX));
+                newY = Math.max(boundsCache.minY, Math.min(boundsCache.maxY, newY));
+            }
+            
+            targetElement.style.transform = `translate(${newX}px, ${newY}px)`;
+            e.preventDefault();
+        };
+        
+        const handleMouseUp = (e) => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+        
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        event.preventDefault();
+    };
+}
+
 // Export the class for use as a module (if modules are supported)
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = CanvasMaker;

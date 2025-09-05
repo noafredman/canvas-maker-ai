@@ -16,13 +16,13 @@ function createNestedComponent() {
         '<h2 style="margin: 0 0 20px 0; text-align: center; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">📊 Level 1: Dashboard</h2>',
         
         // Level 2: Main content container
-        '<div style="position: absolute; top: 60px; left: 20px; right: 20px; height: 280px; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; cursor: move; backdrop-filter: blur(10px);">',
+        '<div style="position: absolute; top: 60px; left: 20px; right: 20px; height: 280px; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; cursor: move; backdrop-filter: blur(10px);" onmousedown="dragElement(event, this)">',
         '<h3 style="margin: 0 0 15px 0; color: #fff; font-size: 18px;">🏢 Level 2: Content Container</h3>',
         
         // Level 3: Sidebar
         '<div style="position: absolute; left: 15px; top: 40px; width: 140px; height: 220px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 12px; cursor: move;">',
         '<h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">📋 Level 3: Sidebar</h4>',
-        '<div style="background: rgba(34, 197, 94, 0.7); padding: 8px; border-radius: 4px; margin-bottom: 8px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmouseover="this.style.background=\'rgba(34, 197, 94, 0.9)\'" onmouseout="this.style.background=\'rgba(34, 197, 94, 0.7)\'">✅ Menu Item 1</div>',
+        '<div style="background: rgba(34, 197, 94, 0.7); padding: 8px; border-radius: 4px; margin-bottom: 8px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmousedown="dragElement(event, this)" onmouseover="this.style.background=\'rgba(34, 197, 94, 0.9)\'" onmouseout="this.style.background=\'rgba(34, 197, 94, 0.7)\'">✅ Menu Item 1</div>',
         '<div style="background: rgba(59, 130, 246, 0.7); padding: 8px; border-radius: 4px; margin-bottom: 8px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmouseover="this.style.background=\'rgba(59, 130, 246, 0.9)\'" onmouseout="this.style.background=\'rgba(59, 130, 246, 0.7)\'">📊 Menu Item 2</div>',
         '<div style="background: rgba(245, 158, 11, 0.7); padding: 8px; border-radius: 4px; margin-bottom: 8px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmouseover="this.style.background=\'rgba(245, 158, 11, 0.9)\'" onmouseout="this.style.background=\'rgba(245, 158, 11, 0.7)\'">⚙️ Menu Item 3</div>',
         '<div style="background: rgba(239, 68, 68, 0.7); padding: 8px; border-radius: 4px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmouseover="this.style.background=\'rgba(239, 68, 68, 0.9)\'" onmouseout="this.style.background=\'rgba(239, 68, 68, 0.7)\'">🚨 Menu Item 4</div>',
