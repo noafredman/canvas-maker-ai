@@ -263,6 +263,9 @@ class CanvasMaker {
         this.canvas.style.transform = 'none';
         this.canvas.style.transformOrigin = '0 0';
         
+        // Initialize properties panel
+        this.initializePropertiesPanel();
+        
         this.redrawCanvas();
     }
     
@@ -9554,6 +9557,311 @@ class CanvasMaker {
         }
 
         return integration;
+    }
+
+    // Properties Panel Implementation
+    initializePropertiesPanel() {
+        // Find the properties panel element
+        this.propertiesPanel = document.getElementById('properties-panel');
+        if (!this.propertiesPanel) {
+            return; // Properties panel not found, skip initialization
+        }
+
+        // Get panel elements
+        this.propertiesPanelContent = this.propertiesPanel.querySelector('.properties-panel-content');
+        this.platformSelector = this.propertiesPanel.querySelector('.platform-dropdown');
+        this.exportCodeBtn = this.propertiesPanel.querySelector('.export-code-btn');
+
+        // Show the properties panel
+        this.propertiesPanel.style.display = 'flex';
+
+        // Set up event listeners
+        if (this.platformSelector) {
+            this.platformSelector.addEventListener('change', () => {
+                this.updatePropertiesPanel();
+            });
+        }
+
+        if (this.exportCodeBtn) {
+            this.exportCodeBtn.addEventListener('click', () => {
+                this.exportCode();
+            });
+        }
+
+        // Hook into selection changes
+        this.addHook('onSelectionChange', (data) => {
+            this.updatePropertiesPanel();
+        });
+
+        // Initial update
+        this.updatePropertiesPanel();
+    }
+
+    updatePropertiesPanel() {
+        if (!this.propertiesPanelContent) return;
+
+        const selectedElements = this.activeCanvasContext.selectedElements;
+        const hasSelection = selectedElements && selectedElements.length > 0;
+
+        if (hasSelection) {
+            this.showSelectionProperties(selectedElements);
+        } else {
+            this.showComponentList();
+        }
+    }
+
+    showComponentList() {
+        // Get all HTML components from shapes
+        const components = this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+        const totalShapes = this.activeCanvasContext.shapes.length;
+        const totalTexts = this.activeCanvasContext.texts.length;
+
+        this.propertiesPanelContent.innerHTML = `
+            <div class="no-selection-state">
+                <div class="no-selection-message">
+                    Select an element to edit its properties
+                </div>
+                
+                <div class="component-list">
+                    <div class="component-list-title">Canvas Contents</div>
+                    
+                    <div style="margin-bottom: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px; font-size: 12px;">
+                        <strong>Summary:</strong><br>
+                        HTML Components: ${components.length}<br>
+                        Shapes: ${totalShapes - components.length}<br>
+                        Text Elements: ${totalTexts}
+                    </div>
+                    
+                    ${components.length > 0 ? `
+                        <div class="component-list-items">
+                            ${components.map((comp, index) => `
+                                <div class="component-item" onclick="window.canvasMaker.selectComponent('${comp.id}')">
+                                    <div class="component-icon">🧩</div>
+                                    <div class="component-info">
+                                        <div class="component-name">HTML Component ${index + 1}</div>
+                                        <div class="component-type">${Math.round(comp.width)}×${Math.round(comp.height)}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<div style="text-align: center; color: #9ca3af; font-size: 12px; padding: 20px;">No HTML components yet</div>'}
+                </div>
+            </div>
+        `;
+    }
+
+    showSelectionProperties(selectedElements) {
+        const element = selectedElements[0]; // Show properties for first selected element
+        
+        this.propertiesPanelContent.innerHTML = `
+            <div class="selection-state">
+                <div style="margin-bottom: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px;">
+                    <strong>Selected:</strong> ${element.type || 'Unknown'}<br>
+                    <strong>Position:</strong> ${Math.round(element.x || 0)}, ${Math.round(element.y || 0)}<br>
+                    ${element.width ? `<strong>Size:</strong> ${Math.round(element.width)}×${Math.round(element.height)}` : ''}
+                </div>
+                
+                <div class="property-sections">
+                    <div class="property-section">
+                        <div class="section-header">Transform</div>
+                        <div class="property-row">
+                            <div class="property-group">
+                                <label>X Position</label>
+                                <input type="number" class="property-input" value="${Math.round(element.x || 0)}" 
+                                       onchange="window.canvasMaker.updateElementProperty('${element.id}', 'x', parseFloat(this.value))">
+                            </div>
+                            <div class="property-group">
+                                <label>Y Position</label>
+                                <input type="number" class="property-input" value="${Math.round(element.y || 0)}"
+                                       onchange="window.canvasMaker.updateElementProperty('${element.id}', 'y', parseFloat(this.value))">
+                            </div>
+                        </div>
+                        ${element.width ? `
+                            <div class="property-row">
+                                <div class="property-group">
+                                    <label>Width</label>
+                                    <input type="number" class="property-input" value="${Math.round(element.width)}"
+                                           onchange="window.canvasMaker.updateElementProperty('${element.id}', 'width', parseFloat(this.value))">
+                                </div>
+                                <div class="property-group">
+                                    <label>Height</label>
+                                    <input type="number" class="property-input" value="${Math.round(element.height)}"
+                                           onchange="window.canvasMaker.updateElementProperty('${element.id}', 'height', parseFloat(this.value))">
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    selectComponent(componentId) {
+        // Find and select the component
+        const component = this.activeCanvasContext.shapes.find(s => s.id === componentId);
+        if (component) {
+            this.activeCanvasContext.selectedElements = [component];
+            this.notifySelectionChange();
+            this.redrawCanvas();
+        }
+    }
+
+    updateElementProperty(elementId, property, value) {
+        // Find the element in all possible arrays
+        const element = this.findElementById(elementId);
+        if (element) {
+            element[property] = value;
+            this.updatePropertiesPanel();
+            this.redrawCanvas();
+        }
+    }
+
+    findElementById(elementId) {
+        // Search in shapes
+        let element = this.activeCanvasContext.shapes.find(s => s.id === elementId);
+        if (element) return element;
+
+        // Search in texts
+        element = this.activeCanvasContext.texts.find(t => t.id === elementId);
+        if (element) return element;
+
+        // Search in paths
+        element = this.activeCanvasContext.paths.find(p => p.id === elementId);
+        if (element) return element;
+
+        // Search in nested canvases
+        element = this.activeCanvasContext.nestedCanvases.find(nc => nc.id === elementId);
+        return element;
+    }
+
+    exportCode() {
+        const platform = this.platformSelector ? this.platformSelector.value : 'web';
+        const components = this.activeCanvasContext.shapes.filter(s => s.type === 'reactComponent');
+        
+        if (components.length === 0) {
+            alert('No HTML components to export');
+            return;
+        }
+
+        // Generate code based on platform
+        let code = this.generatePlatformCode(components, platform);
+        
+        // Create a simple preview modal
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 10000; display: flex;
+            align-items: center; justify-content: center;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 8px; max-width: 80%; max-height: 80%; overflow: auto;">
+                <h3>Generated ${platform.toUpperCase()} Code</h3>
+                <pre style="background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;">${code}</pre>
+                <button onclick="this.parentElement.parentElement.remove()" 
+                        style="margin-top: 15px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Close
+                </button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+
+    generatePlatformCode(components, platform) {
+        // Simple code generation - in a real app this would be more sophisticated
+        switch (platform) {
+            case 'ios':
+                return this.generateSwiftCode(components);
+            case 'android':
+                return this.generateAndroidCode(components);
+            case 'react-native':
+                return this.generateReactNativeCode(components);
+            case 'flutter':
+                return this.generateFlutterCode(components);
+            default:
+                return this.generateWebCode(components);
+        }
+    }
+
+    generateWebCode(components) {
+        return `<div class="canvas-layout">
+${components.map(comp => `  <div style="position: absolute; left: ${comp.x}px; top: ${comp.y}px; width: ${comp.width}px; height: ${comp.height}px;">
+    <!-- Component content would go here -->
+    <div class="component-placeholder">HTML Component</div>
+  </div>`).join('\n')}
+</div>`;
+    }
+
+    generateSwiftCode(components) {
+        return `// iOS SwiftUI Code
+struct CanvasView: View {
+    var body: some View {
+        ZStack {
+${components.map(comp => `            VStack {
+                Text("Component")
+            }
+            .frame(width: ${comp.width}, height: ${comp.height})
+            .position(x: ${comp.x}, y: ${comp.y})`).join('\n')}
+        }
+    }
+}`;
+    }
+
+    generateAndroidCode(components) {
+        return `<!-- Android XML Layout -->
+<RelativeLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    
+${components.map(comp => `    <View
+        android:layout_width="${comp.width}dp"
+        android:layout_height="${comp.height}dp"
+        android:layout_marginLeft="${comp.x}dp"
+        android:layout_marginTop="${comp.y}dp" />`).join('\n')}
+        
+</RelativeLayout>`;
+    }
+
+    generateReactNativeCode(components) {
+        return `// React Native Code
+const CanvasScreen = () => {
+  return (
+    <View style={styles.container}>
+${components.map(comp => `      <View style={{
+        position: 'absolute',
+        left: ${comp.x},
+        top: ${comp.y},
+        width: ${comp.width},
+        height: ${comp.height}
+      }}>
+        {/* Component content */}
+      </View>`).join('\n')}
+    </View>
+  );
+};`);
+    }
+
+    generateFlutterCode(components) {
+        return `// Flutter Code
+class CanvasWidget extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+${components.map(comp => `        Positioned(
+          left: ${comp.x},
+          top: ${comp.y},
+          width: ${comp.width},
+          height: ${comp.height},
+          child: Container(
+            // Component content
+          ),
+        ),`).join('\n')}
+      ],
+    );
+  }
+}`;
     }
 }
 

@@ -229,6 +229,35 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Properties Panel -->
+        <div id="properties-panel" class="properties-panel" style="display: none;">
+            <div class="properties-panel-header">
+                <div class="properties-title">Properties</div>
+                <div class="platform-selector">
+                    <select class="platform-dropdown">
+                        <option value="web">Web</option>
+                        <option value="ios">iOS</option>
+                        <option value="android">Android</option>
+                        <option value="react-native">React Native</option>
+                        <option value="flutter">Flutter</option>
+                        <option value="vue">Vue.js</option>
+                        <option value="angular">Angular</option>
+                    </select>
+                </div>
+            </div>
+            <div class="properties-panel-content">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+            <div class="properties-panel-footer">
+                <button class="export-code-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                    </svg>
+                    Export Code
+                </button>
+            </div>
+        </div>
     </div>
     
     <script src="canvas.js"></script>
