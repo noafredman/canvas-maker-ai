@@ -9839,7 +9839,7 @@ ${components.map(comp => `      <View style={{
       </View>`).join('\n')}
     </View>
   );
-};`);
+};`;
     }
 
     generateFlutterCode(components) {
