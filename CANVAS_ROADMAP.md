@@ -10,12 +10,8 @@ This document tracks the development progress and planned features for the Canva
 - **Minimap Navigation** - Interactive overview with viewport indicator and click/drag navigation
 - **Multi-Element Resize** - Full resize support for text and nested canvas elements
 - **Integration Documentation** - Basic API documentation with examples
-- **HTML Element Drag System** - Comprehensive drag functionality for sub-elements with bounds detection
 
 ### 🔄 In Progress
-
-- **Styles Side Panel** - Modern Figma-style properties panel with live updates
-- **Custom Styles Upload** - Allow users/apps to provide default styles and themes
 
 Currently working on advanced styling and debugging capabilities to achieve Figma/XCode-level design tool functionality.
 
@@ -26,9 +22,6 @@ Currently working on advanced styling and debugging capabilities to achieve Figm
 
 | Task | Status | Priority | Description |
 |------|--------|----------|-------------|
-| Create modern styles side panel UI | 🔄 In Progress | High | Figma-style properties panel with real-time updates |
-| Implement custom styles upload system | 🔄 In Progress | High | Allow external apps to provide default styles/themes |
-| Add drag position feedback to panel | 🔲 Pending | High | Update margin/position values when elements are dragged |
 | Implement setHTMLComponentStyle method | 🔲 Pending | High | Complete CSS property control for HTML components |
 | Add layout and positioning controls | 🔲 Pending | Medium | Flexbox, Grid, absolute positioning |
 | Add animation and transition controls | 🔲 Pending | Medium | CSS animations, keyframes, transitions |
@@ -128,5 +121,5 @@ Screen Component (z: 0)
 
 ---
 
-*Last Updated: September 4, 2025*
+*Last Updated: September 1, 2025*
 *Current Version: v1.8.14*
