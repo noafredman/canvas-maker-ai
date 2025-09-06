@@ -16,13 +16,13 @@ function createNestedComponent() {
         '<h2 style="margin: 0 0 20px 0; text-align: center; font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">📊 Level 1: Dashboard</h2>',
         
         // Level 2: Main content container
-        '<div style="position: absolute; top: 60px; left: 20px; right: 20px; height: 280px; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; cursor: move; backdrop-filter: blur(10px);" onmousedown="dragElement(event, this)">',
+        '<div style="position: absolute; top: 60px; left: 20px; right: 20px; height: 280px; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; cursor: move; backdrop-filter: blur(10px);">',
         '<h3 style="margin: 0 0 15px 0; color: #fff; font-size: 18px;">🏢 Level 2: Content Container</h3>',
         
         // Level 3: Sidebar
-        '<div style="position: absolute; left: 15px; top: 40px; width: 140px; height: 220px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 12px; cursor: move;">',
+        '<div style="position: absolute; left: 15px; top: 40px; width: 140px; height: 220px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 12px; cursor: move;">'
         '<h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">📋 Level 3: Sidebar</h4>',
-        '<div style="background: rgba(34, 197, 94, 0.7); padding: 8px; border-radius: 4px; margin-bottom: 8px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmousedown="dragElement(event, this)" onmouseover="this.style.background=\'rgba(34, 197, 94, 0.9)\'" onmouseout="this.style.background=\'rgba(34, 197, 94, 0.7)\'">✅ Menu Item 1</div>',
+        '<div style="background: rgba(34, 197, 94, 0.7); padding: 8px; border-radius: 4px; margin-bottom: 8px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmouseover="this.style.background=\'rgba(34, 197, 94, 0.9)\'" onmouseout="this.style.background=\'rgba(34, 197, 94, 0.7)\'">✅ Menu Item 1</div>',
         '<div style="background: rgba(59, 130, 246, 0.7); padding: 8px; border-radius: 4px; margin-bottom: 8px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmouseover="this.style.background=\'rgba(59, 130, 246, 0.9)\'" onmouseout="this.style.background=\'rgba(59, 130, 246, 0.7)\'">📊 Menu Item 2</div>',
         '<div style="background: rgba(245, 158, 11, 0.7); padding: 8px; border-radius: 4px; margin-bottom: 8px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmouseover="this.style.background=\'rgba(245, 158, 11, 0.9)\'" onmouseout="this.style.background=\'rgba(245, 158, 11, 0.7)\'">⚙️ Menu Item 3</div>',
         '<div style="background: rgba(239, 68, 68, 0.7); padding: 8px; border-radius: 4px; cursor: move; font-size: 12px; transition: all 0.2s ease;" onmouseover="this.style.background=\'rgba(239, 68, 68, 0.9)\'" onmouseout="this.style.background=\'rgba(239, 68, 68, 0.7)\'">🚨 Menu Item 4</div>',
@@ -62,7 +62,7 @@ function createNestedComponent() {
         '</div>',
         
         // Level 2: Footer status bar
-        '<div style="position: absolute; bottom: 20px; left: 20px; right: 20px; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; cursor: move;">',
+        '<div style="position: absolute; bottom: 20px; left: 20px; right: 20px; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; cursor: move;">'
         '<div style="font-size: 12px; font-weight: 500;">🔹 Level 2: Status Bar - System Online</div>',
         '<div style="display: flex; gap: 8px; align-items: center;">',
         '<div style="width: 10px; height: 10px; background: #10b981; border-radius: 50%; cursor: move; transition: transform 0.2s ease;" onmouseover="this.style.transform=\'scale(1.2)\'" onmouseout="this.style.transform=\'scale(1)\'" title="System Online"></div>',
@@ -106,11 +106,20 @@ function createNestedComponent() {
 }
 
 // Auto-run if loaded via script tag and canvasMaker exists
-if (typeof window !== 'undefined' && window.canvasMaker) {
-    console.log('🚀 Auto-creating nested component...');
-    createNestedComponent();
-} else if (typeof window !== 'undefined') {
-    console.log('⏳ Canvas Maker not ready yet. Run createNestedComponent() when ready.');
+if (typeof window !== 'undefined') {
+    // Wait for Canvas Maker to be ready
+    function waitForCanvasMaker() {
+        if (window.canvasMaker) {
+            console.log('🚀 Auto-creating nested component...');
+            createNestedComponent();
+        } else {
+            console.log('⏳ Canvas Maker not ready yet, waiting...');
+            setTimeout(waitForCanvasMaker, 100);
+        }
+    }
+    
+    // Start checking after a short delay to let the page load
+    setTimeout(waitForCanvasMaker, 500);
 }
 
 // Export for module use

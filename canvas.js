@@ -7308,6 +7308,8 @@ class CanvasMaker {
         // Ensure smooth transition
         element.style.opacity = '1';
         
+        // Enable automatic sub-element dragging
+        this.enableSubElementDragging(element);
         
         // Resize handles will be hidden on next redraw
         
@@ -7351,6 +7353,9 @@ class CanvasMaker {
             
             element.classList.remove('editing');
             // console.log(`[EDIT-EXIT] Removed editing class`);
+            
+            // Disable automatic sub-element dragging
+            this.disableSubElementDragging(element);
         }
         
         
@@ -7421,6 +7426,66 @@ class CanvasMaker {
                 // console.log(`[EDIT-EXIT] ESC pressed but no component in edit mode`);
             }
         }
+    }
+    
+    // Enable automatic sub-element dragging for HTML components
+    enableSubElementDragging(htmlElement) {
+        if (!htmlElement) return;
+        
+        // Find all elements with cursor: move that aren't already draggable
+        const draggableElements = htmlElement.querySelectorAll('[style*="cursor: move"], [style*="cursor:move"]');
+        
+        draggableElements.forEach((element, index) => {
+            // Skip if already has a drag handler
+            if (element._hasDragHandler) return;
+            
+            // Create a bound drag handler for this element
+            const dragHandler = (event) => {
+                event.stopPropagation();
+                if (window.dragElement) {
+                    window.dragElement(event, element);
+                }
+            };
+            
+            // Store the handler on the element for cleanup
+            element._dragHandler = dragHandler;
+            element._hasDragHandler = true;
+            
+            // Add the event listener
+            element.addEventListener('mousedown', dragHandler);
+            
+            // Prevent browser drag for images
+            if (element.tagName === 'IMG') {
+                const preventDrag = (e) => e.preventDefault();
+                element.addEventListener('dragstart', preventDrag);
+                element._preventDragHandler = preventDrag;
+            }
+        });
+    }
+    
+    // Disable automatic sub-element dragging for HTML components  
+    disableSubElementDragging(htmlElement) {
+        if (!htmlElement) return;
+        
+        // Find all elements that have drag handlers
+        const allElements = htmlElement.querySelectorAll('*');
+        
+        allElements.forEach(element => {
+            if (element._hasDragHandler && element._dragHandler) {
+                // Remove the mousedown event listener
+                element.removeEventListener('mousedown', element._dragHandler);
+                
+                // Remove dragstart prevention for images
+                if (element._preventDragHandler) {
+                    element.removeEventListener('dragstart', element._preventDragHandler);
+                    delete element._preventDragHandler;
+                }
+                
+                // Clean up the stored references
+                delete element._dragHandler;
+                delete element._hasDragHandler;
+            }
+        });
     }
     
     // Draw background image/gradient
