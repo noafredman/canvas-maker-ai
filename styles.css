@@ -207,6 +207,18 @@ h1 {
     align-items: center;
     gap: 10px;
     z-index: 1000;
+    transition: right 0.2s ease;
+}
+
+/* Move canvas controls when properties panel is visible */
+.properties-panel[style*="display: flex"] ~ .canvas-container .canvas-controls,
+.properties-panel[style*="display: block"] ~ .canvas-container .canvas-controls {
+    right: 300px; /* 280px panel width + 20px margin */
+}
+
+/* Alternative approach - when body has properties-panel-open class */
+body.properties-panel-open .canvas-controls {
+    right: 300px; /* 280px panel width + 20px margin */
 }
 
 .zoom-controls {

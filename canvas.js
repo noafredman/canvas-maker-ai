@@ -9639,6 +9639,9 @@ class CanvasMaker {
 
         // Show the properties panel
         this.propertiesPanel.style.display = 'flex';
+        
+        // Add body class to move canvas controls
+        document.body.classList.add('properties-panel-open');
 
         // Set up event listeners
         if (this.platformSelector) {
