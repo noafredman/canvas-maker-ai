@@ -9971,8 +9971,21 @@ if (typeof window !== 'undefined' && !window.dragElement) {
         
         // Find immediate positioned parent (not the outermost component)
         let container = targetElement.parentElement;
+        // console.log('🔍 DRAG DEBUG START:', {
+        //     element: targetElement.tagName + ' ' + (targetElement.className || ''),
+        //     elementSize: `${targetElement.offsetWidth}x${targetElement.offsetHeight}`,
+        //     currentTransform: `${currentX}, ${currentY}`
+        // });
+        
         while (container) {
             const computedStyle = getComputedStyle(container);
+            // console.log('🔍 Checking container:', {
+            //     tag: container.tagName,
+            //     class: container.className,
+            //     position: computedStyle.position,
+            //     size: `${container.offsetWidth}x${container.offsetHeight}`,
+            //     isValid: (computedStyle.position === 'absolute' || computedStyle.position === 'relative') && container.offsetWidth > 50 && container.offsetHeight > 50
+            // });
             
             // Stop at first positioned parent that's not tiny
             if ((computedStyle.position === 'absolute' || computedStyle.position === 'relative') && 
@@ -9987,6 +10000,8 @@ if (typeof window !== 'undefined' && !window.dragElement) {
             }
         }
         
+        // console.log('🔍 Final container:', container ? `${container.tagName} ${container.offsetWidth}x${container.offsetHeight}` : 'NONE');
+        
         let boundsCache = null;
         if (container) {
             // Calculate bounds once for the target element
@@ -9998,12 +10013,21 @@ if (typeof window !== 'undefined' && !window.dragElement) {
             const containerRect = container.getBoundingClientRect();
             targetElement.style.transform = `translate(${currentX}px, ${currentY}px)`;
             
+            // Calculate bounds to keep element within container
+            const containerPadding = 0; // Assuming no padding for now
             boundsCache = {
-                minX: -(elementRect.left - containerRect.left),
-                maxX: (containerRect.width - elementWidth) - (elementRect.left - containerRect.left),
-                minY: -(elementRect.top - containerRect.top),
-                maxY: (containerRect.height - elementHeight) - (elementRect.top - containerRect.top)
+                minX: containerRect.left - elementRect.left,
+                maxX: (containerRect.left + containerRect.width - elementWidth) - elementRect.left,
+                minY: containerRect.top - elementRect.top,
+                maxY: (containerRect.top + containerRect.height - elementHeight) - elementRect.top
             };
+            
+            // console.log('🔍 Bounds calculated:', {
+            //     elementPos: `${elementRect.left}, ${elementRect.top}`,
+            //     containerPos: `${containerRect.left}, ${containerRect.top}`,
+            //     boundsX: `${boundsCache.minX} to ${boundsCache.maxX}`,
+            //     boundsY: `${boundsCache.minY} to ${boundsCache.maxY}`
+            // });
         }
         
         const handleMouseMove = (e) => {
