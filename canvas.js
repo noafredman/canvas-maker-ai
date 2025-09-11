@@ -62,6 +62,9 @@ class CanvasMaker {
         window.canvasMaker = this;
         this.currentTool = 'select'; // Default to select tool
         this.showOriginMarker = false; // Hide origin marker by default, set to true for testing
+        
+        // Layer panel functionality
+        this.layerPanel = null;
         this.isDrawing = false;
         this.isSelecting = false;
         this.isDragging = false;
@@ -250,6 +253,7 @@ class CanvasMaker {
         this.setupEventListeners();
         // Always setup toolbar event listeners for existing HTML elements
         this.setupToolbar();
+        this.setupLayerPanel();
         
         if (this.options.createToolbar) {
             this.setupFloatingToolbar();
@@ -5884,6 +5888,12 @@ class CanvasMaker {
             
             this._performRedraw(canvasContext);
             
+            // Update layer tree after redraw
+            this.updateLayerTree();
+            
+            // Update layer selection highlighting
+            this.updateLayerSelection();
+            
             // Execute afterRedraw hooks
             this.executeHooks('afterRedraw', canvasContext);
             
@@ -9931,6 +9941,678 @@ ${components.map(comp => `        Positioned(
   }
 }`;
     }
+
+    // Layer Panel Management
+    setupLayerPanel() {
+        this.layerPanel = document.getElementById('layer-panel');
+        if (!this.layerPanel) return;
+
+        // Setup toggle button
+        const toggleBtn = document.getElementById('layer-panel-toggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+                this.layerPanel.classList.toggle('collapsed');
+                // Rotate the toggle icon
+                const icon = toggleBtn.querySelector('svg');
+                if (icon) {
+                    icon.style.transform = this.layerPanel.classList.contains('collapsed') ? 'rotate(180deg)' : 'rotate(0deg)';
+                }
+            });
+        }
+
+        // Setup resize handle
+        const resizeHandle = this.layerPanel.querySelector('.layer-panel-resize-handle');
+        if (resizeHandle) {
+            this.setupLayerPanelResize(resizeHandle);
+        }
+
+        // Setup expand/collapse functionality
+        const expandButtons = this.layerPanel.querySelectorAll('.layer-expand-btn');
+        expandButtons.forEach(btn => {
+            btn.addEventListener('click', this.handleLayerExpand.bind(this));
+        });
+
+        // Setup layer item selection  
+        const layerItems = this.layerPanel.querySelectorAll('.layer-item-content');
+        layerItems.forEach(item => {
+            item.addEventListener('click', this.handleLayerSelection.bind(this));
+        });
+
+        // Don't update tree immediately - wait for canvas to be ready
+        // Tree will be updated when elements are added via redraw
+    }
+    
+    setupLayerPanelResize(handle) {
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+        
+        const startResize = (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = this.layerPanel.offsetWidth;
+            
+            // Add class for visual feedback
+            this.layerPanel.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            
+            // Prevent selection while dragging
+            e.preventDefault();
+        };
+        
+        const doResize = (e) => {
+            if (!isResizing) return;
+            
+            const deltaX = e.clientX - startX;
+            const newWidth = startWidth + deltaX;
+            
+            // Set min/max widths
+            const minWidth = 200;
+            const maxWidth = 600;
+            
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                this.layerPanel.style.width = newWidth + 'px';
+            }
+        };
+        
+        const stopResize = () => {
+            if (isResizing) {
+                isResizing = false;
+                this.layerPanel.classList.remove('resizing');
+                document.body.style.cursor = '';
+                
+                // Save the width preference (optional - could use localStorage)
+                if (typeof localStorage !== 'undefined') {
+                    localStorage.setItem('layerPanelWidth', this.layerPanel.style.width);
+                }
+            }
+        };
+        
+        // Mouse events
+        handle.addEventListener('mousedown', startResize);
+        document.addEventListener('mousemove', doResize);
+        document.addEventListener('mouseup', stopResize);
+        
+        // Load saved width if available
+        if (typeof localStorage !== 'undefined') {
+            const savedWidth = localStorage.getItem('layerPanelWidth');
+            if (savedWidth) {
+                this.layerPanel.style.width = savedWidth;
+            }
+        }
+    }
+
+    handleLayerExpand(e) {
+        e.stopPropagation();
+        const button = e.target.closest('.layer-expand-btn');
+        const layerItem = button.closest('.layer-item');
+        const children = layerItem.querySelector('.layer-children');
+        
+        if (children) {
+            // Toggle visibility
+            if (children.style.display === 'none') {
+                children.style.display = 'block';
+                button.classList.remove('collapsed');
+            } else {
+                children.style.display = 'none';
+                button.classList.add('collapsed');
+            }
+        }
+    }
+
+    handleLayerSelection(e) {
+        const layerContent = e.target.closest('.layer-item-content');
+        const elementId = layerContent.closest('.layer-item').dataset.elementId;
+
+        // Clear previous selection
+        const selectedItems = this.layerPanel.querySelectorAll('.layer-item-content.selected');
+        selectedItems.forEach(item => item.classList.remove('selected'));
+
+        // Add selection
+        layerContent.classList.add('selected');
+
+        // Sync with canvas selection
+        this.selectElementById(elementId);
+    }
+
+    selectElementById(elementId) {
+        // Clear current selection
+        this.selectedElements = [];
+
+        if (elementId === 'canvas') {
+            this.redraw();
+            return;
+        }
+
+        // Find element in all contexts
+        const contexts = [this.mainCanvasContext];
+        if (this.nestedCanvasContext) contexts.push(this.nestedCanvasContext);
+
+        for (const context of contexts) {
+            if (!context) continue;
+            
+            const allElements = [
+                ...(context.shapes || []),
+                ...(context.texts || []),
+                ...(context.htmlComponents ? Array.from(context.htmlComponents.values()) : [])
+            ];
+
+            const element = allElements.find(el => el.id === elementId);
+            if (element) {
+                this.selectedElements = [element];
+                this.redraw();
+                break;
+            }
+        }
+    }
+
+    updateLayerTree() {
+        const layerTree = document.getElementById('layer-tree');
+        if (!layerTree) return;
+
+        // Clear existing items
+        layerTree.innerHTML = '';
+
+        // Get all elements from active context
+        const context = this.activeCanvasContext;
+        if (!context) return;
+        
+        const allElements = [
+            ...(context.shapes || []),
+            ...(context.texts || []),
+            ...(context.htmlComponents ? Array.from(context.htmlComponents.values()) : [])
+        ];
+
+
+        // Build hierarchy tree
+        allElements.forEach(element => {
+            const layerItem = this.createLayerItem(element);
+            layerTree.appendChild(layerItem);
+        });
+
+        // Re-attach event listeners to new elements
+        const layerItems = layerTree.querySelectorAll('.layer-item-content');
+        layerItems.forEach(item => {
+            item.addEventListener('click', this.handleLayerSelection.bind(this));
+        });
+        
+        // Update selection highlighting
+        this.updateLayerSelection();
+    }
+    
+    updateLayerSelection() {
+        // Remove all existing selections
+        const allLayerItems = this.layerPanel?.querySelectorAll('.layer-item-content');
+        if (!allLayerItems) return;
+        
+        allLayerItems.forEach(item => item.classList.remove('selected'));
+        
+        // Add selection for currently selected elements
+        if (this.selectedElements && this.selectedElements.length > 0) {
+            this.selectedElements.forEach(selectedElement => {
+                // Find the element ID
+                let elementId;
+                
+                // Handle different selection formats
+                if (selectedElement.id) {
+                    elementId = selectedElement.id;
+                } else if (selectedElement.type && selectedElement.index !== undefined) {
+                    // Old format - need to get actual element
+                    const context = this.activeCanvasContext;
+                    if (selectedElement.type === 'shape' && context.shapes[selectedElement.index]) {
+                        elementId = context.shapes[selectedElement.index].id;
+                    } else if (selectedElement.type === 'text' && context.texts[selectedElement.index]) {
+                        elementId = context.texts[selectedElement.index].id;
+                    }
+                }
+                
+                if (elementId) {
+                    const layerItem = this.layerPanel?.querySelector(`[data-element-id="${elementId}"] .layer-item-content`);
+                    if (layerItem) {
+                        layerItem.classList.add('selected');
+                    }
+                }
+            });
+        }
+    }
+
+    createLayerItem(element, depth = 0) {
+        const div = document.createElement('div');
+        div.className = 'layer-item';
+        div.dataset.elementId = element.id;
+
+        const elementType = this.getElementType(element);
+        const elementName = this.getElementName(element);
+        const icon = this.getElementIcon(elementType);
+        
+        // Check if element has children (for HTML components)
+        const hasChildren = this.elementHasChildren(element);
+
+        div.innerHTML = `
+            <div class="layer-item-content" style="padding-left: ${depth * 20}px">
+                <button class="layer-expand-btn${!hasChildren ? ' no-children' : ''}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/>
+                    </svg>
+                </button>
+                <div class="layer-icon">
+                    ${icon}
+                </div>
+                <span class="layer-name">${elementName}</span>
+            </div>
+        `;
+
+        // Add children container if needed
+        if (hasChildren) {
+            const childrenDiv = document.createElement('div');
+            childrenDiv.className = 'layer-children';
+            childrenDiv.style.display = 'block';
+            
+            // Parse HTML content and create child items
+            const children = this.getElementChildren(element);
+            children.forEach(child => {
+                const childItem = this.createChildLayerItem(child, depth + 1);
+                childrenDiv.appendChild(childItem);
+            });
+            
+            div.appendChild(childrenDiv);
+        }
+
+        // Add event listeners
+        const content = div.querySelector('.layer-item-content');
+        content.addEventListener('click', this.handleLayerSelection.bind(this));
+        
+        const expandBtn = div.querySelector('.layer-expand-btn');
+        if (hasChildren) {
+            expandBtn.addEventListener('click', this.handleLayerExpand.bind(this));
+        }
+
+        return div;
+    }
+    
+    elementHasChildren(element) {
+        if (element.htmlContent) {
+            // Check if HTML content has nested elements
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = element.htmlContent;
+            const hasChildren = tempDiv.children.length > 0;
+            return hasChildren;
+        }
+        return false;
+    }
+    
+    getElementChildren(element) {
+        const children = [];
+        if (element.htmlContent) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = element.htmlContent;
+            
+            // Only get direct children, not all descendants
+            Array.from(tempDiv.children).forEach((child, index) => {
+                children.push({
+                    element: child,
+                    path: `${index}`,
+                    tagName: child.tagName.toLowerCase(),
+                    className: child.className,
+                    id: child.id,
+                    text: child.innerText?.substring(0, 30)
+                });
+            });
+        }
+        return children;
+    }
+    
+    createChildLayerItem(child, depth) {
+        const div = document.createElement('div');
+        div.className = 'layer-item';
+        
+        const hasNestedChildren = child.element.children.length > 0;
+        const name = this.getChildElementName(child);
+        const icon = this.getTagIcon(child.tagName);
+
+        div.innerHTML = `
+            <div class="layer-item-content" style="padding-left: ${depth * 20}px">
+                <button class="layer-expand-btn${!hasNestedChildren ? ' no-children' : ''}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/>
+                    </svg>
+                </button>
+                <div class="layer-icon">
+                    ${icon}
+                </div>
+                <span class="layer-name">${name}</span>
+            </div>
+        `;
+        
+        // Add children container if needed
+        if (hasNestedChildren) {
+            const childrenDiv = document.createElement('div');
+            childrenDiv.className = 'layer-children';
+            childrenDiv.style.display = 'block';
+            
+            // Create child items for nested elements
+            Array.from(child.element.children).forEach((nestedChild, index) => {
+                const nestedChildData = {
+                    element: nestedChild,
+                    path: `${child.path}-${index}`,
+                    tagName: nestedChild.tagName.toLowerCase(),
+                    className: nestedChild.className,
+                    id: nestedChild.id,
+                    text: nestedChild.innerText?.substring(0, 30)
+                };
+                const nestedItem = this.createChildLayerItem(nestedChildData, depth + 1);
+                childrenDiv.appendChild(nestedItem);
+            });
+            
+            div.appendChild(childrenDiv);
+        }
+        
+        // Add event listeners
+        const expandBtn = div.querySelector('.layer-expand-btn');
+        if (hasNestedChildren) {
+            expandBtn.addEventListener('click', this.handleLayerExpand.bind(this));
+        }
+        
+        return div;
+    }
+    
+    getChildElementName(child) {
+        const el = child.element;
+        
+        // Priority order for naming:
+        // 1. Text content (for headings, buttons, etc)
+        // 2. ID
+        // 3. Class name (first meaningful one)
+        // 4. Content-based naming for divs
+        // 5. Style-based naming
+        // 6. Position/role in structure
+        
+        // For text-heavy elements, use their text content
+        if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'button', 'a', 'label', 'p'].includes(child.tagName)) {
+            const text = el.textContent?.trim();
+            if (text && text.length > 0) {
+                return text.length > 20 ? text.substring(0, 20) + '...' : text;
+            }
+        }
+        
+        // Use ID if available
+        if (child.id) {
+            return `#${child.id}`;
+        }
+        
+        // Use meaningful class names
+        if (child.className) {
+            const classes = child.className.split(' ');
+            // Look for semantic class names
+            const semanticPatterns = [
+                'container', 'wrapper', 'panel', 'card', 'modal', 'dialog',
+                'header', 'footer', 'sidebar', 'navbar', 'menu', 'toolbar',
+                'content', 'main', 'section', 'article', 'hero', 'banner',
+                'button', 'btn', 'link', 'nav', 'tab', 'dropdown',
+                'form', 'input', 'field', 'control', 'label',
+                'list', 'item', 'row', 'col', 'grid', 'table',
+                'title', 'heading', 'text', 'description', 'caption',
+                'icon', 'image', 'logo', 'avatar', 'badge',
+                'alert', 'notification', 'message', 'error', 'warning'
+            ];
+            
+            // Find the first class that matches semantic patterns
+            const semanticClass = classes.find(cls => {
+                const lowerCls = cls.toLowerCase();
+                return semanticPatterns.some(pattern => lowerCls.includes(pattern));
+            });
+            
+            if (semanticClass) {
+                return `.${semanticClass}`;
+            }
+            
+            // If no semantic class, try any non-utility class
+            const meaningfulClass = classes.find(cls => 
+                !cls.match(/^(flex|grid|absolute|relative|block|inline|hidden|visible|text-|bg-|p-|m-|w-|h-|border-|rounded-|shadow-|opacity-|z-|cursor-|overflow-|transition-|transform-|animate-)/)
+            );
+            if (meaningfulClass) {
+                return `.${meaningfulClass}`;
+            }
+        }
+        
+        // For divs, try to determine purpose from content
+        if (child.tagName === 'div') {
+            // Check if it's a container based on children
+            const childCount = el.children.length;
+            const childTags = Array.from(el.children).map(c => c.tagName.toLowerCase());
+            const uniqueTags = [...new Set(childTags)];
+            
+            // Get any text content directly in this div (not in children)
+            const directText = Array.from(el.childNodes)
+                .filter(node => node.nodeType === Node.TEXT_NODE)
+                .map(node => node.textContent.trim())
+                .filter(text => text.length > 0)
+                .join(' ');
+            
+            // If div has direct text content, use that
+            if (directText && directText.length > 0) {
+                return directText.length > 20 ? directText.substring(0, 20) + '...' : directText;
+            }
+            
+            // Check for icon containers (divs with SVGs)
+            if (childTags.includes('svg')) {
+                if (childCount === 1) return 'Icon';
+                return 'Icon Container';
+            }
+            
+            // Check for specific patterns based on all children
+            if (childCount > 0) {
+                // All buttons = Button Group
+                if (childTags.every(tag => tag === 'button')) {
+                    return `Button Group (${childCount})`;
+                }
+                
+                // Multiple of same type
+                if (uniqueTags.length === 1 && childCount > 2) {
+                    const tagName = uniqueTags[0];
+                    const pluralNames = {
+                        'div': 'Containers',
+                        'span': 'Text Elements',
+                        'p': 'Paragraphs',
+                        'li': 'List Items',
+                        'a': 'Links',
+                        'img': 'Images'
+                    };
+                    return `${childCount} ${pluralNames[tagName] || tagName + 's'}`;
+                }
+                
+                // Mixed content - analyze pattern
+                if (childTags.includes('h1') || childTags.includes('h2') || childTags.includes('h3')) {
+                    if (childTags.includes('p') || childTags.includes('span')) {
+                        return 'Content Section';
+                    }
+                    return 'Header Section';
+                }
+                
+                // Form elements
+                if (childTags.some(tag => ['input', 'select', 'textarea', 'label'].includes(tag))) {
+                    return 'Form Field Group';
+                }
+                
+                // Navigation patterns
+                if (childTags.includes('a') || childTags.includes('nav')) {
+                    return 'Navigation Group';
+                }
+                
+                // Card-like patterns
+                if (childTags.includes('img') && (childTags.includes('h3') || childTags.includes('h4') || childTags.includes('p'))) {
+                    return 'Card Component';
+                }
+            }
+            
+            // Check style-based patterns
+            const styles = window.getComputedStyle(el);
+            
+            // Layout containers
+            if (styles.display === 'flex') {
+                const direction = styles.flexDirection;
+                if (direction === 'row') return 'Horizontal Layout';
+                if (direction === 'column') return 'Vertical Layout';
+                return 'Flex Layout';
+            } else if (styles.display === 'grid') {
+                const cols = styles.gridTemplateColumns;
+                if (cols && cols !== 'none') {
+                    const colCount = cols.split(' ').length;
+                    return `Grid (${colCount} cols)`;
+                }
+                return 'Grid Layout';
+            }
+            
+            // Positioning-based naming
+            if (styles.position === 'fixed') {
+                const top = parseInt(styles.top);
+                const bottom = parseInt(styles.bottom);
+                const zIndex = parseInt(styles.zIndex) || 0;
+                
+                if (zIndex > 1000) return 'Modal/Overlay';
+                if (top === 0) return 'Fixed Header';
+                if (bottom === 0) return 'Fixed Footer';
+                return 'Fixed Element';
+            }
+            
+            if (styles.position === 'absolute') {
+                const zIndex = parseInt(styles.zIndex) || 0;
+                if (zIndex > 100) return 'Overlay Element';
+                return 'Positioned Element';
+            }
+            
+            // Size-based patterns
+            const width = el.offsetWidth;
+            const height = el.offsetHeight;
+            const aspectRatio = width / height;
+            
+            if (width < 50 && height < 50) return 'Small Element';
+            if (aspectRatio > 3) return 'Wide Container';
+            if (aspectRatio < 0.3) return 'Tall Container';
+            
+            // Visual styling patterns
+            const borderRadius = styles.borderRadius;
+            const boxShadow = styles.boxShadow;
+            const background = styles.backgroundColor || styles.backgroundImage;
+            
+            if (borderRadius && borderRadius !== '0px') {
+                if (parseInt(borderRadius) > 20) return 'Rounded Container';
+                if (boxShadow && boxShadow !== 'none') return 'Card Container';
+            }
+            
+            if (background && background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent' && background !== 'none') {
+                if (styles.backgroundImage && styles.backgroundImage !== 'none') return 'Image Background';
+                return 'Colored Container';
+            }
+            
+            // Empty container
+            if (childCount === 0) {
+                if (width > 100 || height > 100) return 'Empty Container';
+                return 'Spacer';
+            }
+            
+            // Default based on content
+            if (childCount === 1) return 'Wrapper';
+            if (childCount > 1) return `Group (${childCount} items)`;
+        }
+        
+        // For specific tags, provide context
+        const contextualNames = {
+            'img': 'Image',
+            'button': 'Button',
+            'input': 'Input',
+            'select': 'Select',
+            'textarea': 'Textarea',
+            'form': 'Form',
+            'nav': 'Navigation',
+            'header': 'Header',
+            'footer': 'Footer',
+            'section': 'Section',
+            'article': 'Article',
+            'aside': 'Sidebar',
+            'main': 'Main Content',
+            'span': 'Text Span'
+        };
+        
+        if (contextualNames[child.tagName]) {
+            return contextualNames[child.tagName];
+        }
+        
+        // For divs and spans with specific roles or aria-labels
+        if (el.getAttribute) {
+            const role = el.getAttribute('role');
+            if (role) {
+                return role.charAt(0).toUpperCase() + role.slice(1);
+            }
+            
+            const ariaLabel = el.getAttribute('aria-label');
+            if (ariaLabel) {
+                return ariaLabel.length > 20 ? ariaLabel.substring(0, 20) + '...' : ariaLabel;
+            }
+        }
+        
+        // Last resort - use position in parent
+        if (child.tagName === 'div' && el.parentElement) {
+            const siblings = Array.from(el.parentElement.children);
+            const index = siblings.indexOf(el);
+            if (index === 0) return 'First Container';
+            if (index === siblings.length - 1) return 'Last Container';
+            return `Container ${index + 1}`;
+        }
+        
+        // Default to tag name
+        return child.tagName;
+    }
+    
+    getTagIcon(tagName) {
+        const tagIcons = {
+            div: '<path d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,19H5V5H19V19Z"/>',
+            button: '<path d="M12,2A3,3 0 0,1 15,5V19A3,3 0 0,1 12,22H8A3,3 0 0,1 5,19V5A3,3 0 0,1 8,2H12M12,4H8A1,1 0 0,0 7,5V19A1,1 0 0,0 8,20H12A1,1 0 0,0 13,19V5A1,1 0 0,0 12,4Z"/>',
+            h1: '<path d="M3,4H5V10H9V4H11V18H9V12H5V18H3V4M13,8H15.31L15.63,5H17.63L17.31,8H19.31L19.63,5H21.63L21.31,8H23V10H21.1L20.9,12H23V14H20.69L20.37,17H18.37L18.69,14H16.69L16.37,17H14.37L14.69,14H13V12H14.9L15.1,10H13V8M17.1,10L16.9,12H18.9L19.1,10H17.1Z"/>',
+            h2: '<path d="M3,4H5V10H9V4H11V18H9V12H5V18H3V4M21,18H13V16C13,15.47 13.2,15 13.54,14.64L18.41,9.41C18.78,9.05 19,8.55 19,8C19,6.9 18.1,6 17,6A2,2 0 0,0 15,8H13A4,4 0 0,1 17,4A4,4 0 0,1 21,8C21,9.1 20.55,10.1 19.83,10.83L15,16H21V18Z"/>',
+            h3: '<path d="M3,4H5V10H9V4H11V18H9V12H5V18H3V4M15,4H19A2,2 0 0,1 21,6V8A2,2 0 0,1 19,10H17V12H19A2,2 0 0,1 21,14V16A2,2 0 0,1 19,18H15A2,2 0 0,1 13,16V15H15V16H19V14H15V10H19V6H15V7H13V6A2,2 0 0,1 15,4Z"/>',
+            h4: '<path d="M3,4H5V10H9V4H11V18H9V12H5V18H3V4M18,18V13H13V11L18,4H20V11H21V13H20V18H18M18,11V7.42L15.45,11H18Z"/>',
+            span: '<path d="M7.25,3C4.9,3 3,4.9 3,7.25C3,9.6 4.9,11.5 7.25,11.5C9.6,11.5 11.5,9.6 11.5,7.25C11.5,4.9 9.6,3 7.25,3M16.75,12.5C14.4,12.5 12.5,14.4 12.5,16.75C12.5,19.1 14.4,21 16.75,21C19.1,21 21,19.1 21,16.75C21,14.4 19.1,12.5 16.75,12.5Z"/>',
+            default: '<path d="M3,3H21V21H3V3M5,5V19H19V5H5Z"/>'
+        };
+        
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">${tagIcons[tagName] || tagIcons.default}</svg>`;
+    }
+
+    getElementType(element) {
+        if (element.type) return element.type;
+        if (element.text !== undefined) return 'text';
+        if (element.htmlContent !== undefined) return 'component';
+        if (element.width !== undefined && element.height !== undefined) return 'rectangle';
+        return 'unknown';
+    }
+
+    getElementName(element) {
+        const type = this.getElementType(element);
+        
+        if (type === 'text') {
+            const text = element.text.length > 20 ? element.text.substring(0, 20) + '...' : element.text;
+            return text || 'Text';
+        }
+        
+        if (type === 'component') {
+            return element.name || 'Component';
+        }
+        
+        return type.charAt(0).toUpperCase() + type.slice(1);
+    }
+
+    getElementIcon(type) {
+        const icons = {
+            rectangle: '<path d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,19H5V5H19V19Z"/>',
+            circle: '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/>',
+            text: '<path d="M5 4v3h5.5v12h3V7H19V4z"/>',
+            component: '<path d="M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v8H8V8zm2 2v4h4v-4h-4z"/>',
+            unknown: '<path d="M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M11,7H13V9H11V7M11,11H13V17H11V11Z"/>'
+        };
+
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">${icons[type] || icons.unknown}</svg>`;
+    }
 }
 
 // Global drag function for HTML sub-elements
@@ -9951,9 +10633,15 @@ if (typeof window !== 'undefined' && !window.dragElement) {
             targetElement = element.parentElement;
         }
         
-        const startX = event.clientX;
-        const startY = event.clientY;
+        let startX = event.clientX;
+        let startY = event.clientY;
         let hasMoved = false;
+        
+        // Store original styles and parent for restoration
+        const originalZIndex = targetElement.style.zIndex || window.getComputedStyle(targetElement).zIndex;
+        const originalPosition = targetElement.style.position || window.getComputedStyle(targetElement).position;
+        const originalParent = targetElement.parentElement;
+        let originalNextSibling = targetElement.nextSibling;
         
         // Get current transform values for the target element
         const computedStyle = window.getComputedStyle(targetElement);
@@ -10037,27 +10725,117 @@ if (typeof window !== 'undefined' && !window.dragElement) {
             // Only start dragging after small movement threshold
             if (!hasMoved && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
                 hasMoved = true;
+                
+                // Get current position before moving to body
+                const currentRect = targetElement.getBoundingClientRect();
+                
+                // Temporarily move element to body to escape stacking context
+                document.body.appendChild(targetElement);
+                
+                // Set position: fixed to maintain visual position and bring to front
+                targetElement.style.setProperty('position', 'fixed', 'important');
+                targetElement.style.setProperty('left', currentRect.left + 'px', 'important');
+                targetElement.style.setProperty('top', currentRect.top + 'px', 'important');
+                targetElement.style.setProperty('z-index', '999999', 'important');
+                targetElement.style.setProperty('opacity', '0.9', 'important');
+                targetElement.style.setProperty('pointer-events', 'none', 'important');
+                
+                console.log('🔄 FREE DRAG MODE: Element moved to body with fixed positioning');
             }
             
             if (!hasMoved) return;
             
-            let newX = currentX + deltaX;
-            let newY = currentY + deltaY;
-            
-            // Apply cached bounds if available
-            if (boundsCache) {
-                newX = Math.max(boundsCache.minX, Math.min(boundsCache.maxX, newX));
-                newY = Math.max(boundsCache.minY, Math.min(boundsCache.maxY, newY));
+            // PHASE 1: FREE DRAGGING - No bounds constraints, direct position movement
+            if (hasMoved) {
+                // Use fixed positioning for smooth movement
+                const newLeft = parseFloat(targetElement.style.left) + deltaX;
+                const newTop = parseFloat(targetElement.style.top) + deltaY;
+                
+                targetElement.style.setProperty('left', newLeft + 'px', 'important');
+                targetElement.style.setProperty('top', newTop + 'px', 'important');
+                
+                // Reset starting position for next frame
+                startX = e.clientX;
+                startY = e.clientY;
             }
-            
-            targetElement.style.transform = `translate(${newX}px, ${newY}px)`;
             e.preventDefault();
         };
         
         const handleMouseUp = (e) => {
+            // PHASE 2: Drop detection and re-parenting
+            if (hasMoved) {
+                // Get element's final position
+                const elementRect = targetElement.getBoundingClientRect();
+                const elementCenter = {
+                    x: elementRect.left + elementRect.width / 2,
+                    y: elementRect.top + elementRect.height / 2
+                };
+                
+                // Find the best parent container at the drop position
+                const bestParent = findBestParentContainer(elementCenter, targetElement);
+                const finalParent = bestParent || originalParent;
+                
+                console.log('🎯 DROP DETECTION:', {
+                    dropPosition: `${elementCenter.x}, ${elementCenter.y}`,
+                    bestParent: bestParent ? bestParent.tagName + ' ' + (bestParent.className || '') : 'none',
+                    usingOriginal: !bestParent
+                });
+                
+                // Move element to the best parent (or keep in original)
+                if (finalParent === originalParent && originalNextSibling && originalNextSibling.parentNode) {
+                    finalParent.insertBefore(targetElement, originalNextSibling);
+                } else {
+                    finalParent.appendChild(targetElement);
+                }
+                
+                // Convert from fixed positioning back to relative positioning within the new parent
+                const parentRect = finalParent.getBoundingClientRect();
+                const relativeX = elementRect.left - parentRect.left;
+                const relativeY = elementRect.top - parentRect.top;
+                
+                // Remove temporary fixed positioning styles
+                targetElement.style.removeProperty('position');
+                targetElement.style.removeProperty('left');
+                targetElement.style.removeProperty('top');
+                targetElement.style.removeProperty('z-index');
+                targetElement.style.removeProperty('opacity');
+                targetElement.style.removeProperty('pointer-events');
+                
+                // Apply the new transform to maintain visual position
+                targetElement.style.transform = `translate(${relativeX}px, ${relativeY}px)`;
+                
+                // Restore original position style if needed
+                if (originalPosition !== 'static' && originalPosition !== 'relative') {
+                    targetElement.style.position = originalPosition;
+                }
+                if (originalZIndex !== 'auto') targetElement.style.zIndex = originalZIndex;
+                
+                console.log('🔚 DRAG ENDED: Element positioned in', finalParent.tagName, 'at transform', `${relativeX}, ${relativeY}`);
+            }
+            
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
         };
+        
+        // Helper function to find the best parent container
+        function findBestParentContainer(point, draggedElement) {
+            // Get all elements under the point
+            const elementsUnder = document.elementsFromPoint(point.x, point.y);
+            
+            // Filter to valid containers (positioned, adequate size, not the dragged element itself)
+            const validContainers = elementsUnder.filter(el => {
+                if (el === draggedElement || draggedElement.contains(el) || el.contains(draggedElement)) {
+                    return false; // Skip the dragged element and its ancestors/descendants
+                }
+                
+                const style = getComputedStyle(el);
+                return (style.position === 'absolute' || style.position === 'relative') 
+                    && el.offsetWidth > 50 && el.offsetHeight > 50;
+            });
+            
+            // Return the first (deepest/most specific) valid container
+            return validContainers[0] || null;
+        }
         
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);

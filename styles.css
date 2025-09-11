@@ -705,6 +705,181 @@ body > #nested-canvas {
     margin: 6px 0;
 }
 
+/* Layer Panel */
+.layer-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+}
+
+.layer-panel.collapsed {
+    transform: translateX(-240px);
+}
+
+.layer-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.layer-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.layer-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    cursor: pointer;
+    color: #666;
+    transition: all 0.2s ease;
+}
+
+.layer-toggle-btn svg {
+    transition: transform 0.3s ease;
+}
+
+.layer-toggle-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #333;
+}
+
+.layer-panel-content {
+    flex: 1;
+    overflow: auto;
+    padding: 8px;
+}
+
+.layer-tree {
+    font-size: 13px;
+}
+
+.layer-item {
+    margin-bottom: 2px;
+}
+
+.layer-item-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.layer-item-content:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.layer-item-content.selected {
+    background: rgba(59, 130, 246, 0.1);
+    color: #2563eb;
+}
+
+.layer-expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #666;
+    transition: all 0.2s ease;
+    border-radius: 3px;
+}
+
+.layer-expand-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: #333;
+}
+
+.layer-expand-btn.collapsed svg {
+    transform: rotate(-90deg);
+}
+
+.layer-expand-btn.no-children {
+    visibility: hidden;
+}
+
+.layer-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+}
+
+.layer-name {
+    flex: 1;
+    font-weight: 500;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.layer-children {
+    margin-left: 16px;
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
+    padding-left: 8px;
+}
+
+
+.root-layer > .layer-item-content {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+/* Layer Panel Resize Handle */
+.layer-panel-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    width: 8px;
+    height: 100%;
+    background: transparent;
+    cursor: ew-resize;
+    z-index: 10;
+}
+
+.layer-panel-resize-handle:hover {
+    background: rgba(59, 130, 246, 0.3);
+}
+
+.layer-panel-resize-handle:active {
+    background: rgba(59, 130, 246, 0.5);
+}
+
+.layer-panel.resizing {
+    user-select: none;
+}
+
+.layer-panel.resizing .layer-panel-content {
+    pointer-events: none;
+}
+
 /* Properties Panel */
 .properties-panel {
     position: fixed;
